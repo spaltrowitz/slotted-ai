@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useCallback,
   type ReactNode,
 } from 'react';
 import {
@@ -15,6 +16,7 @@ import {
   type User,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
+import api from '../lib/api';
 
 interface AuthContextType {
   user: User | null;
@@ -23,12 +25,16 @@ interface AuthContextType {
   isNewUser: boolean;
   onboardingComplete: boolean;
   calendarConnected: boolean;
+  googleCalendarConnected: boolean;
   calendarJustConnected: boolean;
+  appleCalendarConnected: boolean;
   clearNewUser: () => void;
   completeOnboarding: () => void;
   skipOnboarding: () => void;
-  connectCalendar: () => void;
-  disconnectCalendar: () => void;
+  connectCalendar: () => Promise<void>;
+  disconnectCalendar: () => Promise<void>;
+  connectAppleCalendar: (username: string, password: string) => Promise<{ success: boolean; error?: string; calendarsFound?: number }>;
+  disconnectAppleCalendar: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -46,7 +52,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [calendarConnected, setCalendarConnected] = useState(() => {
     return localStorage.getItem('slotted_calendar_connected') === 'true';
   });
+  const [googleCalendarConnected, setGoogleCalendarConnected] = useState(() => {
+    return localStorage.getItem('slotted_google_calendar_connected') === 'true';
+  });
   const [calendarJustConnected, setCalendarJustConnected] = useState(false);
+  const [appleCalendarConnected, setAppleCalendarConnected] = useState(() => {
+    return localStorage.getItem('slotted_apple_calendar_connected') === 'true';
+  });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -179,18 +191,121 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Don't mark complete — so the banner shows
   };
 
-  const connectCalendar = () => {
-    // TODO: replace with real Google Calendar OAuth flow
-    setCalendarConnected(true);
-    localStorage.setItem('slotted_calendar_connected', 'true');
-    setCalendarJustConnected(true);
-    setTimeout(() => setCalendarJustConnected(false), 3000);
-  };
+  const connectCalendar = useCallback(async () => {
+    try {
+      const { data } = await api.get('/calendar/auth-url');
+      if (data?.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error('Failed to get calendar auth URL:', err);
+    }
+  }, []);
 
-  const disconnectCalendar = () => {
-    setCalendarConnected(false);
-    localStorage.removeItem('slotted_calendar_connected');
-  };
+  const disconnectCalendar = useCallback(async () => {
+    try {
+      await api.post('/calendar/disconnect');
+      setGoogleCalendarConnected(false);
+      localStorage.removeItem('slotted_google_calendar_connected');
+      // Update generic connected state
+      const { data } = await api.get('/calendar/status');
+      if (!data?.connected) {
+        setCalendarConnected(false);
+        localStorage.removeItem('slotted_calendar_connected');
+      }
+    } catch (err) {
+      console.error('Failed to disconnect calendar:', err);
+    }
+  }, []);
+
+  const connectAppleCalendar = useCallback(async (username: string, password: string) => {
+    try {
+      const { data } = await api.post('/calendar/apple/connect', { username, password });
+      if (data?.success) {
+        setAppleCalendarConnected(true);
+        setCalendarConnected(true);
+        localStorage.setItem('slotted_apple_calendar_connected', 'true');
+        localStorage.setItem('slotted_calendar_connected', 'true');
+        return { success: true, calendarsFound: data.calendarsFound };
+      }
+      return { success: false, error: 'Unknown error' };
+    } catch (err: any) {
+      console.error('Failed to connect Apple Calendar:', err);
+      return { success: false, error: err.response?.data?.error || 'Failed to connect Apple Calendar' };
+    }
+  }, []);
+
+  const disconnectAppleCalendar = useCallback(async () => {
+    try {
+      await api.post('/calendar/apple/disconnect');
+      setAppleCalendarConnected(false);
+      localStorage.removeItem('slotted_apple_calendar_connected');
+      // Check if Google is still connected
+      const { data } = await api.get('/calendar/status');
+      if (!data?.google) {
+        setCalendarConnected(false);
+        localStorage.removeItem('slotted_calendar_connected');
+      }
+    } catch (err) {
+      console.error('Failed to disconnect Apple Calendar:', err);
+    }
+  }, []);
+
+  // Check real calendar connection status from API
+  const checkCalendarStatus = useCallback(async () => {
+    try {
+      const { data } = await api.get('/calendar/status');
+      const connected = !!data?.connected;
+      setCalendarConnected(connected);
+      if (connected) {
+        localStorage.setItem('slotted_calendar_connected', 'true');
+      } else {
+        localStorage.removeItem('slotted_calendar_connected');
+      }
+      // Google-specific status
+      const gConnected = !!data?.google;
+      setGoogleCalendarConnected(gConnected);
+      if (gConnected) {
+        localStorage.setItem('slotted_google_calendar_connected', 'true');
+      } else {
+        localStorage.removeItem('slotted_google_calendar_connected');
+      }
+      // Apple-specific status
+      const appleConnected = !!data?.apple;
+      setAppleCalendarConnected(appleConnected);
+      if (appleConnected) {
+        localStorage.setItem('slotted_apple_calendar_connected', 'true');
+      } else {
+        localStorage.removeItem('slotted_apple_calendar_connected');
+      }
+    } catch {
+      // silently fail
+    }
+  }, []);
+
+  // Check calendar status after auth is confirmed
+  useEffect(() => {
+    if (user) {
+      checkCalendarStatus();
+    }
+  }, [user, checkCalendarStatus]);
+
+  // Handle ?calendar=connected query param (after OAuth redirect)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('calendar') === 'connected') {
+      setCalendarConnected(true);
+      setGoogleCalendarConnected(true);
+      localStorage.setItem('slotted_calendar_connected', 'true');
+      localStorage.setItem('slotted_google_calendar_connected', 'true');
+      setCalendarJustConnected(true);
+      setTimeout(() => setCalendarJustConnected(false), 3000);
+      // Clean up the URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete('calendar');
+      window.history.replaceState({}, '', url.pathname);
+    }
+  }, []);
 
   const signOut = async () => {
     setIsNewUser(false);
@@ -198,7 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, authError, isNewUser, onboardingComplete, calendarConnected, calendarJustConnected, clearNewUser, completeOnboarding, skipOnboarding, connectCalendar, disconnectCalendar, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, authError, isNewUser, onboardingComplete, calendarConnected, googleCalendarConnected, calendarJustConnected, appleCalendarConnected, clearNewUser, completeOnboarding, skipOnboarding, connectCalendar, disconnectCalendar, connectAppleCalendar, disconnectAppleCalendar, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );

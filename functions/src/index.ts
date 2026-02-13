@@ -3,6 +3,8 @@ import { onRequest } from "firebase-functions/https";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import * as admin from "firebase-admin";
+import { google } from "googleapis";
+import { createDAVClient, DAVCalendar, DAVObject } from "tsdav";
 import { getSupabase } from "./supabase";
 
 // ---------------------------------------------------------------------------
@@ -12,7 +14,27 @@ admin.initializeApp();
 setGlobalOptions({ maxInstances: 10 });
 
 const app = express();
-app.use(cors({ origin: true }));
+
+// CORS: restrict to known origins in production
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "https://slotted-ai.web.app",
+  "https://slotted-ai.firebaseapp.com",
+];
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, server-to-server)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Still allow in dev; tighten for production
+      }
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 // Strip /api prefix so routes work both directly and through Firebase Hosting rewrites
@@ -60,11 +82,124 @@ async function getDbUser(firebaseUid: string) {
   return data;
 }
 
+/** Helper: get the Supabase user row by internal UUID */
+async function getDbUserById(userId: string) {
+  const { data } = await getSupabase()
+    .from("users")
+    .select("*")
+    .eq("id", userId)
+    .single();
+  return data;
+}
+
 // ---------------------------------------------------------------------------
 // Health check (public)
 // ---------------------------------------------------------------------------
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", service: "slotted-api", timestamp: Date.now() });
+});
+
+// ---------------------------------------------------------------------------
+// Notification helper
+// ---------------------------------------------------------------------------
+async function createNotification(opts: {
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  relatedUserId?: string;
+  relatedId?: string;
+}) {
+  const { error } = await getSupabase().from("notifications").insert({
+    user_id: opts.userId,
+    type: opts.type,
+    title: opts.title,
+    body: opts.body,
+    related_user_id: opts.relatedUserId || null,
+    related_id: opts.relatedId || null,
+  });
+  if (error) console.error("Failed to create notification:", error.message);
+}
+
+// ---------------------------------------------------------------------------
+// Notification routes
+// ---------------------------------------------------------------------------
+
+/** GET /notifications — list current user's notifications */
+app.get("/notifications", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { data, error } = await getSupabase()
+      .from("notifications")
+      .select("*, related_user:related_user_id(display_name, photo_url)")
+      .eq("user_id", me.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json(data || []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /notifications/unread-count — quick badge count */
+app.get("/notifications/unread-count", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { count, error } = await getSupabase()
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", me.id)
+      .eq("read", false);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ count: count || 0 });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PATCH /notifications/:id/read — mark a single notification as read */
+app.patch("/notifications/:id/read", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { error } = await getSupabase()
+      .from("notifications")
+      .update({ read: true })
+      .eq("id", req.params.id)
+      .eq("user_id", me.id);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /notifications/mark-all-read — mark all notifications as read */
+app.post("/notifications/mark-all-read", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { error } = await getSupabase()
+      .from("notifications")
+      .update({ read: true })
+      .eq("user_id", me.id)
+      .eq("read", false);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -129,7 +264,26 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-/** GET /users/me — fetch current user profile */
+/** Fields that must NEVER be sent to the client */
+const SENSITIVE_FIELDS = [
+  "google_access_token",
+  "google_refresh_token",
+  "google_token_expires_at",
+  "apple_caldav_password",
+  "apple_caldav_username",
+  "calendar_watch_channel",
+  "calendar_watch_expiry",
+];
+
+function stripSensitive(user: Record<string, any>) {
+  const safe = { ...user };
+  for (const field of SENSITIVE_FIELDS) {
+    delete safe[field];
+  }
+  return safe;
+}
+
+/** GET /users/me — fetch current user profile (sensitive fields stripped) */
 app.get("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const user = await getDbUser(req.uid!);
@@ -137,7 +291,7 @@ app.get("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
       res.status(404).json({ error: "User not found" });
       return;
     }
-    res.json(user);
+    res.json(stripSensitive(user));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -149,7 +303,7 @@ app.get("/users/invite/:code", async (req: Request, res: Response) => {
     const { code } = req.params;
     const { data, error } = await getSupabase()
       .from("users")
-      .select("firebase_uid, display_name, photo_url")
+      .select("display_name, photo_url")
       .eq("invite_code", (code as string).toLowerCase())
       .single();
 
@@ -188,10 +342,52 @@ app.patch("/users/me/battery", requireAuth, async (req: AuthRequest, res: Respon
   }
 });
 
+/** PUT /users/me/settings — save settings page preferences */
+app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const {
+      socialFrequency, preferredTimes, travelBuffer,
+      socialBattery, rechargingDays, planningStyle,
+      neighborhood, workNeighborhood, officeDays,
+    } = req.body;
+
+    const updates: Record<string, any> = {};
+    if (socialFrequency !== undefined) updates.social_frequency = socialFrequency;
+    if (preferredTimes !== undefined) updates.preferred_times = preferredTimes;
+    if (travelBuffer !== undefined) updates.travel_buffer_min = parseInt(travelBuffer, 10);
+    if (socialBattery !== undefined) updates.social_battery = socialBattery;
+    if (rechargingDays !== undefined) updates.recharging_days = rechargingDays;
+    if (planningStyle !== undefined) updates.planning_style = planningStyle;
+    if (neighborhood !== undefined) updates.neighborhood = neighborhood;
+    if (workNeighborhood !== undefined) updates.work_neighborhood = workNeighborhood;
+    if (officeDays !== undefined) updates.office_days = officeDays;
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: "No fields to update" });
+      return;
+    }
+
+    const { data, error } = await getSupabase()
+      .from("users")
+      .update(updates)
+      .eq("firebase_uid", req.uid!)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+    res.json(stripSensitive(data));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** POST /users/me/onboarding — save onboarding answers */
 app.post("/users/me/onboarding", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { socialFrequency, preferredTimes, travelBuffer, socialBattery } =
+    const { socialFrequency, preferredTimes, travelBuffer, socialBattery, rechargingDays } =
       req.body;
 
     const { data, error } = await getSupabase()
@@ -201,6 +397,7 @@ app.post("/users/me/onboarding", requireAuth, async (req: AuthRequest, res: Resp
         preferred_times: preferredTimes,
         travel_buffer_min: travelBuffer ? parseInt(travelBuffer, 10) : 30,
         social_battery: socialBattery || "open",
+        recharging_days: rechargingDays || [],
         onboarded: true,
       })
       .eq("firebase_uid", req.uid!)
@@ -388,6 +585,19 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
       res.status(500).json({ error: error.message });
       return;
     }
+
+    // Notify the referrer that the new user connected
+    if (data) {
+      await createNotification({
+        userId: referrer.id,
+        type: "friend_accepted",
+        title: "New friend connected!",
+        body: `${me.display_name || me.email} joined Slotted via your invite and you're now connected.`,
+        relatedUserId: me.id,
+        relatedId: data.id,
+      });
+    }
+
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -423,6 +633,22 @@ app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: R
       res.status(500).json({ error: error.message });
       return;
     }
+
+    // Notify the inviter when their invite is accepted
+    if (data && action === "accept") {
+      const inviterId = data.invited_by;
+      if (inviterId && inviterId !== me.id) {
+        await createNotification({
+          userId: inviterId,
+          type: "friend_accepted",
+          title: "Friend request accepted!",
+          body: `${me.display_name || me.email} accepted your friend invite. You can now see each other's availability!`,
+          relatedUserId: me.id,
+          relatedId: data.id,
+        });
+      }
+    }
+
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -430,8 +656,447 @@ app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: R
 });
 
 // ---------------------------------------------------------------------------
+// Calendar Sync Engine
+// ---------------------------------------------------------------------------
+
+const SYNC_WINDOW_DAYS = 14; // look 2 weeks ahead
+
+/**
+ * Sync a single user's Google Calendar + Apple Calendar events → `availability` table.
+ * Reads events from all selected calendars (both sources), writes busy blocks, then
+ * computes the inverse as free blocks within 8am–10pm each day.
+ */
+async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean; slots: number }> {
+  const dbUser = await getDbUser(firebaseUid);
+  if (!dbUser) return { synced: false, slots: 0 };
+
+  const hasGoogle = !!dbUser.google_refresh_token;
+  const hasApple = !!(dbUser.apple_calendar_connected && dbUser.apple_caldav_username && dbUser.apple_caldav_password);
+
+  if (!hasGoogle && !hasApple) return { synced: false, slots: 0 };
+
+  const sb = getSupabase();
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+  const allBusyBlocks: { start: string; end: string }[] = [];
+
+  // --- Google Calendar sync ---
+  if (hasGoogle) {
+    const oauth2 = await getAuthedCalendarClient(firebaseUid);
+    if (oauth2) {
+      const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+
+      // Get user's selected Google calendars
+      const { data: selectedGoogleCals } = await sb
+        .from("user_calendars")
+        .select("calendar_id")
+        .eq("user_id", dbUser.id)
+        .eq("is_selected", true)
+        .eq("source", "google");
+
+      const googleCalIds = selectedGoogleCals?.map((c: any) => c.calendar_id) || [];
+
+      const googleFetchPromises = googleCalIds.map(async (calId: string) => {
+        try {
+          const eventsRes = await calendarApi.events.list({
+            calendarId: calId,
+            timeMin: now.toISOString(),
+            timeMax: windowEnd.toISOString(),
+            singleEvents: true,
+            orderBy: "startTime",
+            maxResults: 500,
+            fields: "items(start,end,status,transparency)",
+          });
+
+          for (const event of eventsRes.data.items || []) {
+            if (event.status === "cancelled") continue;
+            if (event.transparency === "transparent") continue;
+
+            const start = event.start?.dateTime || event.start?.date;
+            const end = event.end?.dateTime || event.end?.date;
+            if (!start || !end) continue;
+
+            const startDt = new Date(start);
+            const endDt = new Date(end);
+            if (startDt >= endDt) continue;
+
+            allBusyBlocks.push({
+              start: startDt.toISOString(),
+              end: endDt.toISOString(),
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to fetch Google calendar ${calId}:`, err);
+        }
+      });
+
+      await Promise.all(googleFetchPromises);
+    }
+  }
+
+  // --- Apple Calendar sync ---
+  if (hasApple) {
+    const { data: selectedAppleCals } = await sb
+      .from("user_calendars")
+      .select("calendar_id")
+      .eq("user_id", dbUser.id)
+      .eq("is_selected", true)
+      .eq("source", "apple");
+
+    const appleCalUrls = selectedAppleCals?.map((c: any) => c.calendar_id) || [];
+
+    if (appleCalUrls.length > 0) {
+      try {
+        const appleBlocks = await fetchAppleBusyBlocks(
+          dbUser.apple_caldav_username,
+          dbUser.apple_caldav_password,
+          appleCalUrls,
+          now,
+          windowEnd,
+        );
+        allBusyBlocks.push(...appleBlocks);
+      } catch (err) {
+        console.error("Failed to fetch Apple Calendar events:", err);
+      }
+    }
+  }
+
+  // Sort busy blocks by start time
+  allBusyBlocks.sort((a, b) => a.start.localeCompare(b.start));
+
+  // Merge overlapping busy blocks
+  const mergedBusy: { start: Date; end: Date }[] = [];
+  for (const block of allBusyBlocks) {
+    const s = new Date(block.start);
+    const e = new Date(block.end);
+    if (mergedBusy.length > 0 && s <= mergedBusy[mergedBusy.length - 1].end) {
+      // Overlapping — extend the previous block
+      if (e > mergedBusy[mergedBusy.length - 1].end) {
+        mergedBusy[mergedBusy.length - 1].end = e;
+      }
+    } else {
+      mergedBusy.push({ start: s, end: e });
+    }
+  }
+
+  // Generate free blocks: invert busy within 8am–10pm each day (user's timezone)
+  const tz = dbUser.timezone || "America/New_York";
+  const freeBlocks: { start: string; end: string }[] = [];
+
+  for (let d = 0; d < SYNC_WINDOW_DAYS; d++) {
+    const dayStart = new Date(now);
+    dayStart.setDate(dayStart.getDate() + d);
+
+    // Calculate 8am and 10pm in the user's timezone
+    const dayStr = dayStart.toLocaleDateString("en-CA", { timeZone: tz }); // YYYY-MM-DD
+    const dayOpen = new Date(`${dayStr}T08:00:00`);
+    const dayClose = new Date(`${dayStr}T22:00:00`);
+
+    // Convert to UTC using timezone offset estimation
+    const utcOpen = zonedToUtc(dayStr, "08:00", tz);
+    const utcClose = zonedToUtc(dayStr, "22:00", tz);
+
+    if (utcOpen >= windowEnd || utcClose <= now) continue;
+
+    // Clip to our sync window
+    const windowStart = utcOpen < now ? now : utcOpen;
+    const windowEndClamped = utcClose > windowEnd ? windowEnd : utcClose;
+
+    // Find busy blocks that overlap this day window
+    const dayBusy = mergedBusy.filter(
+      (b) => b.start < windowEndClamped && b.end > windowStart,
+    );
+
+    // Compute free gaps
+    let cursor = windowStart;
+    for (const busy of dayBusy) {
+      const busyStart = busy.start < windowStart ? windowStart : busy.start;
+      const busyEnd = busy.end > windowEndClamped ? windowEndClamped : busy.end;
+
+      if (cursor < busyStart) {
+        // Free gap before this busy block
+        const gapMinutes = (busyStart.getTime() - cursor.getTime()) / 60000;
+        if (gapMinutes >= 30) {
+          // Only keep gaps >= 30 min
+          freeBlocks.push({
+            start: cursor.toISOString(),
+            end: busyStart.toISOString(),
+          });
+        }
+      }
+      if (busyEnd > cursor) cursor = busyEnd;
+    }
+
+    // Last free gap after all busy blocks
+    if (cursor < windowEndClamped) {
+      const gapMinutes = (windowEndClamped.getTime() - cursor.getTime()) / 60000;
+      if (gapMinutes >= 30) {
+        freeBlocks.push({
+          start: cursor.toISOString(),
+          end: windowEndClamped.toISOString(),
+        });
+      }
+    }
+  }
+
+  // Clear old availability for this user and write new data
+  await sb
+    .from("availability")
+    .delete()
+    .eq("user_id", dbUser.id);
+
+  if (freeBlocks.length > 0) {
+    const rows = freeBlocks.map((f) => ({
+      user_id: dbUser.id,
+      start_time: f.start,
+      end_time: f.end,
+      status: "free",
+    }));
+
+    // Insert in batches of 100
+    for (let i = 0; i < rows.length; i += 100) {
+      const batch = rows.slice(i, i + 100);
+      await sb.from("availability").insert(batch);
+    }
+  }
+
+  console.log(`📅 Synced ${freeBlocks.length} free blocks for user ${dbUser.id}`);
+  return { synced: true, slots: freeBlocks.length };
+}
+
+/** Helper: rough timezone conversion (date string + time → UTC Date) */
+function zonedToUtc(dateStr: string, timeStr: string, tz: string): Date {
+  // Use a formatter to figure out the UTC offset for this timezone on this date
+  const refDate = new Date(`${dateStr}T${timeStr}:00`);
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).formatToParts(refDate);
+
+    const get = (type: string) => parts.find((p) => p.type === type)?.value || "0";
+    const localInTz = new Date(
+      `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}`,
+    );
+    const offsetMs = localInTz.getTime() - refDate.getTime();
+    // The target time in the timezone is dateStr + timeStr,
+    // so UTC = target - offset
+    return new Date(refDate.getTime() - offsetMs);
+  } catch {
+    return refDate; // fallback: assume local = UTC
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AI Suggestion Scoring
+// ---------------------------------------------------------------------------
+
+interface ScoredSlot {
+  start: string;
+  end: string;
+  score: number;
+  reasons: string[];
+  dayLabel: string;
+  timeLabel: string;
+}
+
+/**
+ * Score overlapping free slots based on user preferences.
+ * Supports 1-to-1 (userId + friendId) or group (userId + friendIds[]).
+ * Returns top-N suggestions sorted by score descending.
+ */
+async function scoreOverlaps(
+  userId: string,
+  friendId: string,
+  overlaps: { start: string; end: string }[],
+  limit = 5,
+): Promise<ScoredSlot[]> {
+  return scoreGroupOverlaps(userId, [friendId], overlaps, limit);
+}
+
+/**
+ * Score overlapping free slots for a group of participants.
+ */
+async function scoreGroupOverlaps(
+  userId: string,
+  participantIds: string[],
+  overlaps: { start: string; end: string }[],
+  limit = 5,
+): Promise<ScoredSlot[]> {
+  const sb = getSupabase();
+
+  // Fetch all participants' profiles and preferences in parallel
+  const allIds = [userId, ...participantIds];
+  const [profilesRes, prefsRes] = await Promise.all([
+    Promise.all(allIds.map((id) =>
+      sb.from("users").select("*").eq("id", id).single().then((r) => r.data),
+    )),
+    Promise.all(allIds.map((id) =>
+      sb.from("user_preferences").select("*").eq("user_id", id).single().then((r) => r.data),
+    )),
+  ]);
+
+  const userProfile = profilesRes[0];
+  const friendProfiles = profilesRes.slice(1);
+  const userPrefs = prefsRes[0];
+
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  const scored: ScoredSlot[] = overlaps.map((slot) => {
+    const startDt = new Date(slot.start);
+    const endDt = new Date(slot.end);
+    const durationMin = (endDt.getTime() - startDt.getTime()) / 60000;
+    const dayOfWeek = startDt.getDay(); // 0=Sun
+    const hour = startDt.getHours();
+    let score = 50; // base score
+    const reasons: string[] = [];
+
+    // 1. Duration bonus — longer slots are better (more flexibility)
+    if (durationMin >= 120) {
+      score += 15;
+      reasons.push("2+ hour window");
+    } else if (durationMin >= 60) {
+      score += 10;
+      reasons.push("1 hour window");
+    } else if (durationMin < 45) {
+      score -= 10;
+    }
+
+    // 2. Time-of-day match with user preferred times
+    const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : hour < 21 ? "evening" : "night";
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const timeKey = `${isWeekend ? "weekend" : "weekday"}-${timeOfDay}`;
+
+    if (userProfile?.preferred_times?.includes(timeKey)) {
+      score += 15;
+      reasons.push("Your preferred time");
+    }
+
+    // 3. Social battery check — factor in all participants
+    if (userProfile?.social_battery === "recharging") {
+      score -= 20;
+      reasons.push("You're recharging");
+    } else if (userProfile?.social_battery === "open") {
+      score += 5;
+    }
+
+    let friendsRecharging = 0;
+    let friendsOpen = 0;
+    for (const fp of friendProfiles) {
+      if (fp?.social_battery === "recharging") friendsRecharging++;
+      else if (fp?.social_battery === "open") friendsOpen++;
+    }
+    if (friendsRecharging > 0) {
+      score -= 10 * friendsRecharging;
+      reasons.push(`${friendsRecharging} friend${friendsRecharging > 1 ? "s" : ""} recharging`);
+    }
+    if (friendsOpen === friendProfiles.length && friendProfiles.length > 0) {
+      score += 5;
+      reasons.push("Everyone's open");
+    }
+
+    // 3b. Recharging days — heavily penalize days the user always recharges
+    if (userProfile?.recharging_days?.includes(dayOfWeek)) {
+      score -= 40;
+      reasons.push("Your recharge day");
+    }
+    for (const fp of friendProfiles) {
+      if (fp?.recharging_days?.includes(dayOfWeek)) {
+        score -= 20;
+        reasons.push(`${fp.display_name || "Friend"}'s recharge day`);
+      }
+    }
+
+    // 4. Weekend bonus
+    if (isWeekend) {
+      score += 5;
+      reasons.push("Weekend");
+    }
+
+    // 5. Afternoon/evening sweet spot (most social hours)
+    if (hour >= 11 && hour <= 14) {
+      score += 8;
+      reasons.push("Lunch hours");
+    } else if (hour >= 17 && hour <= 20) {
+      score += 10;
+      reasons.push("Evening hours");
+    } else if (hour < 9) {
+      score -= 5;
+    }
+
+    // 6. Learned preference match
+    if (userPrefs?.preferred_time === timeOfDay) {
+      score += 10;
+      reasons.push("Matches your pattern");
+    }
+    if (userPrefs?.preferred_day === dayNames[dayOfWeek]) {
+      score += 8;
+      reasons.push("Your favorite day");
+    }
+
+    // 7. Soon-ness — slight preference for sooner slots
+    const daysAway = (startDt.getTime() - Date.now()) / (86400000);
+    if (daysAway <= 2) {
+      score += 5;
+      reasons.push("Coming up soon");
+    } else if (daysAway <= 5) {
+      score += 2;
+    }
+
+    // Clamp score 0–100
+    score = Math.max(0, Math.min(100, score));
+
+    // Human-readable labels
+    const dayLabel = startDt.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    const startTime = startDt.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    const endTime = endDt.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    const timeLabel = `${startTime} – ${endTime}`;
+
+    return { start: slot.start, end: slot.end, score, reasons, dayLabel, timeLabel };
+  });
+
+  // Sort by score descending, return top N
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
+
+// ---------------------------------------------------------------------------
 // Availability routes
 // ---------------------------------------------------------------------------
+
+/** POST /calendar/sync — trigger a calendar sync for the current user */
+app.post("/calendar/sync", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await syncUserCalendar(req.uid!);
+    if (!result.synced) {
+      res.status(400).json({ error: "Calendar not connected or no calendars selected" });
+      return;
+    }
+    res.json({ success: true, freeSlots: result.slots });
+  } catch (err: any) {
+    console.error("Calendar sync error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 /** GET /availability — get current user's free/busy slots */
 app.get("/availability", requireAuth, async (req: AuthRequest, res: Response) => {
@@ -459,7 +1124,7 @@ app.get("/availability", requireAuth, async (req: AuthRequest, res: Response) =>
   }
 });
 
-/** GET /availability/overlap/:friendId — find mutual free slots */
+/** GET /availability/overlap/:friendId — find mutual free slots with AI scoring */
 app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest, res: Response) => {
   const { friendId } = req.params;
   try {
@@ -469,9 +1134,21 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
       return;
     }
 
+    // Get the friend's DB user to find their firebase_uid for syncing
+    const friendUser = await getDbUserById(friendId);
+
+    // Auto-sync both calendars (in parallel) before computing overlap
+    const syncResults = await Promise.allSettled([
+      syncUserCalendar(req.uid!),
+      friendUser?.firebase_uid ? syncUserCalendar(friendUser.firebase_uid) : Promise.resolve({ synced: false, slots: 0 }),
+    ]);
+
+    const mySync = syncResults[0].status === "fulfilled" ? syncResults[0].value : { synced: false, slots: 0 };
+    const friendSync = syncResults[1].status === "fulfilled" ? syncResults[1].value : { synced: false, slots: 0 };
+
     const now = new Date().toISOString();
 
-    // Fetch both users' free slots in parallel
+    // Fetch both users' free slots
     const [mySlots, friendSlots] = await Promise.all([
       getSupabase()
         .from("availability")
@@ -494,19 +1171,347 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
       return;
     }
 
-    // Simple overlap calculation
+    // Compute overlaps
     const overlaps: { start: string; end: string }[] = [];
     for (const a of mySlots.data || []) {
       for (const b of friendSlots.data || []) {
         const start = a.start_time > b.start_time ? a.start_time : b.start_time;
         const end = a.end_time < b.end_time ? a.end_time : b.end_time;
         if (start < end) {
-          overlaps.push({ start, end });
+          // Only include overlaps >= 30 minutes
+          const durMin = (new Date(end).getTime() - new Date(start).getTime()) / 60000;
+          if (durMin >= 30) {
+            overlaps.push({ start, end });
+          }
         }
       }
     }
 
-    res.json({ overlaps });
+    // AI-score the overlaps
+    const suggestions = await scoreOverlaps(me.id, friendId, overlaps, 8);
+
+    // Persist top suggestions to suggestion_events
+    for (const s of suggestions.slice(0, 5)) {
+      const startDt = new Date(s.start);
+      await getSupabase()
+        .from("suggestion_events")
+        .upsert(
+          {
+            user_id: me.id,
+            friend_id: friendId,
+            suggested_start: s.start,
+            suggested_end: s.end,
+            day_of_week: startDt.getDay(),
+            hour_of_day: startDt.getHours(),
+            social_battery: me.social_battery || "open",
+            score: s.score / 100,
+          },
+          { onConflict: "user_id,friend_id,suggested_start" },
+        )
+        .catch(() => { /* ignore duplicate insert errors */ });
+    }
+
+    res.json({
+      overlaps,
+      suggestions,
+      syncStatus: {
+        me: { synced: mySync.synced, freeSlots: mySync.slots },
+        friend: {
+          synced: friendSync.synced,
+          freeSlots: friendSync.slots,
+          name: friendUser?.display_name || "Friend",
+          calendarConnected: !!(friendUser?.google_refresh_token || friendUser?.apple_calendar_connected),
+        },
+      },
+    });
+  } catch (err: any) {
+    console.error("Overlap error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /availability/group-overlap — find mutual free slots among multiple friends */
+app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, res: Response) => {
+  const { friendIds } = req.body; // array of friend UUIDs
+  if (!Array.isArray(friendIds) || friendIds.length === 0) {
+    res.status(400).json({ error: "friendIds must be a non-empty array" });
+    return;
+  }
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // Fetch all friends' DB records
+    const friendUsers = await Promise.all(
+      friendIds.map((fid: string) => getDbUserById(fid)),
+    );
+
+    // Sync all calendars in parallel (me + all friends)
+    const allUids = [
+      req.uid!,
+      ...friendUsers.map((u) => u?.firebase_uid).filter(Boolean) as string[],
+    ];
+    const syncResults = await Promise.allSettled(
+      allUids.map((uid) => syncUserCalendar(uid)),
+    );
+
+    const now = new Date().toISOString();
+    const sb = getSupabase();
+
+    // Fetch free slots for all participants (me + friends)
+    const allUserIds = [me.id, ...friendIds];
+    const slotsByUser = await Promise.all(
+      allUserIds.map((uid) =>
+        sb
+          .from("availability")
+          .select("start_time, end_time")
+          .eq("user_id", uid)
+          .eq("status", "free")
+          .gte("end_time", now)
+          .order("start_time")
+          .then((r) => r.data || []),
+      ),
+    );
+
+    // N-way overlap: start with first user's slots, intersect with each subsequent user
+    let currentOverlaps: { start: string; end: string }[] = slotsByUser[0].map(
+      (s: any) => ({ start: s.start_time, end: s.end_time }),
+    );
+
+    for (let i = 1; i < slotsByUser.length; i++) {
+      const nextSlots = slotsByUser[i];
+      const newOverlaps: { start: string; end: string }[] = [];
+      for (const a of currentOverlaps) {
+        for (const b of nextSlots) {
+          const start = a.start > b.start_time ? a.start : b.start_time;
+          const end = a.end < b.end_time ? a.end : b.end_time;
+          if (start < end) {
+            const durMin = (new Date(end).getTime() - new Date(start).getTime()) / 60000;
+            if (durMin >= 30) {
+              newOverlaps.push({ start, end });
+            }
+          }
+        }
+      }
+      currentOverlaps = newOverlaps;
+    }
+
+    // AI-score the group overlaps
+    const suggestions = await scoreGroupOverlaps(me.id, friendIds, currentOverlaps, 8);
+
+    // Build sync status for each participant
+    const participantStatus = friendUsers.map((fu, idx) => {
+      const syncResult = syncResults[idx + 1]; // +1 because index 0 is "me"
+      const synced = syncResult?.status === "fulfilled"
+        ? (syncResult.value as { synced: boolean; slots: number }).synced
+        : false;
+      const freeSlots = syncResult?.status === "fulfilled"
+        ? (syncResult.value as { synced: boolean; slots: number }).slots
+        : 0;
+      return {
+        id: fu?.id || friendIds[idx],
+        name: fu?.display_name || "Friend",
+        synced,
+        freeSlots,
+        calendarConnected: !!(fu?.google_refresh_token || fu?.apple_calendar_connected),
+      };
+    });
+
+    const mySyncResult = syncResults[0];
+    const mySync = mySyncResult?.status === "fulfilled"
+      ? mySyncResult.value as { synced: boolean; slots: number }
+      : { synced: false, slots: 0 };
+
+    res.json({
+      overlaps: currentOverlaps,
+      suggestions,
+      syncStatus: {
+        me: { synced: mySync.synced, freeSlots: mySync.slots },
+        participants: participantStatus,
+      },
+    });
+  } catch (err: any) {
+    console.error("Group overlap error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Friend Group routes
+// ---------------------------------------------------------------------------
+
+/** GET /groups — list user's groups with members */
+app.get("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const sb = getSupabase();
+
+    // Groups the user created OR is a member of
+    const { data: memberRows } = await sb
+      .from("friend_group_members")
+      .select("group_id")
+      .eq("user_id", me.id);
+
+    const { data: createdGroups } = await sb
+      .from("friend_groups")
+      .select("id")
+      .eq("created_by", me.id);
+
+    const allGroupIds = [
+      ...new Set([
+        ...(memberRows || []).map((r: any) => r.group_id),
+        ...(createdGroups || []).map((r: any) => r.id),
+      ]),
+    ];
+
+    if (allGroupIds.length === 0) {
+      res.json({ groups: [] });
+      return;
+    }
+
+    const { data: groups } = await sb
+      .from("friend_groups")
+      .select("*")
+      .in("id", allGroupIds)
+      .order("created_at", { ascending: false });
+
+    // Fetch members for each group
+    const { data: allMembers } = await sb
+      .from("friend_group_members")
+      .select("group_id, user_id")
+      .in("group_id", allGroupIds);
+
+    // Fetch user details for all member IDs
+    const memberUserIds = [...new Set((allMembers || []).map((m: any) => m.user_id))];
+    const { data: memberUsers } = memberUserIds.length > 0
+      ? await sb.from("users").select("id, display_name, email, photo_url").in("id", memberUserIds)
+      : { data: [] };
+
+    const userMap = new Map((memberUsers || []).map((u: any) => [u.id, u]));
+
+    const result = (groups || []).map((g: any) => {
+      const members = (allMembers || [])
+        .filter((m: any) => m.group_id === g.id)
+        .map((m: any) => {
+          const u = userMap.get(m.user_id);
+          return {
+            id: m.user_id,
+            displayName: u?.display_name || "Unknown",
+            email: u?.email || "",
+            photoUrl: u?.photo_url || null,
+          };
+        });
+      return { ...g, members };
+    });
+
+    res.json({ groups: result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /groups — create a new group */
+app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { name, emoji, memberIds } = req.body;
+    if (!name || !Array.isArray(memberIds) || memberIds.length === 0) {
+      res.status(400).json({ error: "name and memberIds[] are required" });
+      return;
+    }
+
+    const sb = getSupabase();
+
+    const { data: group, error: gErr } = await sb
+      .from("friend_groups")
+      .insert({ name, emoji: emoji || "👥", created_by: me.id })
+      .select()
+      .single();
+
+    if (gErr) { res.status(500).json({ error: gErr.message }); return; }
+
+    // Add creator + all members
+    const allIds = [me.id, ...memberIds.filter((id: string) => id !== me.id)];
+    const rows = allIds.map((uid: string) => ({ group_id: group.id, user_id: uid }));
+
+    const { error: mErr } = await sb
+      .from("friend_group_members")
+      .insert(rows);
+
+    if (mErr) { res.status(500).json({ error: mErr.message }); return; }
+
+    res.json(group);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /groups/:id — update a group (name, emoji, members) */
+app.put("/groups/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const sb = getSupabase();
+    const groupId = req.params.id;
+
+    // Only creator can edit
+    const { data: group } = await sb
+      .from("friend_groups")
+      .select("*")
+      .eq("id", groupId)
+      .eq("created_by", me.id)
+      .single();
+
+    if (!group) { res.status(404).json({ error: "Group not found or not owned by you" }); return; }
+
+    const { name, emoji, memberIds } = req.body;
+
+    if (name || emoji) {
+      await sb.from("friend_groups").update({
+        ...(name ? { name } : {}),
+        ...(emoji ? { emoji } : {}),
+      }).eq("id", groupId);
+    }
+
+    if (Array.isArray(memberIds)) {
+      // Replace all members
+      await sb.from("friend_group_members").delete().eq("group_id", groupId);
+      const allIds = [me.id, ...memberIds.filter((id: string) => id !== me.id)];
+      const rows = allIds.map((uid: string) => ({ group_id: groupId, user_id: uid }));
+      await sb.from("friend_group_members").insert(rows);
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /groups/:id — delete a group */
+app.delete("/groups/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const sb = getSupabase();
+
+    const { error } = await sb
+      .from("friend_groups")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("created_by", me.id);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+
+    res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -525,7 +1530,19 @@ app.post("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const { title, friendId, startTime, endTime, location, description } = req.body;
+    const { title, friendId, friendIds, startTime, endTime, location, description } = req.body;
+
+    // Support both single friendId and multiple friendIds
+    const participantIds: string[] = friendIds && Array.isArray(friendIds)
+      ? friendIds
+      : friendId
+        ? [friendId]
+        : [];
+
+    if (participantIds.length === 0) {
+      res.status(400).json({ error: "At least one friendId is required" });
+      return;
+    }
 
     // Create the meetup
     const { data: meetup, error: meetupErr } = await getSupabase()
@@ -546,10 +1563,14 @@ app.post("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Add both users as participants
+    // Add all users as participants (creator + friends)
     const participants = [
       { meetup_id: meetup.id, user_id: me.id, rsvp: "accepted" },
-      { meetup_id: meetup.id, user_id: friendId, rsvp: "pending" },
+      ...participantIds.map((pid: string) => ({
+        meetup_id: meetup.id,
+        user_id: pid,
+        rsvp: "pending",
+      })),
     ];
 
     const { error: partErr } = await getSupabase()
@@ -559,6 +1580,22 @@ app.post("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
     if (partErr) {
       res.status(500).json({ error: partErr.message });
       return;
+    }
+
+    // Notify each invited participant
+    const startDt = new Date(startTime);
+    const timeStr = startDt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
+      " at " + startDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+    for (const pid of participantIds) {
+      await createNotification({
+        userId: pid,
+        type: "meetup_request",
+        title: `${me.display_name || "Someone"} wants to hang!`,
+        body: `${title || "Hangout"} — ${timeStr}`,
+        relatedUserId: me.id,
+        relatedId: meetup.id,
+      });
     }
 
     res.json(meetup);
@@ -605,7 +1642,42 @@ app.get("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    res.json({ meetups });
+    // Enrich meetups with participants + RSVP status
+    const { data: allParticipants } = await getSupabase()
+      .from("meetup_participants")
+      .select("meetup_id, user_id, rsvp")
+      .in("meetup_id", meetupIds);
+
+    const participantUserIds = [...new Set((allParticipants || []).map((p: any) => p.user_id))];
+    const { data: participantUsers } = participantUserIds.length > 0
+      ? await getSupabase()
+          .from("users")
+          .select("id, display_name, photo_url, email")
+          .in("id", participantUserIds)
+      : { data: [] };
+
+    const userMap = new Map((participantUsers || []).map((u: any) => [u.id, u]));
+
+    const enriched = (meetups || []).map((m: any) => {
+      const parts = (allParticipants || [])
+        .filter((p: any) => p.meetup_id === m.id)
+        .map((p: any) => {
+          const u = userMap.get(p.user_id);
+          return {
+            userId: p.user_id,
+            rsvp: p.rsvp,
+            displayName: u?.display_name || "Unknown",
+            photoUrl: u?.photo_url || null,
+          };
+        });
+      return {
+        ...m,
+        myRsvp: participations.find((p: any) => p.meetup_id === m.id)?.rsvp || "pending",
+        participants: parts,
+      };
+    });
+
+    res.json({ meetups: enriched });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -631,6 +1703,59 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
       .update({ rsvp })
       .eq("meetup_id", meetupId)
       .eq("user_id", me.id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+
+    // Notify the meetup creator about the RSVP
+    const { data: meetup } = await getSupabase()
+      .from("meetups")
+      .select("title, created_by")
+      .eq("id", meetupId)
+      .single();
+
+    if (meetup && meetup.created_by !== me.id) {
+      const rsvpEmoji = rsvp === "accepted" ? "✅" : rsvp === "declined" ? "❌" : "🤔";
+      await createNotification({
+        userId: meetup.created_by,
+        type: rsvp === "accepted" ? "meetup_confirmed" : "meetup_request",
+        title: `${rsvpEmoji} ${me.display_name || "Someone"} ${rsvp} your invite`,
+        body: meetup.title || "Hangout",
+        relatedUserId: me.id,
+        relatedId: meetupId,
+      });
+    }
+
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PATCH /meetups/:meetupId/didnt-happen — mark a meetup as didn't happen with reason */
+app.patch("/meetups/:meetupId/didnt-happen", requireAuth, async (req: AuthRequest, res: Response) => {
+  const { meetupId } = req.params;
+  const { reason } = req.body;
+  const validReasons = ["sick", "cancelled", "something_came_up", "too_tired", "scheduling_conflict", "other"];
+  if (reason && !validReasons.includes(reason)) {
+    res.status(400).json({ error: "Invalid reason" });
+    return;
+  }
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const { data, error } = await getSupabase()
+      .from("meetups")
+      .update({ status: "didnt_happen", cancel_reason: reason || null })
+      .eq("id", meetupId)
       .select()
       .single();
 
@@ -891,13 +2016,614 @@ async function recomputePreferences(userId: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Google Calendar OAuth helpers
+// ---------------------------------------------------------------------------
+function getOAuth2Client() {
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI || "http://localhost:5173/api/calendar/callback",
+  );
+}
+
+/** Build an authenticated OAuth2 client for a user who has stored tokens */
+async function getAuthedCalendarClient(firebaseUid: string) {
+  const user = await getDbUser(firebaseUid);
+  if (!user?.google_refresh_token) return null;
+
+  const oauth2 = getOAuth2Client();
+  oauth2.setCredentials({
+    access_token: user.google_access_token,
+    refresh_token: user.google_refresh_token,
+    expiry_date: user.google_token_expires_at
+      ? new Date(user.google_token_expires_at).getTime()
+      : undefined,
+  });
+
+  // Auto-refresh: listen for new tokens and persist them
+  oauth2.on("tokens", async (tokens) => {
+    const updates: Record<string, unknown> = {};
+    if (tokens.access_token) updates.google_access_token = tokens.access_token;
+    if (tokens.refresh_token) updates.google_refresh_token = tokens.refresh_token;
+    if (tokens.expiry_date) {
+      updates.google_token_expires_at = new Date(tokens.expiry_date).toISOString();
+    }
+
+    if (Object.keys(updates).length) {
+      await getSupabase()
+        .from("users")
+        .update(updates)
+        .eq("firebase_uid", firebaseUid);
+    }
+  });
+
+  return oauth2;
+}
+
+// ---------------------------------------------------------------------------
+// Google Calendar OAuth routes
+// ---------------------------------------------------------------------------
+
+/** GET /calendar/auth-url — generate the OAuth URL so the client can redirect */
+app.get("/calendar/auth-url", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const oauth2 = getOAuth2Client();
+    const url = oauth2.generateAuthUrl({
+      access_type: "offline",
+      prompt: "consent",
+      scope: [
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events.readonly",
+      ],
+      state: req.uid, // pass Firebase UID so the callback can associate the tokens
+    });
+    res.json({ url });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /calendar/callback — exchange the OAuth code for tokens */
+app.get("/calendar/callback", async (req: Request, res: Response) => {
+  const code = req.query.code as string;
+  const state = req.query.state as string; // Firebase UID
+  if (!code || !state) {
+    res.status(400).json({ error: "Missing code or state" });
+    return;
+  }
+  try {
+    const oauth2 = getOAuth2Client();
+    const { tokens } = await oauth2.getToken(code);
+
+    // Store tokens in the users table
+    const updates: Record<string, unknown> = {
+      google_access_token: tokens.access_token,
+      google_refresh_token: tokens.refresh_token,
+      google_token_expires_at: tokens.expiry_date
+        ? new Date(tokens.expiry_date).toISOString()
+        : null,
+    };
+
+    await getSupabase()
+      .from("users")
+      .update(updates)
+      .eq("firebase_uid", state);
+
+    // After storing tokens, auto-fetch the user's calendar list and store defaults
+    oauth2.setCredentials(tokens);
+    const calendar = google.calendar({ version: "v3", auth: oauth2 });
+    const calListRes = await calendar.calendarList.list();
+    const calendars = calListRes.data.items || [];
+
+    const dbUser = await getDbUser(state);
+    if (dbUser) {
+      const rows = calendars.map((cal) => ({
+        user_id: dbUser.id,
+        calendar_id: cal.id!,
+        calendar_name: cal.summary || cal.id!,
+        calendar_color: cal.backgroundColor || null,
+        is_selected: cal.accessRole === "owner", // default-select owned calendars
+        access_role: cal.accessRole || null,
+        source: "google",
+      }));
+
+      if (rows.length) {
+        await getSupabase()
+          .from("user_calendars")
+          .upsert(rows, { onConflict: "user_id,calendar_id" });
+      }
+    }
+
+    // Redirect back to the frontend settings page
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    res.redirect(`${frontendUrl}/settings?calendar=connected`);
+  } catch (err: any) {
+    console.error("Calendar OAuth callback error:", err);
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    res.redirect(`${frontendUrl}/settings?calendar=error`);
+  }
+});
+
+/** GET /calendar/status — check if user has connected their calendar (Google and/or Apple) */
+app.get("/calendar/status", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await getDbUser(req.uid!);
+    const googleConnected = !!(user?.google_refresh_token);
+    const appleConnected = !!(user?.apple_calendar_connected && user?.apple_caldav_username);
+    res.json({
+      connected: googleConnected || appleConnected,
+      google: googleConnected,
+      apple: appleConnected,
+      appleUsername: user?.apple_caldav_username || null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /calendar/disconnect — remove stored tokens */
+app.post("/calendar/disconnect", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    await getSupabase()
+      .from("users")
+      .update({
+        google_access_token: null,
+        google_refresh_token: null,
+        google_token_expires_at: null,
+      })
+      .eq("firebase_uid", req.uid!);
+
+    // Also remove stored calendars
+    const dbUser = await getDbUser(req.uid!);
+    if (dbUser) {
+      await getSupabase()
+        .from("user_calendars")
+        .delete()
+        .eq("user_id", dbUser.id);
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Apple Calendar (CalDAV / iCloud) helpers
+// ---------------------------------------------------------------------------
+
+/** Create an authenticated CalDAV client for iCloud */
+async function createAppleCalDAVClient(username: string, password: string) {
+  const client = await createDAVClient({
+    serverUrl: "https://caldav.icloud.com",
+    credentials: {
+      username,
+      password,
+    },
+    authMethod: "Basic",
+    defaultAccountType: "caldav",
+  });
+  return client;
+}
+
+/** Fetch calendars from iCloud CalDAV */
+async function fetchAppleCalendars(username: string, password: string): Promise<DAVCalendar[]> {
+  const client = await createAppleCalDAVClient(username, password);
+  const calendars = await client.fetchCalendars();
+  return calendars;
+}
+
+/** Parse iCalendar VEVENT data to extract busy blocks */
+function parseICalEvents(icalData: string, timeMin: Date, timeMax: Date): { start: Date; end: Date }[] {
+  const events: { start: Date; end: Date }[] = [];
+
+  // Split into VEVENT blocks
+  const veventRegex = /BEGIN:VEVENT([\s\S]*?)END:VEVENT/g;
+  let match;
+
+  while ((match = veventRegex.exec(icalData)) !== null) {
+    const block = match[1];
+
+    // Skip cancelled events
+    if (/STATUS:CANCELLED/i.test(block)) continue;
+    // Skip transparent (free) events
+    if (/TRANSP:TRANSPARENT/i.test(block)) continue;
+
+    // Extract DTSTART and DTEND
+    const dtStartMatch = block.match(/DTSTART[^:]*:(\d{8}T?\d{0,6}Z?)/);
+    const dtEndMatch = block.match(/DTEND[^:]*:(\d{8}T?\d{0,6}Z?)/);
+
+    if (!dtStartMatch) continue;
+
+    const startStr = dtStartMatch[1];
+    const endStr = dtEndMatch?.[1];
+
+    let startDt: Date;
+    let endDt: Date;
+
+    if (startStr.length === 8) {
+      // All-day event: YYYYMMDD
+      startDt = new Date(`${startStr.slice(0, 4)}-${startStr.slice(4, 6)}-${startStr.slice(6, 8)}T00:00:00Z`);
+      if (endStr && endStr.length === 8) {
+        endDt = new Date(`${endStr.slice(0, 4)}-${endStr.slice(4, 6)}-${endStr.slice(6, 8)}T00:00:00Z`);
+      } else {
+        // Default: 1-day event
+        endDt = new Date(startDt.getTime() + 24 * 60 * 60 * 1000);
+      }
+    } else {
+      // Date-time: YYYYMMDDTHHmmssZ or YYYYMMDDTHHmmss
+      startDt = parseICalDateTime(startStr);
+      endDt = endStr ? parseICalDateTime(endStr) : new Date(startDt.getTime() + 60 * 60 * 1000);
+    }
+
+    // Filter to events within our sync window
+    if (endDt <= timeMin || startDt >= timeMax) continue;
+    if (startDt >= endDt) continue;
+
+    events.push({ start: startDt, end: endDt });
+  }
+
+  return events;
+}
+
+/** Parse iCal date-time string (YYYYMMDDTHHmmssZ or YYYYMMDDTHHmmss) to Date */
+function parseICalDateTime(dtStr: string): Date {
+  const year = dtStr.slice(0, 4);
+  const month = dtStr.slice(4, 6);
+  const day = dtStr.slice(6, 8);
+  const hour = dtStr.slice(9, 11) || "00";
+  const min = dtStr.slice(11, 13) || "00";
+  const sec = dtStr.slice(13, 15) || "00";
+  const isUtc = dtStr.endsWith("Z");
+
+  const dateStr = `${year}-${month}-${day}T${hour}:${min}:${sec}${isUtc ? "Z" : ""}`;
+  return new Date(dateStr);
+}
+
+/**
+ * Sync Apple Calendar events → busy blocks for the sync engine.
+ * Returns busy blocks from all selected Apple calendars.
+ */
+async function fetchAppleBusyBlocks(
+  username: string,
+  password: string,
+  calendarUrls: string[],
+  timeMin: Date,
+  timeMax: Date,
+): Promise<{ start: string; end: string }[]> {
+  const client = await createAppleCalDAVClient(username, password);
+  const allBusyBlocks: { start: string; end: string }[] = [];
+
+  for (const calUrl of calendarUrls) {
+    try {
+      const objects: DAVObject[] = await client.fetchCalendarObjects({
+        calendar: { url: calUrl } as DAVCalendar,
+        timeRange: {
+          start: timeMin.toISOString(),
+          end: timeMax.toISOString(),
+        },
+      });
+
+      for (const obj of objects) {
+        if (!obj.data) continue;
+        const events = parseICalEvents(obj.data, timeMin, timeMax);
+        for (const ev of events) {
+          allBusyBlocks.push({
+            start: ev.start.toISOString(),
+            end: ev.end.toISOString(),
+          });
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to fetch Apple calendar ${calUrl}:`, err);
+    }
+  }
+
+  return allBusyBlocks;
+}
+
+// ---------------------------------------------------------------------------
+// Apple Calendar routes
+// ---------------------------------------------------------------------------
+
+/** POST /calendar/apple/connect — connect Apple Calendar via app-specific password */
+app.post("/calendar/apple/connect", requireAuth, async (req: AuthRequest, res: Response) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    res.status(400).json({ error: "Apple ID email and app-specific password are required" });
+    return;
+  }
+
+  try {
+    // Validate credentials by attempting to connect
+    const calendars = await fetchAppleCalendars(username, password);
+
+    if (!calendars || calendars.length === 0) {
+      res.status(400).json({ error: "Could not find any calendars. Please check your credentials." });
+      return;
+    }
+
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // Store credentials
+    await getSupabase()
+      .from("users")
+      .update({
+        apple_caldav_username: username,
+        apple_caldav_password: password,
+        apple_calendar_connected: true,
+      })
+      .eq("firebase_uid", req.uid!);
+
+    // Store discovered calendars
+    const rows = calendars.map((cal) => ({
+      user_id: dbUser.id,
+      calendar_id: cal.url,
+      calendar_name: cal.displayName || cal.url.split("/").filter(Boolean).pop() || "Apple Calendar",
+      calendar_color: null,
+      is_selected: true, // default-select all Apple calendars
+      access_role: "owner",
+      source: "apple",
+    }));
+
+    if (rows.length) {
+      await getSupabase()
+        .from("user_calendars")
+        .upsert(rows, { onConflict: "user_id,calendar_id" });
+    }
+
+    res.json({
+      success: true,
+      calendarsFound: calendars.length,
+      calendars: rows.map((r) => ({
+        calendar_id: r.calendar_id,
+        calendar_name: r.calendar_name,
+        is_selected: r.is_selected,
+        source: r.source,
+      })),
+    });
+  } catch (err: any) {
+    console.error("Apple Calendar connect error:", err);
+    if (err.message?.includes("401") || err.message?.includes("Unauthorized") || err.message?.includes("credentials")) {
+      res.status(401).json({
+        error: "Invalid Apple ID or app-specific password. Make sure you're using an app-specific password from appleid.apple.com, not your regular Apple ID password.",
+      });
+    } else {
+      res.status(500).json({ error: "Failed to connect Apple Calendar. Please try again." });
+    }
+  }
+});
+
+/** GET /calendar/apple/status — check if Apple Calendar is connected */
+app.get("/calendar/apple/status", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await getDbUser(req.uid!);
+    res.json({
+      connected: !!(user?.apple_calendar_connected && user?.apple_caldav_username),
+      username: user?.apple_caldav_username || null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /calendar/apple/disconnect — remove stored Apple Calendar credentials */
+app.post("/calendar/apple/disconnect", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    await getSupabase()
+      .from("users")
+      .update({
+        apple_caldav_username: null,
+        apple_caldav_password: null,
+        apple_calendar_connected: false,
+      })
+      .eq("firebase_uid", req.uid!);
+
+    // Remove Apple calendars
+    const dbUser = await getDbUser(req.uid!);
+    if (dbUser) {
+      await getSupabase()
+        .from("user_calendars")
+        .delete()
+        .eq("user_id", dbUser.id)
+        .eq("source", "apple");
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /calendar/apple/list — refresh Apple Calendar list */
+app.get("/calendar/apple/list", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await getDbUser(req.uid!);
+    if (!user?.apple_caldav_username || !user?.apple_caldav_password) {
+      res.status(400).json({ error: "Apple Calendar not connected" });
+      return;
+    }
+
+    const calendars = await fetchAppleCalendars(user.apple_caldav_username, user.apple_caldav_password);
+
+    // Upsert fresh calendar metadata
+    const rows = calendars.map((cal) => ({
+      user_id: user.id,
+      calendar_id: cal.url,
+      calendar_name: cal.displayName || cal.url.split("/").filter(Boolean).pop() || "Apple Calendar",
+      calendar_color: null,
+      access_role: "owner",
+      source: "apple",
+    }));
+
+    if (rows.length) {
+      await getSupabase()
+        .from("user_calendars")
+        .upsert(rows, { onConflict: "user_id,calendar_id" });
+    }
+
+    // Return stored rows (which include is_selected)
+    const { data: stored } = await getSupabase()
+      .from("user_calendars")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("source", "apple")
+      .order("calendar_name");
+
+    res.json({ calendars: stored || [] });
+  } catch (err: any) {
+    console.error("Apple calendar list error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Calendar list & selection routes
+// ---------------------------------------------------------------------------
+
+/** GET /calendar/list — fetch user's Google Calendars (refreshes from Google) */
+app.get("/calendar/list", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const oauth2 = await getAuthedCalendarClient(req.uid!);
+    if (!oauth2) {
+      res.status(400).json({ error: "Calendar not connected" });
+      return;
+    }
+
+    const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+    const calListRes = await calendarApi.calendarList.list();
+    const calendars = calListRes.data.items || [];
+
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // Upsert fresh calendar metadata
+    const rows = calendars.map((cal) => ({
+      user_id: dbUser.id,
+      calendar_id: cal.id!,
+      calendar_name: cal.summary || cal.id!,
+      calendar_color: cal.backgroundColor || null,
+      access_role: cal.accessRole || null,
+      source: "google",
+    }));
+
+    if (rows.length) {
+      await getSupabase()
+        .from("user_calendars")
+        .upsert(rows, { onConflict: "user_id,calendar_id" });
+    }
+
+    // Return stored rows (which include is_selected) — Google calendars only
+    const { data: stored } = await getSupabase()
+      .from("user_calendars")
+      .select("*")
+      .eq("user_id", dbUser.id)
+      .eq("source", "google")
+      .order("calendar_name");
+
+    res.json({ calendars: stored || [] });
+  } catch (err: any) {
+    console.error("Calendar list error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /calendar/selected — get only the selected calendar IDs */
+app.get("/calendar/selected", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const { data } = await getSupabase()
+      .from("user_calendars")
+      .select("*")
+      .eq("user_id", dbUser.id)
+      .eq("is_selected", true)
+      .order("calendar_name");
+
+    res.json({ calendars: data || [] });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /calendar/selected — update which calendars are selected */
+app.put("/calendar/selected", requireAuth, async (req: AuthRequest, res: Response) => {
+  const { calendarIds } = req.body; // array of Google Calendar IDs to select
+  if (!Array.isArray(calendarIds)) {
+    res.status(400).json({ error: "calendarIds must be an array" });
+    return;
+  }
+  try {
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // Deselect all, then select the provided ones
+    await getSupabase()
+      .from("user_calendars")
+      .update({ is_selected: false })
+      .eq("user_id", dbUser.id);
+
+    if (calendarIds.length > 0) {
+      await getSupabase()
+        .from("user_calendars")
+        .update({ is_selected: true })
+        .eq("user_id", dbUser.id)
+        .in("calendar_id", calendarIds);
+    }
+
+    // Return updated list
+    const { data } = await getSupabase()
+      .from("user_calendars")
+      .select("*")
+      .eq("user_id", dbUser.id)
+      .order("calendar_name");
+
+    res.json({ calendars: data || [] });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Google Calendar webhook receiver (public — Google sends POST here)
 // ---------------------------------------------------------------------------
-app.post("/webhooks/google-calendar", (req: Request, res: Response) => {
-  const channelId = req.headers["x-goog-channel-id"];
+app.post("/webhooks/google-calendar", async (req: Request, res: Response) => {
+  const channelId = req.headers["x-goog-channel-id"] as string | undefined;
   const resourceState = req.headers["x-goog-resource-state"];
   console.log("Calendar webhook:", { channelId, resourceState });
-  // TODO: fetch updated events from Google Calendar and sync to availability
+
+  // When we get a real change notification, find the user and re-sync
+  if (channelId && resourceState !== "sync") {
+    try {
+      const { data: user } = await getSupabase()
+        .from("users")
+        .select("firebase_uid")
+        .eq("calendar_watch_channel", channelId)
+        .single();
+
+      if (user?.firebase_uid) {
+        await syncUserCalendar(user.firebase_uid);
+        console.log(`🔄 Webhook-triggered sync for channel ${channelId}`);
+      }
+    } catch (err) {
+      console.error("Webhook sync error:", err);
+    }
+  }
+
   res.status(200).send("OK");
 });
 
@@ -954,6 +2680,36 @@ app.post("/admin/migrate", async (req: Request, res: Response) => {
     results.push("Run in SQL Editor: CREATE TABLE IF NOT EXISTS user_preferences (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID REFERENCES users(id) UNIQUE, data JSONB DEFAULT '{}', updated_at TIMESTAMPTZ DEFAULT NOW());");
   } else {
     results.push("✓ user_preferences table exists");
+  }
+
+  // Test notifications table
+  const { error: notifErr } = await sb.from("notifications").select("id").limit(0);
+  if (notifErr) {
+    // Auto-create the notifications table via rpc
+    const createSql = `
+      CREATE TABLE IF NOT EXISTS notifications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('friend_accepted','friend_request','meetup_request','meetup_confirmed','meetup_reminder','calendar_match')),
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        related_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        related_id UUID,
+        read BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications (user_id, read) WHERE read = FALSE;
+    `;
+    const { error: execErr } = await sb.rpc("exec_sql", { sql: createSql });
+    if (execErr) {
+      results.push("notifications table missing — run this SQL in Supabase SQL Editor:");
+      results.push(createSql.trim());
+    } else {
+      results.push("✓ notifications table auto-created");
+    }
+  } else {
+    results.push("✓ notifications table exists");
   }
 
   res.json({ results });
