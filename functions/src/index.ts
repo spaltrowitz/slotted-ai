@@ -268,6 +268,76 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
   }
 });
 
+/** POST /friends/connect-referral — auto-connect when someone signs up via referral link */
+app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res: Response) => {
+  const { referrerUid, referrerEmail } = req.body;
+  if (!referrerUid && !referrerEmail) {
+    res.status(400).json({ error: "referrerUid or referrerEmail is required" });
+    return;
+  }
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // Look up the referrer by Firebase UID or email
+    let referrer: any = null;
+    if (referrerUid) {
+      const { data } = await getSupabase()
+        .from("users")
+        .select("id")
+        .eq("firebase_uid", referrerUid)
+        .single();
+      referrer = data;
+    } else if (referrerEmail) {
+      const { data } = await getSupabase()
+        .from("users")
+        .select("id")
+        .eq("email", referrerEmail)
+        .single();
+      referrer = data;
+    }
+
+    if (!referrer) {
+      res.status(404).json({ error: "Referrer not found" });
+      return;
+    }
+
+    if (referrer.id === me.id) {
+      res.status(400).json({ error: "Cannot friend yourself" });
+      return;
+    }
+
+    // Canonical ordering: smaller UUID first
+    const [userA, userB] =
+      me.id < referrer.id ? [me.id, referrer.id] : [referrer.id, me.id];
+
+    const { data, error } = await getSupabase()
+      .from("friendships")
+      .upsert(
+        {
+          user_a_id: userA,
+          user_b_id: userB,
+          invited_by: referrer.id,
+          status: "accepted",
+        },
+        { onConflict: "user_a_id,user_b_id" },
+      )
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** PATCH /friends/:friendshipId — accept or decline a friendship */
 app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: Response) => {
   const { friendshipId } = req.params;
@@ -577,6 +647,192 @@ app.post("/suggestions/:suggestionId/act", requireAuth, async (req: AuthRequest,
     res.status(500).json({ error: err.message });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Feedback — sends user feedback to developer
+// ---------------------------------------------------------------------------
+app.post("/feedback", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { message } = req.body;
+    if (!message || typeof message !== "string" || !message.trim()) {
+      res.status(400).json({ error: "Message is required" });
+      return;
+    }
+
+    const firebaseUser = await admin.auth().getUser(req.uid!);
+    const feedbackEntry = {
+      firebase_uid: req.uid,
+      email: firebaseUser.email ?? "unknown",
+      display_name: firebaseUser.displayName ?? "unknown",
+      message: message.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    // Store in Supabase
+    const { error } = await getSupabase()
+      .from("feedback")
+      .insert(feedbackEntry);
+
+    if (error) {
+      console.error("Failed to store feedback in Supabase:", error);
+      // Still log it even if DB insert fails
+    }
+
+    // Always log so it's visible in Cloud Functions logs
+    console.log("📬 USER FEEDBACK:", JSON.stringify(feedbackEntry));
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Feedback error:", err);
+    res.status(500).json({ error: "Failed to submit feedback" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /meetup-logs — Log a meetup for progressive profiling
+// ---------------------------------------------------------------------------
+app.post("/meetup-logs", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const { friend_id, activity_type, duration_min, day_of_week, time_of_day, notice_days, was_spontaneous, rating } = req.body;
+
+    const { data, error } = await getSupabase()
+      .from("meetup_logs")
+      .insert({
+        user_id: dbUser.id,
+        friend_id: friend_id || null,
+        activity_type: activity_type || "hangout",
+        duration_min: duration_min || null,
+        day_of_week: day_of_week ?? new Date().getDay(),
+        time_of_day: time_of_day || "afternoon",
+        notice_days: notice_days || null,
+        was_spontaneous: was_spontaneous || false,
+        rating: rating || null,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Recompute learned preferences after each log
+    await recomputePreferences(dbUser.id);
+
+    console.log("📝 Meetup logged:", data.id);
+    res.status(201).json(data);
+  } catch (err) {
+    console.error("Meetup log error:", err);
+    res.status(500).json({ error: "Failed to log meetup" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /meetup-logs — Get all meetup logs for current user
+// ---------------------------------------------------------------------------
+app.get("/meetup-logs", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const { data, error } = await getSupabase()
+      .from("meetup_logs")
+      .select("*")
+      .eq("user_id", dbUser.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) {
+    console.error("Meetup logs fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch meetup logs" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /preferences/learned — Get learned preferences for current user
+// ---------------------------------------------------------------------------
+app.get("/preferences/learned", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const { data, error } = await getSupabase()
+      .from("user_preferences")
+      .select("*")
+      .eq("user_id", dbUser.id)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error; // PGRST116 = not found
+    res.json(data || { total_meetups_logged: 0 });
+  } catch (err) {
+    console.error("Preferences fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch preferences" });
+  }
+});
+
+/** Recompute learned preferences from meetup_logs */
+async function recomputePreferences(userId: string) {
+  const supabase = getSupabase();
+
+  const { data: logs } = await supabase
+    .from("meetup_logs")
+    .select("*")
+    .eq("user_id", userId);
+
+  if (!logs || logs.length === 0) return;
+
+  // Count activity types
+  const activityCounts: Record<string, number> = {};
+  let totalDuration = 0;
+  let durationCount = 0;
+  const timeCounts: Record<string, number> = {};
+  const dayCounts: Record<number, number> = {};
+  let spontaneousCount = 0;
+
+  for (const log of logs) {
+    activityCounts[log.activity_type] = (activityCounts[log.activity_type] || 0) + 1;
+    if (log.duration_min) {
+      totalDuration += log.duration_min;
+      durationCount++;
+    }
+    timeCounts[log.time_of_day] = (timeCounts[log.time_of_day] || 0) + 1;
+    dayCounts[log.day_of_week] = (dayCounts[log.day_of_week] || 0) + 1;
+    if (log.was_spontaneous) spontaneousCount++;
+  }
+
+  const topActivity = Object.entries(activityCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const avgDuration = durationCount > 0 ? Math.round(totalDuration / durationCount) : null;
+  const topTime = Object.entries(timeCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const topDay = Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  const spontaneousRatio = spontaneousCount / logs.length;
+  const planningStyle = spontaneousRatio > 0.6 ? "spontaneous" : spontaneousRatio < 0.3 ? "planner" : "mixed";
+
+  await supabase
+    .from("user_preferences")
+    .upsert({
+      user_id: userId,
+      preferred_activity: topActivity || null,
+      avg_duration_min: avgDuration,
+      preferred_time: topTime || null,
+      preferred_day: topDay !== undefined ? dayNames[Number(topDay)] : null,
+      planning_style: planningStyle,
+      total_meetups_logged: logs.length,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+}
 
 // ---------------------------------------------------------------------------
 // Google Calendar webhook receiver (public — Google sends POST here)

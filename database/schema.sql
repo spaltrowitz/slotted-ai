@@ -159,6 +159,70 @@ CREATE TRIGGER trg_meetup_participants_updated_at
   BEFORE UPDATE ON meetup_participants FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ============================================================
+-- FEEDBACK
+-- ============================================================
+CREATE TABLE feedback (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  firebase_uid    TEXT NOT NULL,
+  email           TEXT NOT NULL,
+  display_name    TEXT,
+  message         TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_feedback_created ON feedback(created_at DESC);
+
+-- ============================================================
+-- MEETUP LOGS (progressive profiling — learning data)
+-- ============================================================
+CREATE TABLE meetup_logs (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  friend_id       UUID REFERENCES users(id) ON DELETE SET NULL,
+
+  -- What happened
+  activity_type   TEXT NOT NULL DEFAULT 'other'
+    CHECK (activity_type IN ('coffee', 'meal', 'drinks', 'walk', 'workout', 'movie', 'game_night', 'hangout', 'other')),
+  duration_min    INT,                                 -- actual duration in minutes
+  day_of_week     INT NOT NULL,                        -- 0=Sun … 6=Sat
+  time_of_day     TEXT NOT NULL                        -- morning, afternoon, evening, night
+    CHECK (time_of_day IN ('morning', 'afternoon', 'evening', 'night')),
+  
+  -- Planning style
+  notice_days     INT,                                 -- how many days in advance it was planned
+  was_spontaneous BOOLEAN NOT NULL DEFAULT FALSE,      -- planned < 24h ahead
+  
+  -- User sentiment
+  rating          INT CHECK (rating BETWEEN 1 AND 5),  -- optional: how'd it go?
+  
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_meetup_logs_user ON meetup_logs (user_id, created_at);
+CREATE INDEX idx_meetup_logs_activity ON meetup_logs (user_id, activity_type);
+
+-- ============================================================
+-- USER PREFERENCES (learned from meetup_logs — cached patterns)
+-- ============================================================
+CREATE TABLE user_preferences (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id         UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+  -- Learned patterns (updated after each meetup log)
+  preferred_activity    TEXT,           -- most common activity_type
+  avg_duration_min      INT,           -- average meetup duration
+  preferred_time        TEXT,          -- most common time_of_day
+  preferred_day         TEXT,          -- most common day name
+  planning_style        TEXT           -- 'spontaneous' | 'planner' | 'mixed'
+    CHECK (planning_style IN ('spontaneous', 'planner', 'mixed', NULL)),
+  total_meetups_logged  INT NOT NULL DEFAULT 0,
+
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_user_prefs_user ON user_preferences (user_id);
+
+-- ============================================================
 -- Row Level Security (RLS) — enable after setting up Supabase auth
 -- ============================================================
 -- ALTER TABLE users ENABLE ROW LEVEL SECURITY;

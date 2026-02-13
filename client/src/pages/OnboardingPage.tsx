@@ -2,33 +2,31 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-type BatteryLevel = 'open' | 'ask_me' | 'recharging';
-
 interface OnboardingData {
   socialFrequency: string;
   preferredTimes: string[];
-  travelBuffer: string;
-  socialBattery: BatteryLevel;
+  personalTimeMode: string;
+  tripBuffer: string;
   calendarConnected: boolean;
 }
 
 const steps = [
   'frequency',
   'times',
-  'travel',
-  'battery',
+  'personal-time',
+  'trip-buffer',
   'calendar',
 ] as const;
 
 export default function OnboardingPage() {
-  const { user } = useAuth();
+  const { user, clearNewUser, completeOnboarding, skipOnboarding, connectCalendar, calendarConnected } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<OnboardingData>({
     socialFrequency: '',
     preferredTimes: [],
-    travelBuffer: '30',
-    socialBattery: 'open',
+    personalTimeMode: '',
+    tripBuffer: '',
     calendarConnected: false,
   });
 
@@ -40,31 +38,28 @@ export default function OnboardingPage() {
     } else {
       // TODO: POST onboarding data to API
       console.log('Onboarding complete:', data);
+      clearNewUser();
+      completeOnboarding();
       navigate('/dashboard');
     }
+  };
+
+  const handleSkip = () => {
+    skipOnboarding();
+    navigate('/dashboard');
   };
 
   const back = () => {
     if (step > 0) setStep(step - 1);
   };
 
-  const stepEmojis = ['🗓️', '🌅', '🚗', '🔋', '📅'];
+  const stepEmojis = ['🗓️', '🌅', '�️', '✈️', '📅'];
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#faf9f7] relative overflow-hidden">
-      {/* Decorative geometric shapes — crisp, matching login */}
-      <div className="absolute top-16 left-20 h-28 w-28 rounded-full bg-teal-400/12" />
-      <div className="absolute bottom-24 right-16 h-36 w-36 rounded-full bg-amber-300/15" />
-      <div className="absolute top-1/3 right-1/4 h-14 w-14 rounded-2xl rotate-12 bg-indigo-400/10" />
-
-      {/* Subtle dot grid */}
-      <div
-        className="absolute inset-0 opacity-[0.03]"
-        style={{
-          backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-        }}
-      />
+    <div className="flex min-h-screen items-center justify-center bg-white relative overflow-hidden">
+      {/* Soft gradient wash — matching login */}
+      <div className="absolute -top-1/3 -right-1/4 h-[800px] w-[800px] rounded-full bg-gradient-to-br from-orange-100/60 via-rose-50/40 to-transparent blur-3xl" />
+      <div className="absolute -bottom-1/4 -left-1/4 h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-blue-50/50 via-indigo-50/30 to-transparent blur-3xl" />
 
       <div className="relative w-full max-w-lg rounded-2xl bg-white p-8 shadow-xl border border-gray-200/60">
         {/* Progress */}
@@ -130,12 +125,12 @@ export default function OnboardingPage() {
             <p className="text-sm text-gray-500">Select all that apply</p>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { value: 'weekday-morning', label: '🌅 Weekday mornings' },
-                { value: 'weekday-lunch', label: '☀️ Weekday lunches' },
-                { value: 'weekday-evening', label: '🌆 Weekday evenings' },
-                { value: 'weekend-morning', label: '🥐 Weekend mornings' },
-                { value: 'weekend-afternoon', label: '🏖️ Weekend afternoons' },
-                { value: 'weekend-evening', label: '🌙 Weekend evenings' },
+                { value: 'weekday-morning', emoji: '🌅', prefix: 'Weekday', suffix: 'mornings' },
+                { value: 'weekday-lunch', emoji: '☀️', prefix: 'Weekday', suffix: 'lunches' },
+                { value: 'weekday-evening', emoji: '🌆', prefix: 'Weekday', suffix: 'evenings' },
+                { value: 'weekend-morning', emoji: '🥐', prefix: 'Weekend', suffix: 'mornings' },
+                { value: 'weekend-afternoon', emoji: '🏖️', prefix: 'Weekend', suffix: 'afternoons' },
+                { value: 'weekend-evening', emoji: '🌙', prefix: 'Weekend', suffix: 'evenings' },
               ].map((opt) => {
                 const selected = data.preferredTimes.includes(opt.value);
                 return (
@@ -155,7 +150,7 @@ export default function OnboardingPage() {
                         : 'border-gray-200 text-gray-700 hover:border-slotted-200 hover:bg-gray-50'
                     }`}
                   >
-                    {opt.label}
+                    {opt.emoji} <span className="font-bold">{opt.prefix}</span> {opt.suffix}
                   </button>
                 );
               })}
@@ -163,29 +158,28 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Q3: Travel Buffer */}
-        {currentStep === 'travel' && (
+        {/* Q3: Protect Personal Time */}
+        {currentStep === 'personal-time' && (
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
-              How much travel buffer do you need?
+              How do you want to protect personal time?
             </h2>
             <p className="text-sm text-gray-500">
-              We'll pad your meetup times so you're never rushing 🏃‍♀️
+              Sometimes you're technically free but don't want plans
             </p>
             <div className="space-y-2">
               {[
-                { value: '15', label: '15 minutes' },
-                { value: '30', label: '30 minutes' },
-                { value: '45', label: '45 minutes' },
-                { value: '60', label: '1 hour' },
+                { value: 'manual', label: '🔧 I\'ll manually mark blocks as unavailable' },
+                { value: 'recurring', label: '🔁 Help me set up recurring protected time' },
+                { value: 'open', label: '📖 I\'m comfortable showing all my free time' },
               ].map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() =>
-                    setData({ ...data, travelBuffer: opt.value })
+                    setData({ ...data, personalTimeMode: opt.value })
                   }
                   className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                    data.travelBuffer === opt.value
+                    data.personalTimeMode === opt.value
                       ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
                       : 'border-gray-200 text-gray-700 hover:border-slotted-200 hover:bg-gray-50'
                   }`}
@@ -197,57 +191,41 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Q4: Social Battery Default */}
-        {currentStep === 'battery' && (
+        {/* Q4: Trip Buffers */}
+        {currentStep === 'trip-buffer' && (
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
-              What's your usual social energy level?
+              Auto-block time around trips? ✈️
             </h2>
             <p className="text-sm text-gray-500">
-              You can change this anytime from your dashboard
+              When we detect travel on your calendar, we can buffer recovery time
             </p>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {[
-                {
-                  value: 'open' as BatteryLevel,
-                  emoji: '🟢',
-                  label: 'Open',
-                  desc: "I'm usually down to hang out",
-                },
-                {
-                  value: 'ask_me' as BatteryLevel,
-                  emoji: '🟡',
-                  label: 'Ask Me',
-                  desc: "Depends on the plan and who's going",
-                },
-                {
-                  value: 'recharging' as BatteryLevel,
-                  emoji: '🔴',
-                  label: 'Recharging',
-                  desc: 'I prefer alone time by default',
-                },
+                { value: 'before', label: 'Block the day before travel' },
+                { value: 'after', label: 'Block the day after travel' },
+                { value: 'both', label: 'Block both before and after' },
+                { value: 'none', label: 'No buffers — I\'m always available' },
               ].map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() =>
-                    setData({ ...data, socialBattery: opt.value })
+                    setData({ ...data, tripBuffer: opt.value })
                   }
-                  className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
-                    data.socialBattery === opt.value
-                      ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 shadow-sm'
-                      : 'border-gray-200 hover:border-slotted-200 hover:bg-gray-50'
+                  className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                    data.tripBuffer === opt.value
+                      ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
+                      : 'border-gray-200 text-gray-700 hover:border-slotted-200 hover:bg-gray-50'
                   }`}
                 >
-                  <span className="text-lg">{opt.emoji}</span>{' '}
-                  <span className="font-medium text-gray-900">{opt.label}</span>
-                  <p className="mt-0.5 text-sm text-gray-500">{opt.desc}</p>
+                  {opt.label}
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {/* Q5: Calendar connect */}
+        {/* Q4: Calendar connect */}
         {currentStep === 'calendar' && (
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
@@ -256,7 +234,7 @@ export default function OnboardingPage() {
             <p className="text-sm text-gray-500">
               We only read your busy/free times — never event details
             </p>
-            {data.calendarConnected ? (
+            {calendarConnected ? (
               <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
                 <span className="text-2xl">✅</span>
                 <p className="mt-2 font-medium text-green-700">
@@ -265,10 +243,7 @@ export default function OnboardingPage() {
               </div>
             ) : (
               <button
-                onClick={() =>
-                  // TODO: trigger Google Calendar OAuth flow
-                  setData({ ...data, calendarConnected: true })
-                }
+                onClick={() => connectCalendar()}
                 className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-6 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -296,7 +271,7 @@ export default function OnboardingPage() {
         )}
 
         {/* Navigation buttons */}
-        <div className="mt-8 flex justify-between">
+        <div className="mt-8 flex items-center justify-between">
           <button
             onClick={back}
             disabled={step === 0}
@@ -304,12 +279,20 @@ export default function OnboardingPage() {
           >
             Back
           </button>
-          <button
-            onClick={next}
-            className="rounded-xl gradient-btn px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
-          >
-            {step === steps.length - 1 ? 'Let\'s go! 🚀' : 'Continue'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSkip}
+              className="rounded-xl px-4 py-2.5 text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Skip for now
+            </button>
+            <button
+              onClick={next}
+              className="rounded-xl gradient-btn px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
+            >
+              {step === steps.length - 1 ? 'Let\'s go! \uD83D\uDE80' : 'Continue'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

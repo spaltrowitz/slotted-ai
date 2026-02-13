@@ -21,6 +21,16 @@ const navItems = [
     ),
   },
   {
+    path: '/notifications',
+    label: 'Inbox',
+    badge: true,
+    icon: (
+      <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+      </svg>
+    ),
+  },
+  {
     path: '/settings',
     label: 'Settings',
     icon: (
@@ -37,13 +47,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50/50 font-sans">
-      {/* Top navigation bar */}
+    <div className="flex min-h-screen flex-col bg-[#f8f7f4] font-sans">
+      {/* Subtle background washes */}
+      <div className="fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-40 right-0 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-amber-100/30 via-orange-100/20 to-transparent blur-3xl" />
+        <div className="absolute top-1/3 -left-32 h-[400px] w-[400px] rounded-full bg-gradient-to-tr from-teal-100/25 via-cyan-50/20 to-transparent blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 h-[350px] w-[350px] rounded-full bg-gradient-to-tl from-violet-100/20 via-fuchsia-50/15 to-transparent blur-3xl" />
+      </div>
+
+      {/* Top navigation bar — desktop: full nav, mobile: logo + avatar only */}
       <header className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           {/* Left — logo + nav */}
           <div className="flex items-center gap-8">
-            <Link to="/dashboard" className="flex items-center gap-2">
+            <Link to="/" className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-btn">
                 <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -52,14 +69,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <span className="font-display text-lg font-bold text-gray-900">Slotted</span>
             </Link>
 
-            <nav className="flex items-center gap-1">
+            {/* Desktop nav — hidden on mobile */}
+            <nav className="hidden md:flex items-center gap-1">
               {navItems.map((item) => {
                 const isActive = location.pathname.startsWith(item.path);
                 return (
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                    className={`relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
                       isActive
                         ? 'bg-slotted-50 text-slotted-700'
                         : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
@@ -67,6 +85,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   >
                     {item.icon}
                     {item.label}
+                    {'badge' in item && item.badge && (
+                      <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -77,7 +101,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3">
             <button
               onClick={signOut}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              className="hidden md:inline-flex rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:border-gray-300 shadow-sm"
             >
               Sign out
             </button>
@@ -92,10 +116,41 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Main content */}
+      {/* Main content — extra bottom padding on mobile for tab bar */}
       <main className="flex-1">
-        <div className="mx-auto max-w-6xl px-6 py-8">{children}</div>
+        <div className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 md:pb-8">{children}</div>
       </main>
+
+      {/* Mobile bottom tab bar — hidden on desktop */}
+      <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-gray-200/80 bg-white/95 backdrop-blur-xl md:hidden">
+        <div className="mx-auto flex h-16 max-w-lg items-center justify-around px-2">
+          {navItems.map((item) => {
+            const isActive = location.pathname.startsWith(item.path);
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`relative flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 transition-all ${
+                  isActive
+                    ? 'text-slotted-600'
+                    : 'text-gray-400'
+                }`}
+              >
+                <span className="h-6 w-6 [&>svg]:h-6 [&>svg]:w-6">{item.icon}</span>
+                <span className="text-[10px] font-medium">{item.label}</span>
+                {'badge' in item && item.badge && (
+                  <span className="absolute top-0.5 right-1 flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+        {/* Safe area for phones with home indicator */}
+        <div className="h-[env(safe-area-inset-bottom)]" />
+      </nav>
     </div>
   );
 }

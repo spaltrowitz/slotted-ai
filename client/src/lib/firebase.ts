@@ -14,5 +14,5 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
-// Request calendar scope so we can read Google Calendar
-googleProvider.addScope('https://www.googleapis.com/auth/calendar.readonly');
+// Calendar scope will be requested server-side via a separate OAuth flow.
+// Adding it here blocks sign-in unless the OAuth consent screen is verified.

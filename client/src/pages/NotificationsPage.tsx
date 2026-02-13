@@ -1,0 +1,128 @@
+import { useState } from 'react';
+import AppShell from '../components/AppShell';
+
+interface Notification {
+  id: string;
+  type: 'match' | 'request' | 'accepted' | 'reminder';
+  title: string;
+  body: string;
+  time: string;
+  read: boolean;
+  actionLabel?: string;
+}
+
+// Placeholder data — will be replaced with real API data
+const mockNotifications: Notification[] = [];
+
+export default function NotificationsPage() {
+  const [notifications] = useState<Notification[]>(mockNotifications);
+
+  const typeConfig: Record<string, { emoji: string; bg: string; border: string }> = {
+    match: { emoji: '✨', bg: 'bg-amber-50', border: 'border-amber-100' },
+    request: { emoji: '👋', bg: 'bg-violet-50', border: 'border-violet-100' },
+    accepted: { emoji: '🎉', bg: 'bg-emerald-50', border: 'border-emerald-100' },
+    reminder: { emoji: '⏰', bg: 'bg-blue-50', border: 'border-blue-100' },
+  };
+
+  return (
+    <AppShell>
+      <div className="mb-8">
+        <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">Inbox</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Match alerts, meetup requests, and updates from your friends
+        </p>
+      </div>
+
+      {notifications.length === 0 ? (
+        <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+          <div className="flex flex-col items-center justify-center px-6 py-20">
+            <div className="animate-float text-5xl mb-2">🔔</div>
+            <h3 className="mt-3 font-display text-lg font-bold text-gray-900">
+              No notifications yet
+            </h3>
+            <p className="mt-2 max-w-sm text-center text-sm text-gray-400 leading-relaxed">
+              When Slotted finds a time that works for you and a friend, or someone sends you a
+              meetup request, it'll show up here.
+            </p>
+            <div className="mt-8 grid grid-cols-2 gap-4 max-w-md w-full">
+              {[
+                {
+                  emoji: '✨',
+                  title: 'Calendar match',
+                  desc: 'We found a time that works for both of you',
+                  bg: 'from-amber-50 to-orange-50',
+                  border: 'border-amber-100',
+                },
+                {
+                  emoji: '👋',
+                  title: 'Meetup request',
+                  desc: 'A friend wants to hang out at a suggested time',
+                  bg: 'from-violet-50 to-fuchsia-50',
+                  border: 'border-violet-100',
+                },
+                {
+                  emoji: '🎉',
+                  title: 'Request accepted',
+                  desc: 'Your meetup is confirmed and on both calendars',
+                  bg: 'from-emerald-50 to-teal-50',
+                  border: 'border-emerald-100',
+                },
+                {
+                  emoji: '⏰',
+                  title: 'Reminders',
+                  desc: 'Nudges when you haven\'t responded to a request',
+                  bg: 'from-blue-50 to-cyan-50',
+                  border: 'border-blue-100',
+                },
+              ].map((item) => (
+                <div
+                  key={item.title}
+                  className={`rounded-xl border ${item.border} bg-gradient-to-br ${item.bg} p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md`}
+                >
+                  <span className="text-xl">{item.emoji}</span>
+                  <p className="mt-2 text-xs font-semibold text-gray-900">{item.title}</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-gray-400">{item.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {notifications.map((notification) => {
+            const config = typeConfig[notification.type];
+            return (
+              <div
+                key={notification.id}
+                className={`flex items-start gap-4 rounded-2xl border ${
+                  notification.read ? 'border-gray-100 bg-white' : `${config.border} ${config.bg}`
+                } p-5 shadow-sm transition-all hover:shadow-md`}
+              >
+                <span className="mt-0.5 text-xl">{config.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className={`text-sm font-semibold ${notification.read ? 'text-gray-700' : 'text-gray-900'}`}>
+                        {notification.title}
+                      </p>
+                      <p className="mt-0.5 text-sm text-gray-500">{notification.body}</p>
+                    </div>
+                    <span className="shrink-0 text-xs text-gray-400">{notification.time}</span>
+                  </div>
+                  {notification.actionLabel && (
+                    <button className="mt-3 rounded-lg gradient-btn px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
+                      {notification.actionLabel}
+                    </button>
+                  )}
+                </div>
+                {!notification.read && (
+                  <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-slotted-500" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </AppShell>
+  );
+}

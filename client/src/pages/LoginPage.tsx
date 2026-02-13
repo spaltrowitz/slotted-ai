@@ -1,8 +1,22 @@
-import { Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
-  const { user, loading, signInWithGoogle } = useAuth();
+  const { user, loading, signInWithGoogle, authError } = useAuth();
+
+  // Capture referral param from invite links (e.g. ?ref=abc123)
+  // Default: connect new signups with founder account for testing
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref) {
+      localStorage.setItem('slotted_referrer', ref);
+      localStorage.removeItem('slotted_referrer_email');
+    } else if (!localStorage.getItem('slotted_referrer')) {
+      localStorage.setItem('slotted_referrer_email', 'sharipaltrowitz@gmail.com');
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -12,92 +26,139 @@ export default function LoginPage() {
     );
   }
 
-  if (user) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#faf9f7]">
-      {/* Decorative geometric shapes — crisp, not blurry */}
-      <div className="absolute top-12 left-16 h-32 w-32 rounded-full bg-teal-400/15" />
-      <div className="absolute top-40 right-24 h-20 w-20 rounded-full bg-amber-300/20" />
-      <div className="absolute bottom-32 left-1/4 h-16 w-16 rounded-2xl rotate-12 bg-indigo-400/10" />
-      <div className="absolute bottom-20 right-16 h-40 w-40 rounded-full bg-rose-300/10" />
-      <div className="absolute top-1/2 left-12 h-10 w-10 rounded-lg rotate-45 bg-cyan-400/15" />
-      <div className="absolute top-24 right-1/3 h-6 w-6 rounded-full bg-amber-400/25" />
+    <div className="relative min-h-screen overflow-hidden bg-[#f8f7f4]">
+      {/* Warm gradient mesh — colorful but sophisticated */}
+      <div className="absolute -top-32 -right-32 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-amber-200/50 via-orange-200/30 to-transparent blur-3xl" />
+      <div className="absolute top-1/2 -left-40 h-[500px] w-[500px] rounded-full bg-gradient-to-tr from-teal-200/40 via-cyan-100/30 to-transparent blur-3xl" />
+      <div className="absolute -bottom-20 right-1/4 h-[400px] w-[400px] rounded-full bg-gradient-to-tl from-violet-200/30 via-fuchsia-100/20 to-transparent blur-3xl" />
 
-      {/* Subtle dot grid */}
-      <div
-        className="absolute inset-0 opacity-[0.03]"
-        style={{
-          backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-        }}
-      />
-
-      {/* Content */}
-      <div className="relative z-10 w-full max-w-md px-6">
-        {/* Brand */}
-        <div className="mb-10 text-center">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-cyan-500 shadow-lg shadow-teal-500/20">
-            <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <h1 className="font-display text-5xl font-extrabold tracking-tight text-gray-900">
-            Slotted
-          </h1>
-          <p className="mt-3 text-lg font-medium text-gray-400">
-            Stop planning. Start hanging out.
-          </p>
+      {/* Sticky nav */}
+      <nav className="relative z-10 flex items-center justify-between px-8 py-5">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-btn text-sm font-bold text-white shadow-md">S</div>
+          <span className="font-display text-xl font-bold tracking-tight text-gray-900">Slotted</span>
         </div>
-
-        {/* Card */}
-        <div className="rounded-3xl border border-gray-200/60 bg-white p-8 shadow-xl shadow-gray-200/40">
-          {/* Feature chips */}
-          <div className="flex flex-wrap justify-center gap-2">
-            {[
-              { emoji: '📅', label: 'Calendar sync' },
-              { emoji: '🔋', label: 'Social battery' },
-              { emoji: '✨', label: 'AI scheduling' },
-            ].map((chip) => (
-              <span
-                key={chip.label}
-                className="inline-flex items-center gap-1.5 rounded-full border border-gray-100 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600"
-              >
-                <span>{chip.emoji}</span>
-                {chip.label}
-              </span>
-            ))}
-          </div>
-
-          {/* CTA */}
-          <button
-            onClick={signInWithGoogle}
-            className="mt-8 flex w-full items-center justify-center gap-3 rounded-2xl bg-gray-900 px-6 py-4 text-sm font-semibold text-white shadow-lg transition-all hover:bg-gray-800 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+        {user && (
+          <Link
+            to="/dashboard"
+            className="rounded-xl border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-300 shadow-sm"
           >
-            <svg className="h-5 w-5" viewBox="0 0 24 24">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-            </svg>
-            Continue with Google
-          </button>
+            Dashboard →
+          </Link>
+        )}
+      </nav>
 
-          <p className="mt-4 text-center text-xs text-gray-300">
-            Free forever &middot; No credit card needed
-          </p>
-        </div>
+      {/* Hero section */}
+      <div className="relative z-10 mx-auto max-w-3xl px-6 pt-16 pb-10 text-center">
+        <h1 className="font-display text-5xl font-extrabold tracking-tight text-gray-900 sm:text-6xl leading-[1.1]">
+          Stop texting back and forth.{' '}
+          <span className="gradient-text">Just hang out.</span>
+        </h1>
+        <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-gray-500">
+          Slotted syncs your Google Calendar with your friends, finds the best time to meet using AI,
+          and puts it on both calendars — no more back-and-forth.
+        </p>
 
-        {/* Privacy */}
-        <div className="mt-6 flex items-center justify-center gap-2 text-xs text-gray-300">
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-          </svg>
-          We only see busy/free — never your event details
+        {/* CTA */}
+        <div className="mt-8 flex flex-col items-center gap-3">
+          {user ? (
+            <Link
+              to="/dashboard"
+              className="flex items-center justify-center gap-3 rounded-2xl gradient-btn px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+            >
+              Go to Dashboard →
+            </Link>
+          ) : (
+            <div className="flex flex-col items-stretch gap-3 sm:flex-row">
+              <button
+                onClick={signInWithGoogle}
+                className="flex flex-1 items-center justify-center gap-3 rounded-2xl gradient-btn px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+              >
+                <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#fff" fillOpacity=".7" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#fff" fillOpacity=".8" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#fff" fillOpacity=".6" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#fff" fillOpacity=".7" />
+                </svg>
+                Get started with Google
+              </button>
+              <button
+                onClick={signInWithGoogle}
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-8 py-4 text-base font-semibold text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:border-gray-300 hover:-translate-y-0.5 active:translate-y-0"
+              >
+                <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                </svg>
+                Log back in
+              </button>
+            </div>
+          )}
+
+          {authError && (
+            <div className="mt-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-600">
+              {authError}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* How it works — compact 3-column */}
+      <section className="relative z-10 mx-auto max-w-4xl px-6 pb-8">
+        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-6">
+          How it works
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {[
+            {
+              step: '1',
+              emoji: '📅',
+              title: 'Connect your calendar',
+              desc: 'Sign in with Google — we only see free/busy times, never event details.',
+              color: 'from-blue-50 to-cyan-50',
+              border: 'border-blue-100',
+            },
+            {
+              step: '2',
+              emoji: '👋',
+              title: 'Invite your friends',
+              desc: 'Share a link. When they join, calendars sync and Slotted finds mutual free time.',
+              color: 'from-violet-50 to-fuchsia-50',
+              border: 'border-violet-100',
+            },
+            {
+              step: '3',
+              emoji: '✨',
+              title: 'Get smart suggestions',
+              desc: 'AI picks the best times. Accept a slot and it goes on both calendars.',
+              color: 'from-amber-50 to-orange-50',
+              border: 'border-amber-100',
+            },
+          ].map((item) => (
+            <div
+              key={item.step}
+              className={`rounded-2xl border ${item.border} bg-gradient-to-br ${item.color} p-5 shadow-sm`}
+            >
+              <div className="mb-3 flex items-center gap-2.5">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-gray-900 shadow-sm ring-1 ring-gray-200/60">
+                  {item.step}
+                </span>
+                <span className="text-xl">{item.emoji}</span>
+              </div>
+              <h3 className="font-display text-sm font-bold text-gray-900">{item.title}</h3>
+              <p className="mt-1.5 text-xs leading-relaxed text-gray-500">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="relative z-10 pb-8 text-center text-xs text-gray-400">
+        Made with ❤️ for people who want to see their friends more
+      </footer>
     </div>
   );
 }
