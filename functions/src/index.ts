@@ -1,5 +1,6 @@
 import { setGlobalOptions } from "firebase-functions";
 import { onRequest } from "firebase-functions/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import * as admin from "firebase-admin";
@@ -118,7 +119,70 @@ async function createNotification(opts: {
     related_user_id: opts.relatedUserId || null,
     related_id: opts.relatedId || null,
   });
-  if (error) console.error("Failed to create notification:", error.message);
+  if (error) {
+    console.error("Failed to create notification:", error.message);
+    return;
+  }
+
+  //Send FCM push notification
+  try {
+    const { data: tokens } = await getSupabase()
+      .from("fcm_tokens")
+      .select("token")
+      .eq("user_id", opts.userId);
+
+    if (!tokens || tokens.length === 0) {
+      console.log(`No FCM tokens found for user ${opts.userId}`);
+      return;
+    }
+
+    // Send to all user's devices
+    const messaging = admin.messaging();
+    const tokenList = tokens.map((t) => t.token);
+
+    const message = {
+      notification: {
+        title: opts.title,
+        body: opts.body,
+      },
+      data: {
+        type: opts.type,
+        relatedId: opts.relatedId || "",
+        relatedUserId: opts.relatedUserId || "",
+      },
+      tokens: tokenList,
+    };
+
+    const response = await messaging.sendEachForMulticast(message);
+    console.log(`Sent ${response.successCount} FCM notifications to user ${opts.userId}`);
+
+    // Clean up invalid tokens
+    if (response.failureCount > 0) {
+      const invalidTokens: string[] = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success && resp.error) {
+          const errorCode = resp.error.code;
+          if (
+            errorCode === "messaging/invalid-registration-token" ||
+            errorCode === "messaging/registration-token-not-registered"
+          ) {
+            invalidTokens.push(tokenList[idx]);
+          }
+        }
+      });
+
+      if (invalidTokens.length > 0) {
+        await getSupabase()
+          .from("fcm_tokens")
+          .delete()
+          .in("token", invalidTokens);
+        console.log(`Removed ${invalidTokens.length} invalid FCM tokens`);
+      }
+    }
+  } catch (fcmError: any) {
+    console.error("Error sending FCM push notification:", fcmError.message);
+    // Don't fail the whole notification creation if FCM fails
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -211,17 +275,20 @@ async function generateInviteCode(displayName: string): Promise<string> {
   const base = (displayName || "user")
     .split(" ")[0]
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 20) || "user";
   const sb = getSupabase();
 
-  // Try the base name first, then add random digits
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const code = attempt === 0 ? base : `${base}${Math.floor(Math.random() * 900) + 100}`;
+  // Try the base name first (e.g. "mike"), then "mike" + random 4-digit suffix
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const suffix = attempt === 0 ? "" : String(Math.floor(1000 + Math.random() * 9000));
+    const code = `${base}${suffix}`;
     const { data } = await sb.from("users").select("id").eq("invite_code", code).single();
     if (!data) return code; // unique — use it
   }
-  // Fallback: base + timestamp suffix
-  return `${base}${Date.now() % 100000}`;
+  // Fallback: base + full UUID fragment (guaranteed unique)
+  const uuid = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+  return `${base}${uuid}`;
 }
 
 /** POST /users/me — upsert user on first login / profile update */
@@ -400,7 +467,7 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
       socialFrequency, preferredTimes, travelBuffer,
       socialBattery, rechargingDays, planningStyle,
       neighborhood, workNeighborhood, officeDays,
-      callWindows, tripBufferBefore, tripBufferAfter,
+      callWindows, tripBufferBefore, tripBufferAfter, shareHangouts, officeScheduleVaries,
     } = req.body;
 
     const updates: Record<string, any> = {};
@@ -413,9 +480,11 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
     if (neighborhood !== undefined) updates.neighborhood = neighborhood;
     if (workNeighborhood !== undefined) updates.work_neighborhood = workNeighborhood;
     if (officeDays !== undefined) updates.office_days = officeDays;
+    if (officeScheduleVaries !== undefined) updates.office_schedule_varies = officeScheduleVaries;
     if (callWindows !== undefined) updates.call_windows = callWindows;
     if (tripBufferBefore !== undefined) updates.trip_buffer_before = tripBufferBefore;
     if (tripBufferAfter !== undefined) updates.trip_buffer_after = tripBufferAfter;
+    if (shareHangouts !== undefined) updates.share_hangouts = shareHangouts;
 
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ error: "No fields to update" });
@@ -469,6 +538,79 @@ app.post("/users/me/onboarding", requireAuth, async (req: AuthRequest, res: Resp
   }
 });
 
+/** POST /users/me/fcm-token — save FCM token for push notifications */
+app.post("/users/me/fcm-token", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const { token, deviceInfo } = req.body;
+    if (!token) {
+      res.status(400).json({ error: "Token is required" });
+      return;
+    }
+
+    // Upsert the FCM token (allows multiple tokens per user for different devices)
+    const { data, error } = await getSupabase()
+      .from("fcm_tokens")
+      .upsert(
+        {
+          user_id: me.id,
+          token,
+          device_info: deviceInfo || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,token" }
+      )
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /users/me/fcm-token — remove FCM token (logout/disable notifications) */
+app.delete("/users/me/fcm-token", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const { token } = req.body;
+    if (!token) {
+      res.status(400).json({ error: "Token is required" });
+      return;
+    }
+
+    const { error } = await getSupabase()
+      .from("fcm_tokens")
+      .delete()
+      .eq("user_id", me.id)
+      .eq("token", token);
+
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Friends routes
 // ---------------------------------------------------------------------------
@@ -500,12 +642,14 @@ app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
       // hangoutPref is MY private preference for this friend
       const hangoutPref = iAmA ? (f.user_a_hangout_pref || "both") : (f.user_b_hangout_pref || "both");
       const friendshipType = iAmA ? (f.user_a_friendship_type || "local") : (f.user_b_friendship_type || "local");
+      const visitDurationHours = iAmA ? f.user_a_visit_duration_hours : f.user_b_visit_duration_hours;
       return {
         friendshipId: f.id,
         status: f.status,
         invitedBy: f.invited_by,
         hangoutPref,
         friendshipType,
+        visitDurationHours,
         friend: {
           id: friend.id,
           displayName: friend.display_name,
@@ -543,7 +687,7 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
     // Find the invitee
     const { data: invitee } = await getSupabase()
       .from("users")
-      .select("id")
+      .select("id, neighborhood")
       .eq("email", email)
       .single();
 
@@ -568,6 +712,22 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
       return;
     }
 
+    // Auto-detect friendship type based on neighborhoods
+    const myNeighborhood = (me.neighborhood || '').toLowerCase();
+    const theirNeighborhood = (invitee.neighborhood || '').toLowerCase();
+    let defaultFriendshipType = 'local';
+    
+    // Simple city detection: extract last part after comma (e.g., "West Village, NYC" → "nyc")
+    const extractCity = (n: string) => n.split(',').pop()?.trim() || '';
+    const myCity = extractCity(myNeighborhood);
+    const theirCity = extractCity(theirNeighborhood);
+    
+    if (myCity && theirCity && myCity !== theirCity) {
+      defaultFriendshipType = 'long_distance';
+    } else if (!myNeighborhood || !theirNeighborhood) {
+      defaultFriendshipType = 'local'; // Default to local if either is unknown
+    }
+
     // Canonical ordering: smaller UUID first
     const iAmA = me.id < invitee.id;
     const [userA, userB] = iAmA ? [me.id, invitee.id] : [invitee.id, me.id];
@@ -577,6 +737,8 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
       user_b_id: userB,
       invited_by: me.id,
       status: "pending",
+      user_a_friendship_type: defaultFriendshipType,
+      user_b_friendship_type: defaultFriendshipType,
     };
     // Set MY hangout pref on the correct column
     if (iAmA) {
@@ -595,6 +757,17 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
       res.status(500).json({ error: error.message });
       return;
     }
+
+    // Notify the invitee about the friend request
+    await createNotification({
+      userId: invitee.id,
+      type: "friend_request",
+      title: "New friend request",
+      body: `${me.display_name || me.email} wants to connect on Slotted`,
+      relatedUserId: me.id,
+      relatedId: data.id,
+    });
+
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -620,14 +793,14 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
     if (referrerUid) {
       const { data } = await getSupabase()
         .from("users")
-        .select("id")
+        .select("id, neighborhood")
         .eq("firebase_uid", referrerUid)
         .single();
       referrer = data;
     } else if (referrerEmail) {
       const { data } = await getSupabase()
         .from("users")
-        .select("id")
+        .select("id, neighborhood")
         .eq("email", referrerEmail)
         .single();
       referrer = data;
@@ -643,6 +816,21 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
       return;
     }
 
+    // Auto-detect friendship type based on neighborhoods
+    const myNeighborhood = (me.neighborhood || '').toLowerCase();
+    const theirNeighborhood = (referrer.neighborhood || '').toLowerCase();
+    let defaultFriendshipType = 'local';
+    
+    const extractCity = (n: string) => n.split(',').pop()?.trim() || '';
+    const myCity = extractCity(myNeighborhood);
+    const theirCity = extractCity(theirNeighborhood);
+    
+    if (myCity && theirCity && myCity !== theirCity) {
+      defaultFriendshipType = 'long_distance';
+    } else if (!myNeighborhood || !theirNeighborhood) {
+      defaultFriendshipType = 'local';
+    }
+
     // Canonical ordering: smaller UUID first
     const [userA, userB] =
       me.id < referrer.id ? [me.id, referrer.id] : [referrer.id, me.id];
@@ -655,6 +843,8 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
           user_b_id: userB,
           invited_by: referrer.id,
           status: "accepted",
+          user_a_friendship_type: defaultFriendshipType,
+          user_b_friendship_type: defaultFriendshipType,
         },
         { onConflict: "user_a_id,user_b_id" },
       )
@@ -687,18 +877,19 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
 /** PATCH /friends/:friendshipId — accept or decline a friendship, update prefs */
 app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: Response) => {
   const { friendshipId } = req.params;
-  const { action, hangoutPref, friendshipType } = req.body;
+  const { action, hangoutPref, friendshipType, visitDurationHours } = req.body;
 
-  // Support accept/decline actions AND hangoutPref/friendshipType updates
+  // Support accept/decline actions AND hangoutPref/friendshipType/visitDurationHours updates
   const validActions = ["accept", "decline"];
   const validPrefs = ["both", "one_on_one", "group"];
   const validTypes = ["local", "long_distance", "both"];
   const hasAction = action && validActions.includes(action);
   const hasPref = hangoutPref && validPrefs.includes(hangoutPref);
   const hasType = friendshipType && validTypes.includes(friendshipType);
+  const hasVisitDuration = visitDurationHours !== undefined;
 
-  if (!hasAction && !hasPref && !hasType) {
-    res.status(400).json({ error: "Provide action, hangoutPref, or friendshipType" });
+  if (!hasAction && !hasPref && !hasType && !hasVisitDuration) {
+    res.status(400).json({ error: "Provide action, hangoutPref, friendshipType, or visitDurationHours" });
     return;
   }
   try {
@@ -714,7 +905,7 @@ app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: R
     }
 
     // Update hangout pref or friendship type on the correct side
-    if (hasPref || hasType) {
+    if (hasPref || hasType || hasVisitDuration) {
       // Fetch the friendship to determine which side I am
       const { data: friendship } = await getSupabase()
         .from("friendships")
@@ -726,9 +917,11 @@ app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: R
         if (friendship.user_a_id === me.id) {
           if (hasPref) updatePayload.user_a_hangout_pref = hangoutPref;
           if (hasType) updatePayload.user_a_friendship_type = friendshipType;
+          if (hasVisitDuration) updatePayload.user_a_visit_duration_hours = visitDurationHours;
         } else {
           if (hasPref) updatePayload.user_b_hangout_pref = hangoutPref;
           if (hasType) updatePayload.user_b_friendship_type = friendshipType;
+          if (hasVisitDuration) updatePayload.user_b_visit_duration_hours = visitDurationHours;
         }
       }
     }
@@ -870,6 +1063,37 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
         allBusyBlocks.push(...appleBlocks);
       } catch (err) {
         console.error("Failed to fetch Apple Calendar events:", err);
+      }
+    }
+  }
+
+  // ─── Trip buffer: detect multi-day events and block buffer days ───
+  const tbBefore = !!dbUser.trip_buffer_before;
+  const tbAfter = dbUser.trip_buffer_after !== false;
+  if (tbBefore || tbAfter) {
+    // Find multi-day all-day events in the busy blocks (spans ≥ 2 days)
+    for (const block of [...allBusyBlocks]) {
+      const s = new Date(block.start);
+      const e = new Date(block.end);
+      const spanDays = (e.getTime() - s.getTime()) / 86400000;
+      if (spanDays >= 2) {
+        const tz = dbUser.timezone || "America/New_York";
+        if (tbBefore) {
+          const dayBefore = new Date(s);
+          dayBefore.setDate(dayBefore.getDate() - 1);
+          const dayBeforeStr = dayBefore.toISOString().slice(0, 10);
+          allBusyBlocks.push({
+            start: zonedToUtc(dayBeforeStr, "00:00", tz).toISOString(),
+            end: zonedToUtc(dayBeforeStr, "23:59", tz).toISOString(),
+          });
+        }
+        if (tbAfter) {
+          const dayAfterStr = e.toISOString().slice(0, 10);
+          allBusyBlocks.push({
+            start: zonedToUtc(dayAfterStr, "00:00", tz).toISOString(),
+            end: zonedToUtc(dayAfterStr, "23:59", tz).toISOString(),
+          });
+        }
       }
     }
   }
@@ -2044,6 +2268,274 @@ app.get("/dashboard", requireAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
+/** GET /activity-feed — get activity feed items */
+app.get("/activity-feed", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const activities: any[] = [];
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Fetch user's dismissals from the last 30 days
+    const { data: dismissals } = await getSupabase()
+      .from("activity_dismissals")
+      .select("activity_type, friend_id")
+      .eq("user_id", me.id)
+      .gte("dismissed_at", thirtyDaysAgo.toISOString());
+
+    const dismissedSet = new Set<string>();
+    if (dismissals) {
+      dismissals.forEach((d) => {
+        // Create a key for this dismissal: "type:friendId" or just "type" if no friend
+        dismissedSet.add(d.friend_id ? `${d.activity_type}:${d.friend_id}` : d.activity_type);
+      });
+    }
+
+    // Helper to check if activity is dismissed
+    const isDismissed = (type: string, friendId?: string) => {
+      if (friendId && dismissedSet.has(`${type}:${friendId}`)) return true;
+      // Also check for type-level dismissals (3+ dismissals of same type = auto-dismiss that type)
+      const typeCount = Array.from(dismissedSet).filter(k => k.startsWith(`${type}:`)).length;
+      return typeCount >= 3;
+    };
+
+    // 1. Get overdue friends (haven't seen in 30+ days)
+    const { data: friendships } = await getSupabase()
+      .from("friendships")
+      .select(`
+        id,
+        user_a_id,
+        user_b_id,
+        user_a:users!friendships_user_a_id_fkey(id, display_name, photo_url),
+        user_b:users!friendships_user_b_id_fkey(id, display_name, photo_url)
+      `)
+      .eq("status", "accepted")
+      .or(`user_a_id.eq.${me.id},user_b_id.eq.${me.id}`);
+
+    if (friendships && friendships.length > 0) {
+      // For each friend, check last hangout
+      const overdueFriends: any[] = [];
+      
+      for (const f of friendships) {
+        const iAmA = f.user_a.id === me.id;
+        const friend = iAmA ? f.user_b : f.user_a;
+
+        // Get last meetup with this friend
+        const { data: lastMeetup } = await getSupabase()
+          .from("meetups")
+          .select("start_time")
+          .eq("status", "completed")
+          .or(`id.in.(
+            select meetup_id from meetup_participants where user_id = '${me.id}'
+          ),id.in.(
+            select meetup_id from meetup_participants where user_id = '${friend.id}'
+          )`)
+          .order("start_time", { ascending: false })
+          .limit(1)
+          .single();
+
+        const lastSeen = lastMeetup ? new Date(lastMeetup.start_time) : null;
+        
+        // Only consider friends "overdue" if we have actual hangout history
+        if (!lastSeen) continue; // Skip friends with no recorded hangouts
+        
+        const daysSinceLastSeen = Math.floor((now.getTime() - lastSeen.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (daysSinceLastSeen >= 30) {
+          overdueFriends.push({
+            type: "overdue",
+            friend,
+            daysSince: daysSinceLastSeen,
+            lastSeen: lastSeen.toISOString(),
+          });
+        }
+      }
+
+      // Add top 3 most overdue (excluding dismissed)
+      overdueFriends
+        .sort((a, b) => b.daysSince - a.daysSince)
+        .filter((f) => !isDismissed("overdue_friends", f.friend.id))
+        .slice(0, 3)
+        .forEach((f) => {
+          activities.push({
+            type: "overdue_friends",
+            priority: 3,
+            friendId: f.friend.id,
+            friendName: f.friend.display_name,
+            friendPhoto: f.friend.photo_url,
+            daysSince: f.daysSince,
+            message: f.daysSince > 90 
+              ? `You haven't seen ${f.friend.display_name} in over 3 months` 
+              : `It's been ${f.daysSince} days since you saw ${f.friend.display_name}`,
+          });
+        });
+    }
+
+    // 2. Recent shared hangout activity (last 7 days, friends with share_hangouts=true)
+    const { data: recentLogs } = await getSupabase()
+      .from("meetup_logs")
+      .select(`
+        created_at,
+        activity_type,
+        user:users!meetup_logs_user_id_fkey(id, display_name, photo_url, share_hangouts)
+      `)
+      .gte("created_at", sevenDaysAgo.toISOString())
+      .neq("user_id", me.id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (recentLogs) {
+      for (const log of recentLogs) {
+        // Only show if user has share_hangouts enabled
+        if (!log.user.share_hangouts) continue;
+
+        // Check if this person is my friend
+        const { data: friendship } = await getSupabase()
+          .from("friendships")
+          .select("id")
+          .eq("status", "accepted")
+          .or(`user_a_id.eq.${me.id} AND user_b_id.eq.${log.user.id},user_a_id.eq.${log.user.id} AND user_b_id.eq.${me.id}`)
+          .single();
+
+        if (friendship) {
+          // Skip if dismissed
+          if (isDismissed("recent_activity", log.user.id)) continue;
+
+          const activityEmoji = {
+            coffee: "☕",
+            meal: "🍽️",
+            drinks: "🍻",
+            walk: "🚶",
+            workout: "💪",
+            movie: "🎬",
+            phone_call: "📞",
+            facetime: "📱",
+            video_call: "💻",
+          }[log.activity_type] || "😎";
+
+          activities.push({
+            type: "recent_activity",
+            priority: 2,
+            friendId: log.user.id,
+            friendName: log.user.display_name,
+            friendPhoto: log.user.photo_url,
+            activityType: log.activity_type,
+            timestamp: log.created_at,
+            message: `${log.user.display_name} logged a ${log.activity_type.replace("_", " ")} ${activityEmoji}`,
+          });
+        }
+      }
+    }
+
+    // 3. Friends free this weekend (simple version)
+    const dayOfWeek = now.getDay();
+    const daysUntilSaturday = (6 - dayOfWeek + 7) % 7;
+    const nextSaturday = new Date(now);
+    nextSaturday.setDate(now.getDate() + daysUntilSaturday);
+    nextSaturday.setHours(9, 0, 0, 0);
+    const nextSunday = new Date(nextSaturday);
+    nextSunday.setDate(nextSaturday.getDate() + 1);
+    nextSunday.setHours(23, 59, 59, 999);
+
+    if (friendships && friendships.length > 0 && daysUntilSaturday <= 3) {
+      // Only show if it's Wed-Sat
+      const { data: weekendAvail } = await getSupabase()
+        .from("availability")
+        .select("user_id")
+        .eq("status", "free")
+        .gte("start_time", nextSaturday.toISOString())
+        .lte("end_time", nextSunday.toISOString())
+        .in(
+          "user_id",
+          friendships.map((f) => (f.user_a.id === me.id ? f.user_b.id : f.user_a.id))
+        );
+
+      if (weekendAvail && weekendAvail.length > 0) {
+        const freeFriendIds = new Set(weekendAvail.map((a) => a.user_id));
+        const freeFriends = friendships
+          .map((f) => {
+            const iAmA = f.user_a.id === me.id;
+            return freeFriendIds.has(iAmA ? f.user_b.id : f.user_a.id)
+              ? (iAmA ? f.user_b : f.user_a)
+              : null;
+          })
+          .filter(Boolean)
+          .slice(0, 2);
+
+        freeFriends.forEach((friend: any) => {
+          // Skip if dismissed
+          if (isDismissed("free_weekend", friend.id)) return;
+
+          activities.push({
+            type: "free_weekend",
+            priority: 1,
+            friendId: friend.id,
+            friendName: friend.display_name,
+            friendPhoto: friend.photo_url,
+            message: `${friend.display_name} is free this weekend`,
+          });
+        });
+      }
+    }
+
+    // Sort by priority (higher first) then timestamp
+    activities.sort((a, b) => {
+      if (a.priority !== b.priority) return b.priority - a.priority;
+      if (a.timestamp && b.timestamp) return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      return 0;
+    });
+
+    res.json({ activities: activities.slice(0, 10) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /activity-feed/dismiss — dismiss an activity feed item
+// ---------------------------------------------------------------------------
+app.post("/activity-feed/dismiss", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const { activityType, friendId } = req.body;
+    if (!activityType || !["overdue_friends", "recent_activity", "free_weekend"].includes(activityType)) {
+      res.status(400).json({ error: "Invalid activity type" });
+      return;
+    }
+
+    // Record the dismissal
+    const { error } = await getSupabase()
+      .from("activity_dismissals")
+      .insert({
+        user_id: dbUser.id,
+        activity_type: activityType,
+        friend_id: friendId || null,
+      });
+
+    if (error) {
+      console.error("Dismissal insert error:", error);
+      res.status(500).json({ error: "Failed to record dismissal" });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error("Activity dismissal error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Feedback — sends user feedback to developer
 // ---------------------------------------------------------------------------
@@ -2102,7 +2594,7 @@ app.post("/meetup-logs", requireAuth, async (req: AuthRequest, res: Response) =>
       .insert({
         user_id: dbUser.id,
         friend_id: friend_id || null,
-        activity_type: activity_type || "hangout",
+        activity_type: activity_type || "other",
         duration_min: duration_min || null,
         day_of_week: day_of_week ?? new Date().getDay(),
         time_of_day: time_of_day || "afternoon",
@@ -2376,7 +2868,7 @@ app.get("/calendar/status", requireAuth, async (req: AuthRequest, res: Response)
   }
 });
 
-/** POST /calendar/disconnect — remove stored tokens */
+/** POST /calendar/disconnect — remove stored Google tokens */
 app.post("/calendar/disconnect", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     await getSupabase()
@@ -2388,13 +2880,14 @@ app.post("/calendar/disconnect", requireAuth, async (req: AuthRequest, res: Resp
       })
       .eq("firebase_uid", req.uid!);
 
-    // Also remove stored calendars
+    // Only remove Google calendars (not Apple)
     const dbUser = await getDbUser(req.uid!);
     if (dbUser) {
       await getSupabase()
         .from("user_calendars")
         .delete()
-        .eq("user_id", dbUser.id);
+        .eq("user_id", dbUser.id)
+        .eq("source", "google");
     }
 
     res.json({ success: true });
@@ -2426,6 +2919,59 @@ async function fetchAppleCalendars(username: string, password: string): Promise<
   const client = await createAppleCalDAVClient(username, password);
   const calendars = await client.fetchCalendars();
   return calendars;
+}
+
+/** Parse iCalendar VEVENT data to extract events with details (title, location, allDay) */
+function parseICalEventsWithDetails(
+  icalData: string,
+  timeMin: Date,
+  timeMax: Date,
+): { start: Date; end: Date; title: string; location: string | null; allDay: boolean }[] {
+  const events: { start: Date; end: Date; title: string; location: string | null; allDay: boolean }[] = [];
+
+  const veventRegex = /BEGIN:VEVENT([\s\S]*?)END:VEVENT/g;
+  let match;
+
+  while ((match = veventRegex.exec(icalData)) !== null) {
+    const block = match[1];
+    if (/STATUS:CANCELLED/i.test(block)) continue;
+    if (/TRANSP:TRANSPARENT/i.test(block)) continue;
+
+    const dtStartMatch = block.match(/DTSTART[^:]*:(\d{8}T?\d{0,6}Z?)/);
+    const dtEndMatch = block.match(/DTEND[^:]*:(\d{8}T?\d{0,6}Z?)/);
+    if (!dtStartMatch) continue;
+
+    const summaryMatch = block.match(/SUMMARY[^:]*:(.*)/);
+    const locationMatch = block.match(/LOCATION[^:]*:(.*)/);
+    const title = summaryMatch?.[1]?.trim() || "Busy";
+    const location = locationMatch?.[1]?.trim() || null;
+
+    const startStr = dtStartMatch[1];
+    const endStr = dtEndMatch?.[1];
+    let startDt: Date;
+    let endDt: Date;
+    let allDay = false;
+
+    if (startStr.length === 8) {
+      allDay = true;
+      startDt = new Date(`${startStr.slice(0, 4)}-${startStr.slice(4, 6)}-${startStr.slice(6, 8)}T00:00:00Z`);
+      if (endStr && endStr.length === 8) {
+        endDt = new Date(`${endStr.slice(0, 4)}-${endStr.slice(4, 6)}-${endStr.slice(6, 8)}T00:00:00Z`);
+      } else {
+        endDt = new Date(startDt.getTime() + 24 * 60 * 60 * 1000);
+      }
+    } else {
+      startDt = parseICalDateTime(startStr);
+      endDt = endStr ? parseICalDateTime(endStr) : new Date(startDt.getTime() + 60 * 60 * 1000);
+    }
+
+    if (endDt <= timeMin || startDt >= timeMax) continue;
+    if (startDt >= endDt) continue;
+
+    events.push({ start: startDt, end: endDt, title, location, allDay });
+  }
+
+  return events;
 }
 
 /** Parse iCalendar VEVENT data to extract busy blocks */
@@ -2544,14 +3090,18 @@ async function fetchAppleBusyBlocks(
 /** POST /calendar/apple/connect — connect Apple Calendar via app-specific password */
 app.post("/calendar/apple/connect", requireAuth, async (req: AuthRequest, res: Response) => {
   const { username, password } = req.body;
+  console.log("Apple Calendar connection attempt for user:", req.uid, "username:", username);
+  
   if (!username || !password) {
     res.status(400).json({ error: "Apple ID email and app-specific password are required" });
     return;
   }
 
   try {
+    console.log("Attempting to fetch Apple calendars...");
     // Validate credentials by attempting to connect
     const calendars = await fetchAppleCalendars(username, password);
+    console.log("Successfully fetched calendars, count:", calendars?.length);
 
     if (!calendars || calendars.length === 0) {
       res.status(400).json({ error: "Could not find any calendars. Please check your credentials." });
@@ -2602,13 +3152,22 @@ app.post("/calendar/apple/connect", requireAuth, async (req: AuthRequest, res: R
       })),
     });
   } catch (err: any) {
-    console.error("Apple Calendar connect error:", err);
+    // Detailed error logging for debugging
+    console.error("Apple Calendar connect error - Full details:");
+    console.error("Error type:", err?.constructor?.name);
+    console.error("Error message:", err?.message);
+    console.error("Error code:", err?.code);
+    console.error("Error status:", err?.status || err?.statusCode);
+    console.error("Error stack:", err?.stack?.substring(0, 500));
+    console.error("Full error object:", JSON.stringify(err, Object.getOwnPropertyNames(err), 2).substring(0, 1000));
+    
     if (
       err.message?.includes("401") ||
       err.message?.includes("Unauthorized") ||
       err.message?.includes("credentials") ||
       err.message?.includes("cannot find homeUrl") ||
-      err.message?.includes("homeUrl")
+      err.message?.includes("homeUrl") ||
+      err.message?.includes("Invalid credentials")
     ) {
       res.status(401).json({
         error: "Could not connect. Please check: (1) Use your Apple ID email — this may differ from your Gmail. (2) Use an app-specific password from appleid.apple.com, not your regular Apple password.",
@@ -2663,13 +3222,19 @@ app.post("/calendar/apple/disconnect", requireAuth, async (req: AuthRequest, res
 /** GET /calendar/apple/list — refresh Apple Calendar list */
 app.get("/calendar/apple/list", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
+    console.log("Fetching Apple calendars for user:", req.uid);
     const user = await getDbUser(req.uid!);
+    console.log("User found:", !!user, "Apple connected:", !!user?.apple_calendar_connected, "Has username:", !!user?.apple_caldav_username, "Has password:", !!user?.apple_caldav_password);
+    
     if (!user?.apple_caldav_username || !user?.apple_caldav_password) {
-      res.status(400).json({ error: "Apple Calendar not connected" });
+      console.error("Apple Calendar credentials missing for user:", req.uid);
+      res.status(400).json({ error: "Apple Calendar not connected. Please reconnect in Settings." });
       return;
     }
 
+    console.log("Fetching calendars from Apple CalDAV...");
     const calendars = await fetchAppleCalendars(user.apple_caldav_username, user.apple_caldav_password);
+    console.log("Found", calendars.length, "Apple calendars");
 
     // Upsert fresh calendar metadata
     const rows = calendars.map((cal) => ({
@@ -2682,22 +3247,360 @@ app.get("/calendar/apple/list", requireAuth, async (req: AuthRequest, res: Respo
     }));
 
     if (rows.length) {
-      await getSupabase()
+      const { error: upsertError } = await getSupabase()
         .from("user_calendars")
         .upsert(rows, { onConflict: "user_id,calendar_id" });
+      
+      if (upsertError) {
+        console.error("Failed to upsert Apple calendars:", upsertError);
+      } else {
+        console.log("Successfully upserted", rows.length, "Apple calendars");
+      }
     }
 
     // Return stored rows (which include is_selected)
-    const { data: stored } = await getSupabase()
+    const { data: stored, error: selectError } = await getSupabase()
       .from("user_calendars")
       .select("*")
       .eq("user_id", user.id)
       .eq("source", "apple")
       .order("calendar_name");
 
+    if (selectError) {
+      console.error("Failed to fetch stored Apple calendars:", selectError);
+    }
+
+    console.log("Returning", stored?.length || 0, "stored Apple calendars");
     res.json({ calendars: stored || [] });
   } catch (err: any) {
     console.error("Apple calendar list error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Combined calendar events endpoint
+// ---------------------------------------------------------------------------
+
+/** GET /calendar/events — fetch merged events from Google + Apple calendars */
+app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const now = new Date();
+    // Default: 2 weeks ahead, allow query params to override
+    const daysAhead = parseInt(req.query.days as string) || 14;
+    const windowEnd = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+
+    interface CalEvent {
+      id: string;
+      title: string;
+      start: string;
+      end: string;
+      allDay: boolean;
+      location: string | null;
+      source: "google" | "apple";
+      calendarName: string;
+      color: string | null;
+    }
+
+    const allEvents: CalEvent[] = [];
+    const sb = getSupabase();
+
+    // --- Google Calendar events ---
+    const hasGoogle = !!dbUser.google_refresh_token;
+    console.log("Calendar events - hasGoogle:", hasGoogle, "hasApple:", !!(dbUser.apple_calendar_connected && dbUser.apple_caldav_username));
+    if (hasGoogle) {
+      try {
+        const oauth2 = await getAuthedCalendarClient(req.uid!);
+        if (oauth2) {
+          const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+
+          const { data: selectedGoogleCals } = await sb
+            .from("user_calendars")
+            .select("calendar_id, calendar_name, calendar_color")
+            .eq("user_id", dbUser.id)
+            .eq("is_selected", true)
+            .eq("source", "google");
+
+          const googleCals = selectedGoogleCals || [];
+          console.log("Google calendars selected:", googleCals.length, googleCals.map((c: any) => c.calendar_name));
+
+          // If no Google calendars selected, check if any exist and auto-select owned ones
+          if (googleCals.length === 0) {
+            const { data: allGoogleCals } = await sb
+              .from("user_calendars")
+              .select("calendar_id, calendar_name, calendar_color, is_selected, access_role")
+              .eq("user_id", dbUser.id)
+              .eq("source", "google");
+            
+            console.log("All Google calendars in DB:", allGoogleCals?.length || 0);
+            
+            if (!allGoogleCals || allGoogleCals.length === 0) {
+              // No Google calendars stored at all — fetch them now
+              console.log("No Google calendars in DB, fetching from Google API...");
+              try {
+                const calListRes = await calendarApi.calendarList.list();
+                const calendars = calListRes.data.items || [];
+                console.log("Google API returned", calendars.length, "calendars");
+                
+                const rows = calendars.map((cal) => ({
+                  user_id: dbUser.id,
+                  calendar_id: cal.id!,
+                  calendar_name: cal.summary || cal.id!,
+                  calendar_color: cal.backgroundColor || null,
+                  is_selected: cal.accessRole === "owner",
+                  access_role: cal.accessRole || null,
+                  source: "google",
+                }));
+                
+                if (rows.length) {
+                  await sb.from("user_calendars").upsert(rows, { onConflict: "user_id,calendar_id" });
+                  // Use the newly inserted owned calendars
+                  const owned = rows.filter(r => r.is_selected);
+                  googleCals.push(...owned.map(r => ({
+                    calendar_id: r.calendar_id,
+                    calendar_name: r.calendar_name,
+                    calendar_color: r.calendar_color,
+                  })));
+                  console.log("Auto-imported and selected", owned.length, "Google calendars");
+                }
+              } catch (fetchErr) {
+                console.error("Failed to auto-fetch Google calendar list:", fetchErr);
+              }
+            } else {
+              // Calendars exist but none selected — auto-select owned ones
+              const ownedIds = allGoogleCals
+                .filter((c: any) => c.access_role === "owner")
+                .map((c: any) => c.calendar_id);
+              
+              if (ownedIds.length > 0) {
+                console.log("Auto-selecting", ownedIds.length, "owned Google calendars");
+                for (const calId of ownedIds) {
+                  await sb
+                    .from("user_calendars")
+                    .update({ is_selected: true })
+                    .eq("user_id", dbUser.id)
+                    .eq("calendar_id", calId);
+                }
+                // Re-fetch selected
+                const reSelected = allGoogleCals.filter((c: any) => ownedIds.includes(c.calendar_id));
+                googleCals.push(...reSelected);
+              }
+            }
+          }
+
+          const googlePromises = googleCals.map(async (cal: any) => {
+            try {
+              console.log(`Fetching Google events for "${cal.calendar_name}" (${cal.calendar_id}), timeMin=${now.toISOString()}, timeMax=${windowEnd.toISOString()}`);
+              const eventsRes = await calendarApi.events.list({
+                calendarId: cal.calendar_id,
+                timeMin: now.toISOString(),
+                timeMax: windowEnd.toISOString(),
+                singleEvents: true,
+                orderBy: "startTime",
+                maxResults: 250,
+              });
+
+              const rawItems = eventsRes.data.items || [];
+              console.log(`Google cal "${cal.calendar_name}": ${rawItems.length} raw events`);
+              if (rawItems.length > 0) {
+                console.log("Sample events:", rawItems.slice(0, 3).map(e => ({
+                  summary: e.summary,
+                  status: e.status,
+                  transparency: e.transparency,
+                  start: e.start,
+                  end: e.end,
+                })));
+              }
+
+              for (const event of rawItems) {
+                if (event.status === "cancelled") continue;
+                // NOTE: Don't filter transparency here — we want to SHOW all events
+                // on the calendar display (transparent = "free" in Google but user
+                // still wants to see them). The sync engine filters transparency
+                // separately for availability calculations.
+
+                const start = event.start?.dateTime || event.start?.date;
+                const end = event.end?.dateTime || event.end?.date;
+                if (!start || !end) continue;
+
+                const isAllDay = !event.start?.dateTime;
+
+                // For all-day Google events, use plain date strings
+                let startVal: string;
+                let endVal: string;
+                if (isAllDay) {
+                  startVal = start; // already "YYYY-MM-DD" from event.start.date
+                  endVal = end;
+                } else {
+                  startVal = start;
+                  endVal = end;
+                }
+
+                allEvents.push({
+                  id: `google_${event.id}`,
+                  title: event.summary || "Busy",
+                  start: startVal,
+                  end: endVal,
+                  allDay: isAllDay,
+                  location: event.location || null,
+                  source: "google",
+                  calendarName: cal.calendar_name || "Google Calendar",
+                  color: cal.calendar_color || "#4285f4",
+                });
+              }
+            } catch (err) {
+              console.error(`Failed to fetch events from Google cal ${cal.calendar_id}:`, err);
+            }
+          });
+
+          await Promise.all(googlePromises);
+        }
+      } catch (err) {
+        console.error("Google Calendar events fetch error:", err);
+      }
+    }
+
+    // --- Apple Calendar events ---
+    const hasApple = !!(dbUser.apple_calendar_connected && dbUser.apple_caldav_username && dbUser.apple_caldav_password);
+    if (hasApple) {
+      try {
+        const { data: selectedAppleCals } = await sb
+          .from("user_calendars")
+          .select("calendar_id, calendar_name")
+          .eq("user_id", dbUser.id)
+          .eq("is_selected", true)
+          .eq("source", "apple");
+
+        const appleCals = selectedAppleCals || [];
+        if (appleCals.length > 0) {
+          const client = await createAppleCalDAVClient(dbUser.apple_caldav_username, dbUser.apple_caldav_password);
+
+          for (const cal of appleCals) {
+            try {
+              const objects: DAVObject[] = await client.fetchCalendarObjects({
+                calendar: { url: cal.calendar_id } as DAVCalendar,
+                timeRange: {
+                  start: now.toISOString(),
+                  end: windowEnd.toISOString(),
+                },
+              });
+
+              for (const obj of objects) {
+                if (!obj.data) continue;
+                const events = parseICalEventsWithDetails(obj.data, now, windowEnd);
+                for (const ev of events) {
+                  // For all-day events, send plain date strings to avoid timezone issues
+                  const startStr = ev.allDay
+                    ? ev.start.toISOString().slice(0, 10) // "2026-02-26"
+                    : ev.start.toISOString();
+                  const endStr = ev.allDay
+                    ? ev.end.toISOString().slice(0, 10)
+                    : ev.end.toISOString();
+                  allEvents.push({
+                    id: `apple_${obj.url || Math.random().toString(36)}`,
+                    title: ev.title,
+                    start: startStr,
+                    end: endStr,
+                    allDay: ev.allDay,
+                    location: ev.location,
+                    source: "apple",
+                    calendarName: cal.calendar_name || "Apple Calendar",
+                    color: "#ff3b30", // Apple red
+                  });
+                }
+              }
+            } catch (err) {
+              console.error(`Failed to fetch events from Apple cal ${cal.calendar_id}:`, err);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Apple Calendar events fetch error:", err);
+      }
+    }
+
+    // ─── Trip buffer: detect multi-day all-day events and inject buffer days ───
+    const tripBufferBefore = !!dbUser.trip_buffer_before;
+    const tripBufferAfter = dbUser.trip_buffer_after !== false; // default true
+    if (tripBufferBefore || tripBufferAfter) {
+      const trips = allEvents.filter((ev) => {
+        if (!ev.allDay) return false;
+        // Multi-day = start and end are different dates (end is exclusive in iCal)
+        // A single all-day event has end = start + 1 day, so diff > 1 means multi-day
+        const s = ev.start; // "YYYY-MM-DD"
+        const e = ev.end;
+        if (s.length !== 10 || e.length !== 10) return false;
+        const startMs = new Date(s + "T00:00:00").getTime();
+        const endMs = new Date(e + "T00:00:00").getTime();
+        const daySpan = (endMs - startMs) / 86400000;
+        return daySpan >= 2; // 2+ calendar days (end is exclusive, so span ≥ 2 means at least a 2-day trip)
+      });
+
+      for (const trip of trips) {
+        if (tripBufferBefore) {
+          const dayBefore = new Date(trip.start + "T00:00:00");
+          dayBefore.setDate(dayBefore.getDate() - 1);
+          const bufferDate = dayBefore.toISOString().slice(0, 10);
+          const nextDate = trip.start; // the trip start itself
+          allEvents.push({
+            id: `buffer_before_${trip.id}`,
+            title: "✈️ Pre-trip buffer",
+            start: bufferDate,
+            end: nextDate,
+            allDay: true,
+            location: null,
+            source: trip.source,
+            calendarName: "Slotted",
+            color: "#94a3b8", // slate-400
+          });
+        }
+        if (tripBufferAfter) {
+          // trip.end is already exclusive (day after last day), so that IS the recovery day
+          const recoveryDate = trip.end;
+          const dayAfterRecovery = new Date(recoveryDate + "T00:00:00");
+          dayAfterRecovery.setDate(dayAfterRecovery.getDate() + 1);
+          const recoveryEndDate = dayAfterRecovery.toISOString().slice(0, 10);
+          allEvents.push({
+            id: `buffer_after_${trip.id}`,
+            title: "🔋 Trip recovery day",
+            start: recoveryDate,
+            end: recoveryEndDate,
+            allDay: true,
+            location: null,
+            source: trip.source,
+            calendarName: "Slotted",
+            color: "#94a3b8", // slate-400
+          });
+        }
+      }
+      if (trips.length > 0) {
+        console.log(`Trip buffer: detected ${trips.length} trips, injected buffer events (before=${tripBufferBefore}, after=${tripBufferAfter})`);
+      }
+    }
+
+    // Sort by start time
+    allEvents.sort((a, b) => a.start.localeCompare(b.start));
+
+    const googleCount = allEvents.filter(e => e.source === "google").length;
+    const appleCount = allEvents.filter(e => e.source === "apple").length;
+    const bufferCount = allEvents.filter(e => e.id.startsWith("buffer_")).length;
+    console.log(`Calendar events: ${allEvents.length} total (${googleCount} Google, ${appleCount} Apple, ${bufferCount} trip buffers)`);
+
+    res.json({
+      events: allEvents,
+      sources: {
+        google: hasGoogle,
+        apple: hasApple,
+      },
+    });
+  } catch (err: any) {
+    console.error("Calendar events error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -2959,6 +3862,104 @@ app.post("/admin/migrate", async (req: Request, res: Response) => {
   }
 
   res.json({ results });
+});
+
+// ---------------------------------------------------------------------------
+// Scheduled Functions
+// ---------------------------------------------------------------------------
+
+/** 
+ * Scheduled function to send meetup reminders
+ * Runs every hour to check for meetups happening in the next 24 hours
+ * Sends one reminder per meetup to each participant who hasn't been notified
+ */
+export const sendMeetupReminders = onSchedule("every 1 hours", async (event) => {
+  const sb = getSupabase();
+  
+  // Find meetups happening in the next 24 hours that haven't been reminded yet
+  const now = new Date();
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  
+  const { data: meetups } = await sb
+    .from("meetups")
+    .select(`
+      id,
+      title,
+      start_time,
+      location,
+      created_by,
+      meetup_participants (
+        user_id,
+        rsvp
+      )
+    `)
+    .gte("start_time", now.toISOString())
+    .lte("start_time", tomorrow.toISOString())
+    .eq("status", "confirmed")
+    .is("reminder_sent_at", null);
+
+  if (!meetups || meetups.length === 0) {
+    console.log("No meetups needing reminders");
+    return;
+  }
+
+  for (const meetup of meetups) {
+    const startDt = new Date(meetup.start_time);
+    const timeStr = startDt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
+      " at " + startDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+    
+    const locationStr = meetup.location ? ` at ${meetup.location}` : "";
+    
+    // Send reminders to all accepted participants
+    const acceptedParticipants = (meetup.meetup_participants || [])
+      .filter((p: any) => p.rsvp === "accepted");
+    
+    for (const participant of acceptedParticipants) {
+      await createNotification({
+        userId: participant.user_id,
+        type: "meetup_reminder",
+        title: "Reminder: Upcoming hangout!",
+        body: `${meetup.title || "Hangout"} — ${timeStr}${locationStr}`,
+        relatedId: meetup.id,
+      });
+    }
+    
+    // Mark as reminded
+    await sb
+      .from("meetups")
+      .update({ reminder_sent_at: new Date().toISOString() })
+      .eq("id", meetup.id);
+    
+    console.log(`Sent reminders for meetup ${meetup.id} to ${acceptedParticipants.length} participants`);
+  }
+});
+
+/**
+ * Scheduled function to find calendar matches and notify users
+ * Runs daily to analyze mutual availability and suggest hangouts
+ * V2 feature — currently disabled
+ */
+export const findCalendarMatches = onSchedule("every day 09:00", async (event) => {
+  // TODO: Implement calendar matching algorithm
+  // 1. For each user, get their accepted friends
+  // 2. Find overlapping free time in the next 2 weeks
+  // 3. Score opportunities based on:
+  //    - Social battery (time since last hangout with anyone)
+  //    - Friendship activity (time since last hangout with this friend)
+  //    - Mutual availability (longer blocks = better)
+  //    - Preferred times/days
+  // 4. Send calendar_match notifications for top opportunities
+  //
+  // Example notification:
+  // await createNotification({
+  //   userId: user.id,
+  //   type: "calendar_match",
+  //   title: "You and 3 friends are free Thursday!",
+  //   body: "Alex, Jamie, and Sam are all free Thursday 6-9pm. Want to grab dinner?",
+  //   relatedId: JSON.stringify({ friendIds: [id1, id2, id3], timeSlot: "..." }),
+  // });
+  
+  console.log("Calendar matching not yet implemented — V2 feature");
 });
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 {
-  "name": "Slotted — AI Social Scheduling",
-  "short_name": "Slotted",
+  "name": "Slotted AI",
+  "short_name": "Slotted AI",
   "description": "Find the perfect time to hang out with friends",
   "start_url": "/dashboard",
   "display": "standalone",

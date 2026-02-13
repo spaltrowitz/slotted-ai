@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import AppShell from '../components/AppShell';
 import CalendarPicker from '../components/CalendarPicker';
+import PushNotificationPrompt from '../components/PushNotificationPrompt';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function SettingsPage() {
@@ -8,7 +9,6 @@ export default function SettingsPage() {
   const [travelBuffer, setTravelBuffer] = useState(30);
   const [tripBufferBefore, setTripBufferBefore] = useState(false);
   const [tripBufferAfter, setTripBufferAfter] = useState(true);
-  const [personalTimeProtection, setPersonalTimeProtection] = useState(50);
   const [planningStyle, setPlanningStyle] = useState('flexible');
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['weekday-evening', 'weekend-afternoon']);
   const [saved, setSaved] = useState(false);
@@ -24,46 +24,29 @@ export default function SettingsPage() {
   const [appleSuccess, setAppleSuccess] = useState(false);
   const [showAppleCalendarDetails, setShowAppleCalendarDetails] = useState(false);
   const [showAppleWhy, setShowAppleWhy] = useState(false);
-  const [showManualAvail, setShowManualAvail] = useState(false);
   const [showCalendarDetails, setShowCalendarDetails] = useState(false);
 
   const [socialRecharge, setSocialRecharge] = useState('2-3-week');
   const [rechargingDays, setRechargingDays] = useState<number[]>([]);
+  const [shareHangouts, setShareHangouts] = useState(false);
   const [neighborhood, setNeighborhood] = useState('');
   const [workNeighborhood, setWorkNeighborhood] = useState('');
   const [officeDays, setOfficeDays] = useState<string[]>([]);
   const [officeVaries, setOfficeVaries] = useState(false);
-  const [manualAvailability, setManualAvailability] = useState<Record<string, string[]>>({
-    Mon: [], Tue: [], Wed: [], Thu: [], Fri: [], Sat: [], Sun: [],
-  });
   const feedbackRef = useRef<HTMLTextAreaElement>(null);
 
   // Call windows for phone/video availability
   const [callWindows, setCallWindows] = useState<{ day: number; start: string; end: string; label: string }[]>([]);
-
-  // Learned preferences from progressive profiling
-  const [learnedPrefs, setLearnedPrefs] = useState<{
-    preferred_activity?: string;
-    avg_duration_min?: number;
-    preferred_time?: string;
-    preferred_day?: string;
-    planning_style?: string;
-    total_meetups_logged: number;
-  }>({ total_meetups_logged: 0 });
+  const [customCallDays, setCustomCallDays] = useState<Set<number>>(new Set());
+  const [customCallStart, setCustomCallStart] = useState('12:00');
+  const [customCallEnd, setCustomCallEnd] = useState('13:00');
+  const [customCallLabel, setCustomCallLabel] = useState('');
 
   useEffect(() => {
     if (!user) return;
     (async () => {
-      try {
+      try{
         const token = await user.getIdToken();
-        // Load learned preferences
-        const prefsRes = await fetch('/api/preferences/learned', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (prefsRes.ok) {
-          const data = await prefsRes.json();
-          setLearnedPrefs(data);
-        }
         // Load user settings
         const meRes = await fetch('/api/users/me', {
           headers: { Authorization: `Bearer ${token}` },
@@ -76,8 +59,16 @@ export default function SettingsPage() {
           if (me.trip_buffer_before !== undefined) setTripBufferBefore(me.trip_buffer_before);
           if (me.trip_buffer_after !== undefined) setTripBufferAfter(me.trip_buffer_after);
           if (me.recharging_days) setRechargingDays(me.recharging_days);
+          if (me.share_hangouts !== undefined) setShareHangouts(me.share_hangouts);
           if (me.call_windows && Array.isArray(me.call_windows)) setCallWindows(me.call_windows);
           if (me.neighborhood) setNeighborhood(me.neighborhood);
+          if (me.work_neighborhood) setWorkNeighborhood(me.work_neighborhood);
+          if (me.office_days && Array.isArray(me.office_days)) {
+            // Convert 0-6 integers to day names
+            const dayMap: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
+            setOfficeDays(me.office_days.map((d: number) => dayMap[d]).filter(Boolean));
+          }
+          if (me.office_schedule_varies !== undefined) setOfficeVaries(me.office_schedule_varies);
         }
       } catch {
         // silently fail
@@ -89,7 +80,14 @@ export default function SettingsPage() {
     if (!user) return;
     try {
       const token = await user.getIdToken();
-      await fetch('/api/users/me/settings', {
+      
+      // Convert day names to integers for officeDays
+      const dayNameToInt: Record<string, number> = { 
+        Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 
+      };
+      const officeDaysInts = officeDays.map(day => dayNameToInt[day]).filter(n => n !== undefined);
+      
+      const response = await fetch('/api/users/me/settings', {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -102,15 +100,24 @@ export default function SettingsPage() {
           tripBufferBefore,
           tripBufferAfter,
           rechargingDays,
+          shareHangouts,
           planningStyle,
           neighborhood,
           workNeighborhood,
-          officeDays,
+          officeDays: officeDaysInts,
+          officeScheduleVaries: officeVaries,
           callWindows,
         }),
       });
-    } catch {
-      // silent
+      if (!response.ok) {
+        console.error('Settings save failed:', await response.text());
+        alert('Failed to save settings. Please try again.');
+        return;
+      }
+    } catch (err) {
+      console.error('Settings save error:', err);
+      alert('Failed to save settings. Please check your connection.');
+      return;
     }
     if (!onboardingComplete) {
       completeOnboarding();
@@ -139,9 +146,6 @@ export default function SettingsPage() {
       <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
     </svg>
   );
-
-
-  const personalTimeLabel = personalTimeProtection <= 20 ? 'Show all free time' : personalTimeProtection <= 50 ? 'Light protection' : personalTimeProtection <= 80 ? 'Moderate protection' : 'Maximum protection';
 
   return (
     <AppShell>
@@ -196,7 +200,7 @@ export default function SettingsPage() {
                       Connected
                     </span>
                   ) : (
-                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                    <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500">
                       Not connected
                     </span>
                   )}
@@ -273,7 +277,7 @@ export default function SettingsPage() {
                 ) : (
                   <button
                     onClick={() => setShowAppleConnect(!showAppleConnect)}
-                    className="rounded-lg bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:bg-gray-800"
+                    className="rounded-lg gradient-btn px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md"
                   >
                     Connect
                   </button>
@@ -369,57 +373,19 @@ export default function SettingsPage() {
                   </button>
                 </div>
               )}
-
-              {/* Manual availability toggle */}
-              <button
-                onClick={() => setShowManualAvail(!showManualAvail)}
-                className="mt-2 flex w-full items-center justify-between text-left"
-              >
-                <span className="text-[11px] font-medium text-gray-500">✏️ Enter availability manually instead</span>
-                <svg className={`h-3.5 w-3.5 text-gray-400 transition-transform ${showManualAvail ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {showManualAvail && (
-                <div className="mt-2 space-y-2">
-                  <p className="text-[10px] text-gray-400">Mark your typical available times:</p>
-                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-                    <div key={day} className="flex items-center gap-2">
-                      <span className="w-8 text-[11px] font-semibold text-gray-600">{day}</span>
-                      <div className="flex flex-1 gap-1">
-                        {[
-                          { value: 'morning', label: 'AM', emoji: '🌅' },
-                          { value: 'afternoon', label: 'PM', emoji: '☀️' },
-                          { value: 'evening', label: 'Eve', emoji: '🌙' },
-                        ].map((slot) => {
-                          const isSelected = manualAvailability[day]?.includes(slot.value);
-                          return (
-                            <button
-                              key={slot.value}
-                              onClick={() => {
-                                setManualAvailability((prev) => ({
-                                  ...prev,
-                                  [day]: isSelected
-                                    ? prev[day].filter((s) => s !== slot.value)
-                                    : [...(prev[day] || []), slot.value],
-                                }));
-                              }}
-                              className={`flex-1 rounded-md border px-1.5 py-1 text-[10px] font-medium transition-all ${
-                                isSelected
-                                  ? 'border-slotted-400 bg-slotted-50 text-slotted-700'
-                                  : 'border-gray-200 text-gray-400 hover:bg-gray-50'
-                              }`}
-                            >
-                              {slot.emoji} {slot.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
+          </div>
+
+          {/* ─── Push Notifications ─── */}
+          <PushNotificationPrompt />
+
+          {/* ═══ IN-PERSON MEETUPS ═══ */}
+          <div className="mb-3 mt-6">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📍</span>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">In-Person Meetups</h3>
+            </div>
+            <div className="mt-1 h-px bg-gradient-to-r from-gray-200 to-transparent"></div>
           </div>
 
           {/* ─── Neighborhoods ─── */}
@@ -492,120 +458,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-          </div>
-
-          {/* ─── Call Windows ─── */}
-          <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">📞</span>
-              <h2 className="text-sm font-semibold text-gray-900">Call Windows</h2>
-            </div>
-            <p className="mt-0.5 text-[11px] text-gray-400">
-              Recurring times you're available for phone or video calls — great for long-distance friends
-            </p>
-
-            {callWindows.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {callWindows.map((w, idx) => {
-                  const dayLabel = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w.day] || '?';
-                  return (
-                    <div key={idx} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/30 px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-semibold text-gray-700">{dayLabel}</span>
-                        <span className="text-[11px] text-gray-500">{w.start} – {w.end}</span>
-                        {w.label && <span className="text-[10px] text-gray-400">({w.label})</span>}
-                      </div>
-                      <button
-                        onClick={() => setCallWindows((prev) => prev.filter((_, i) => i !== idx))}
-                        className="text-gray-400 hover:text-red-500 transition-colors"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Quick-add presets */}
-            <div className="mt-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mb-2">Quick add</p>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { label: '🥪 Weekday lunch', days: [1,2,3,4,5], start: '12:00', end: '13:00', tag: 'Lunch break' },
-                  { label: '🚗 Commute', days: [1,2,3,4,5], start: '17:30', end: '18:30', tag: 'Commute' },
-                  { label: '🌆 Weekday evening', days: [1,2,3,4,5], start: '19:00', end: '21:00', tag: 'Evening' },
-                  { label: '☀️ Weekend morning', days: [0,6], start: '09:00', end: '11:00', tag: 'Morning' },
-                  { label: '🌙 Weekend evening', days: [0,6], start: '18:00', end: '21:00', tag: 'Evening' },
-                ].map((preset) => (
-                  <button
-                    key={preset.label}
-                    onClick={() => {
-                      const newWindows = preset.days.map((day) => ({
-                        day,
-                        start: preset.start,
-                        end: preset.end,
-                        label: preset.tag,
-                      }));
-                      // Avoid duplicates
-                      setCallWindows((prev) => {
-                        const existing = new Set(prev.map((w) => `${w.day}-${w.start}-${w.end}`));
-                        const unique = newWindows.filter((w) => !existing.has(`${w.day}-${w.start}-${w.end}`));
-                        return [...prev, ...unique];
-                      });
-                    }}
-                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-600 transition-all hover:border-slotted-200 hover:bg-slotted-50"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Custom add */}
-            <details className="mt-3">
-              <summary className="text-[11px] font-medium text-gray-400 hover:text-slotted-600 cursor-pointer transition-colors">
-                + Add custom window
-              </summary>
-              <div className="mt-2 flex items-end gap-2">
-                <div>
-                  <label className="block text-[10px] text-gray-400 mb-0.5">Day</label>
-                  <select id="cw-day" className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none">
-                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, i) => (
-                      <option key={d} value={i}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] text-gray-400 mb-0.5">Start</label>
-                  <input id="cw-start" type="time" defaultValue="12:00" className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-gray-400 mb-0.5">End</label>
-                  <input id="cw-end" type="time" defaultValue="13:00" className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-gray-400 mb-0.5">Label</label>
-                  <input id="cw-label" type="text" placeholder="e.g. Lunch" className="w-20 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none" />
-                </div>
-                <button
-                  onClick={() => {
-                    const day = parseInt((document.getElementById('cw-day') as HTMLSelectElement).value);
-                    const start = (document.getElementById('cw-start') as HTMLInputElement).value;
-                    const end = (document.getElementById('cw-end') as HTMLInputElement).value;
-                    const label = (document.getElementById('cw-label') as HTMLInputElement).value;
-                    if (start && end) {
-                      setCallWindows((prev) => [...prev, { day, start, end, label }]);
-                    }
-                  }}
-                  className="rounded-lg gradient-btn px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
-                >
-                  Add
-                </button>
-              </div>
-            </details>
           </div>
 
           {/* ─── Social Battery (recharge) ─── */}
@@ -863,105 +715,216 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Personal time protection — slider */}
-            <div className="mt-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs">🛡️</span>
-                <label className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                  Protect personal time
-                </label>
+            {/* Privacy settings — share hangouts */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs">👥</span>
+                    <label className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
+                      Share hangout activity
+                    </label>
+                  </div>
+                  <p className="mt-0.5 text-[10px] text-gray-400">Let friends see when you complete hangouts</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={shareHangouts}
+                  onClick={() => setShareHangouts(!shareHangouts)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    shareHangouts ? 'bg-slotted-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                    shareHangouts ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                  }`} />
+                </button>
               </div>
-              <p className="mt-0.5 text-[10px] text-gray-400">How aggressively should Slotted protect your free time?</p>
-              <div className="mt-2 flex items-center gap-3">
-                <span className="text-[10px] text-gray-400">Open</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={10}
-                  value={personalTimeProtection}
-                  onChange={(e) => setPersonalTimeProtection(Number(e.target.value))}
-                  className="flex-1 accent-teal-500 h-1.5 cursor-pointer"
-                />
-                <span className="text-[10px] text-gray-400">Max</span>
+              <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
+                <p className="text-[11px] text-gray-500">
+                  {shareHangouts
+                    ? '✅ Friends will see "You caught up with [Name]" in their activity feed'
+                    : '🔒 Your hangouts are completely private — only you can see them'}
+                </p>
               </div>
-              <p className="mt-1 text-center text-[10px] font-medium text-slotted-600">{personalTimeLabel}</p>
             </div>
           </div>
 
-          {/* ─── Learned Preferences ─── */}
+          {/* ═══ VIRTUAL CATCHUPS ═══ */}
+          <div className="-mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📞</span>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">Virtual Catchups</h3>
+            </div>
+            <div className="mt-1 h-px bg-gradient-to-r from-gray-200 to-transparent"></div>
+          </div>
+
+          {/* ─── Call Windows ─── */}
           <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2">
-              <span className="text-lg">🧠</span>
-              <h2 className="text-sm font-semibold text-gray-900">Learned Preferences</h2>
+              <span className="text-lg">📞</span>
+              <h2 className="text-sm font-semibold text-gray-900">Call Windows</h2>
             </div>
             <p className="mt-0.5 text-[11px] text-gray-400">
-              Slotted learns your habits as you log hangouts
+              Recurring times you're available for phone or video calls — great for long-distance friends
             </p>
 
-            {learnedPrefs.total_meetups_logged >= 3 ? (
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {learnedPrefs.preferred_activity && (
-                  <div className="flex items-center gap-2 rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-2.5">
-                    <span className="text-base">
-                      {({ coffee: '☕', meal: '🍽️', drinks: '🍻', walk: '🚶', workout: '💪', movie: '🎬', game_night: '🎮', hangout: '😎', other: '✨' } as Record<string, string>)[learnedPrefs.preferred_activity] || '✨'}
-                    </span>
-                    <div>
-                      <p className="text-[10px] font-semibold text-gray-700">Activity</p>
-                      <p className="text-[10px] text-gray-500 capitalize">{learnedPrefs.preferred_activity.replace('_', ' ')}</p>
+            {callWindows.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {callWindows.map((w, idx) => {
+                  const dayLabel = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w.day] || '?';
+                  return (
+                    <div key={idx} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/30 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-gray-700">{dayLabel}</span>
+                        <span className="text-[11px] text-gray-500">{w.start} – {w.end}</span>
+                        {w.label && <span className="text-[10px] text-gray-400">({w.label})</span>}
+                      </div>
+                      <button
+                        onClick={() => setCallWindows((prev) => prev.filter((_, i) => i !== idx))}
+                        className="text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
-                  </div>
-                )}
-                {learnedPrefs.avg_duration_min && (
-                  <div className="flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-2.5">
-                    <span className="text-base">⏱️</span>
-                    <div>
-                      <p className="text-[10px] font-semibold text-gray-700">Duration</p>
-                      <p className="text-[10px] text-gray-500">
-                        {learnedPrefs.avg_duration_min >= 60
-                          ? `${Math.floor(learnedPrefs.avg_duration_min / 60)}h ${learnedPrefs.avg_duration_min % 60 > 0 ? `${learnedPrefs.avg_duration_min % 60}m` : ''}`
-                          : `${learnedPrefs.avg_duration_min} min`}
-                      </p>
-                    </div>
-                  </div>
-                )}
-                {learnedPrefs.preferred_time && (
-                  <div className="flex items-center gap-2 rounded-xl border border-amber-100 bg-amber-50/50 px-3 py-2.5">
-                    <span className="text-base">
-                      {({ morning: '🌅', afternoon: '☀️', evening: '🌆', night: '🌙' } as Record<string, string>)[learnedPrefs.preferred_time] || '🕐'}
-                    </span>
-                    <div>
-                      <p className="text-[10px] font-semibold text-gray-700">Best time</p>
-                      <p className="text-[10px] text-gray-500 capitalize">{learnedPrefs.preferred_time} {learnedPrefs.preferred_day ? `· ${learnedPrefs.preferred_day}s` : ''}</p>
-                    </div>
-                  </div>
-                )}
-                {learnedPrefs.planning_style && (
-                  <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-2.5">
-                    <span className="text-base">{learnedPrefs.planning_style === 'spontaneous' ? '⚡' : learnedPrefs.planning_style === 'planner' ? '📋' : '🔄'}</span>
-                    <div>
-                      <p className="text-[10px] font-semibold text-gray-700">Style</p>
-                      <p className="text-[10px] text-gray-500 capitalize">{learnedPrefs.planning_style}</p>
-                    </div>
-                  </div>
-                )}
-                <p className="col-span-2 text-center text-[10px] text-gray-400 pt-1">
-                  Based on {learnedPrefs.total_meetups_logged} hangouts
-                </p>
-              </div>
-            ) : (
-              <div className="mt-3 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 px-4 py-4 text-center">
-                <span className="text-xl">📊</span>
-                <p className="mt-1 text-[11px] font-medium text-gray-600">
-                  {learnedPrefs.total_meetups_logged === 0
-                    ? 'No hangouts logged yet'
-                    : `${learnedPrefs.total_meetups_logged} of 3 hangouts logged`}
-                </p>
-                <p className="mt-0.5 text-[10px] text-gray-400">
-                  Log at least 3 hangouts to start learning your patterns
-                </p>
+                  );
+                })}
               </div>
             )}
+
+            {/* Quick-add presets */}
+            <div className="mt-3">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mb-2">Quick add</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: '🥪 Weekday lunch', days: [1,2,3,4,5], start: '12:00', end: '13:00', tag: 'Lunch break' },
+                  { label: '🚗 Morning commute', days: [1,2,3,4,5], start: '07:30', end: '09:00', tag: 'Commute' },
+                  { label: '🚙 Evening commute', days: [1,2,3,4,5], start: '17:00', end: '18:30', tag: 'Commute' },
+                  { label: '🌆 Weekday evening', days: [1,2,3,4,5], start: '19:00', end: '21:00', tag: 'Evening' },
+                  { label: '☀️ Weekend morning', days: [0,6], start: '09:00', end: '11:00', tag: 'Morning' },
+                  { label: '🌙 Weekend evening', days: [0,6], start: '18:00', end: '21:00', tag: 'Evening' },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => {
+                      const newWindows = preset.days.map((day) => ({
+                        day,
+                        start: preset.start,
+                        end: preset.end,
+                        label: preset.tag,
+                      }));
+                      // Avoid duplicates
+                      setCallWindows((prev) => {
+                        const existing = new Set(prev.map((w) => `${w.day}-${w.start}-${w.end}`));
+                        const unique = newWindows.filter((w) => !existing.has(`${w.day}-${w.start}-${w.end}`));
+                        return [...prev, ...unique];
+                      });
+                    }}
+                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-600 transition-all hover:border-slotted-200 hover:bg-slotted-50"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom add with day checkboxes */}
+            <details className="mt-3">
+              <summary className="text-[11px] font-medium text-gray-400 hover:text-slotted-600 cursor-pointer transition-colors">
+                + Add custom window
+              </summary>
+              <div className="mt-3 space-y-3">
+                {/* Day selection */}
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-1.5">Select days</label>
+                  <div className="flex gap-1.5">
+                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, i) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => {
+                          setCustomCallDays((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(i)) next.delete(i);
+                            else next.add(i);
+                            return next;
+                          });
+                        }}
+                        className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-medium transition-all ${
+                          customCallDays.has(i)
+                            ? 'border-slotted-400 bg-slotted-50 text-slotted-700'
+                            : 'border-gray-200 text-gray-500 hover:border-slotted-200'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Time and label */}
+                <div className="flex items-end gap-2">
+                  <div>
+                    <label className="block text-[10px] text-gray-400 mb-0.5">Start</label>
+                    <input
+                      type="time"
+                      value={customCallStart}
+                      onChange={(e) => setCustomCallStart(e.target.value)}
+                      className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-gray-400 mb-0.5">End</label>
+                    <input
+                      type="time"
+                      value={customCallEnd}
+                      onChange={(e) => setCustomCallEnd(e.target.value)}
+                      className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-[10px] text-gray-400 mb-0.5">Label (optional)</label>
+                    <input
+                      type="text"
+                      value={customCallLabel}
+                      onChange={(e) => setCustomCallLabel(e.target.value)}
+                      placeholder="e.g. Lunch"
+                      className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (customCallDays.size > 0 && customCallStart && customCallEnd) {
+                        const newWindows = Array.from(customCallDays).map((day) => ({
+                          day,
+                          start: customCallStart,
+                          end: customCallEnd,
+                          label: customCallLabel,
+                        }));
+                        // Avoid duplicates
+                        setCallWindows((prev) => {
+                          const existing = new Set(prev.map((w) => `${w.day}-${w.start}-${w.end}`));
+                          const unique = newWindows.filter((w) => !existing.has(`${w.day}-${w.start}-${w.end}`));
+                          return [...prev, ...unique];
+                        });
+                        // Reset
+                        setCustomCallDays(new Set());
+                        setCustomCallStart('12:00');
+                        setCustomCallEnd('13:00');
+                        setCustomCallLabel('');
+                      }
+                    }}
+                    disabled={customCallDays.size === 0}
+                    className="rounded-lg gradient-btn px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       </div>

@@ -4,6 +4,18 @@ import AppShell from '../components/AppShell';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 
+/* ─── types ─── */
+interface ActivityFeedItem {
+  type: 'overdue_friends' | 'recent_activity' | 'free_weekend';
+  priority: number;
+  friendId: string;
+  friendName: string;
+  friendPhoto?: string;
+  message: string;
+  timestamp?: string;
+  activityType?: string;
+}
+
 /* ─── constants ─── */
 const ACTIVITY_OPTIONS = [
   { value: 'coffee', emoji: '☕', label: 'Coffee', virtual: false },
@@ -13,7 +25,6 @@ const ACTIVITY_OPTIONS = [
   { value: 'workout', emoji: '💪', label: 'Workout', virtual: false },
   { value: 'movie', emoji: '🎬', label: 'Movie', virtual: false },
   { value: 'game_night', emoji: '🎮', label: 'Game Night', virtual: false },
-  { value: 'hangout', emoji: '😎', label: 'Hangout', virtual: false },
   { value: 'phone_call', emoji: '📞', label: 'Phone Call', virtual: true },
   { value: 'facetime', emoji: '📱', label: 'FaceTime', virtual: true },
   { value: 'video_call', emoji: '💻', label: 'Video Call', virtual: true },
@@ -51,6 +62,17 @@ interface Meetup {
   participants: { userId: string; displayName: string; photoUrl: string | null; rsvp: string }[];
   myRsvp: string;
 }
+interface CalEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  location: string | null;
+  source: 'google' | 'apple';
+  calendarName: string;
+  color: string | null;
+}
 interface FriendToSee {
   id: string;
   displayName: string;
@@ -84,6 +106,9 @@ function friendLocalTime(tz: string | null): string | null {
   } catch { return null; }
 }
 
+/** Check if a calendar event is a Slotted trip buffer */
+const isBufferEvent = (ev: CalEvent) => ev.id.startsWith('buffer_');
+
 const TYPE_BADGE: Record<string, { emoji: string; label: string }> = {
   local: { emoji: '📍', label: 'Local' },
   long_distance: { emoji: '📞', label: 'Long distance' },
@@ -95,11 +120,17 @@ export default function DashboardPage() {
   const { user, calendarConnected, calendarJustConnected } = useAuth();
 
   // Calendar view state
-  const [calView, setCalView] = useState<'WEEK' | 'MONTH'>('WEEK');
+  const [calView, setCalView] = useState<'agenda' | 'week' | 'month'>('week');
+  const [calEvents, setCalEvents] = useState<CalEvent[]>([]);
+  const [calEventsLoading, setCalEventsLoading] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 1 = next week, etc.
+  const [monthOffset, setMonthOffset] = useState(0); // 0 = this month, 1 = next month, etc.
 
   // Dashboard data
   const [friendsToSee, setFriendsToSee] = useState<FriendToSee[]>([]);
   const [stats, setStats] = useState({ totalFriends: 0, hangoutsThisMonth: 0, totalPastHangouts: 0 });
+  const [activities, setActivities] = useState<ActivityFeedItem[]>([]);
+  const [dismissingActivity, setDismissingActivity] = useState<string | null>(null);
 
   // Meetups
   const [meetups, setMeetups] = useState<Meetup[]>([]);
@@ -140,6 +171,16 @@ export default function DashboardPage() {
     if (!user) return;
     (async () => {
       try {
+        const { data } = await api.get('/activity-feed');
+        setActivities(data.activities || []);
+      } catch { /* silent */ }
+    })();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
         const { data } = await api.get('/meetups');
         setMeetups(data.meetups || []);
       } catch { /* silent */ }
@@ -152,11 +193,33 @@ export default function DashboardPage() {
       setSyncing(true);
       try {
         const { data: _syncData } = await api.post('/calendar/sync');
-        // sync happens silently, no slot count displayed
       } catch { /* silent */ }
       finally { setSyncing(false); }
     })();
   }, [user, calendarConnected]);
+
+  // Fetch combined calendar events (more days for month view, with offset support)
+  useEffect(() => {
+    if (!user || !calendarConnected) return;
+    (async () => {
+      setCalEventsLoading(true);
+      try {
+        // For month view with offset, calculate how many days ahead we need
+        let fetchDays = 14;
+        if (calView === 'month') {
+          const ref = new Date();
+          ref.setMonth(ref.getMonth() + monthOffset);
+          // Fetch from now to end of that month, plus padding
+          const monthEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, 6); // extra days for last week
+          fetchDays = Math.ceil((monthEnd.getTime() - new Date().getTime()) / 86400000);
+          if (fetchDays < 1) fetchDays = 1;
+        }
+        const { data } = await api.get(`/calendar/events?days=${fetchDays}`);
+        setCalEvents(data.events || []);
+      } catch { /* silent */ }
+      finally { setCalEventsLoading(false); }
+    })();
+  }, [user, calendarConnected, calView, monthOffset]);
 
   /* ─── derived ─── */
   const now = useMemo(() => new Date(), []);
@@ -188,21 +251,151 @@ export default function DashboardPage() {
   const otherParticipants = (m: Meetup) =>
     m.participants.filter((p) => p.userId !== user?.uid?.replace(/^firebase_/, ''));
 
-  /* ─── calendar embed URL ─── */
-  const calendarUrl = useMemo(() => {
-    const params = new URLSearchParams({
-      src: user?.email ?? '',
-      mode: calView,
-      showTitle: '0',
-      showNav: '1',
-      showPrint: '0',
-      showTabs: '0',
-      showCalendars: '0',
-      showTz: '0',
-      wkst: '1',
-    });
-    return `https://calendar.google.com/calendar/embed?${params.toString()}`;
-  }, [user?.email, calView]);
+  /* ─── group events by date (expand multi-day into each day) ─── */
+  const groupedEvents = useMemo(() => {
+    const groups: Record<string, CalEvent[]> = {};
+    for (const ev of calEvents) {
+      const startKey = eventDateStr(ev.start, ev.allDay);
+      const endKey = eventEndDateStr(ev.end, ev.allDay);
+
+      // For multi-day events, add to each day
+      let cursor = startKey;
+      while (cursor < endKey) {
+        if (!groups[cursor]) groups[cursor] = [];
+        groups[cursor].push(ev);
+        // Advance one day
+        const d = new Date(cursor + 'T12:00:00');
+        d.setDate(d.getDate() + 1);
+        cursor = d.toLocaleDateString('en-CA');
+      }
+
+      // For timed events that don't span days, ensure at least start is included
+      if (!ev.allDay && startKey === endKey) {
+        if (!groups[startKey]) groups[startKey] = [];
+        if (!groups[startKey].includes(ev)) groups[startKey].push(ev);
+      }
+    }
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [calEvents]);
+
+  const formatEventTime = (start: string, end: string, allDay: boolean) => {
+    if (allDay) return 'All day';
+    const s = new Date(start);
+    const e = new Date(end);
+    return `${s.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} – ${e.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+  };
+
+  const formatDateHeader = (dateStr: string) => {
+    const d = new Date(dateStr + 'T12:00:00');
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const tomorrowStr = new Date(Date.now() + 86400000).toLocaleDateString('en-CA');
+    if (dateStr === todayStr) return 'Today';
+    if (dateStr === tomorrowStr) return 'Tomorrow';
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  };
+
+  /* ─── week view helpers ─── */
+  const weekDays = useMemo(() => {
+    const today = new Date();
+    // Start from today + offset (so today is always on the left)
+    const startDay = new Date(today);
+    startDay.setDate(today.getDate() + (weekOffset * 7));
+    const days: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startDay);
+      d.setDate(startDay.getDate() + i);
+      days.push(d.toLocaleDateString('en-CA'));
+    }
+    return days;
+  }, [weekOffset]);
+
+  const weekLabel = useMemo(() => {
+    if (weekDays.length === 0) return '';
+    const s = new Date(weekDays[0] + 'T12:00:00');
+    const e = new Date(weekDays[6] + 'T12:00:00');
+    if (s.getMonth() === e.getMonth()) {
+      return `${s.toLocaleDateString('en-US', { month: 'long' })} ${s.getDate()}–${e.getDate()}, ${s.getFullYear()}`;
+    }
+    return `${s.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${e.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  }, [weekDays]);
+
+  /* helper: get the date string (YYYY-MM-DD) for an event's start, handling all-day vs timed */
+  const eventDateStr = (isoStr: string, isAllDay: boolean) => {
+    // All-day events come as "YYYY-MM-DD" (no timezone), timed events as full ISO
+    if (isAllDay && isoStr.length === 10) return isoStr;
+    return new Date(isoStr).toLocaleDateString('en-CA');
+  };
+
+  const eventEndDateStr = (isoStr: string, isAllDay: boolean) => {
+    if (isAllDay && isoStr.length === 10) return isoStr;
+    return new Date(isoStr).toLocaleDateString('en-CA');
+  };
+
+  /* event falls on a given date (handles multi-day) */
+  const eventOnDate = (ev: CalEvent, dateStr: string) => {
+    const evStart = eventDateStr(ev.start, ev.allDay);
+    const evEnd = eventEndDateStr(ev.end, ev.allDay);
+    // For all-day events, end date in iCal is exclusive (day after last day)
+    // So a Feb 26-Mar 1 trip has end = Mar 2
+    return dateStr >= evStart && dateStr < evEnd;
+  };
+
+  const eventsForDate = (dateStr: string) =>
+    calEvents.filter((ev) => eventOnDate(ev, dateStr));
+
+  /* ─── time-grid helpers for week view ─── */
+  const HOUR_HEIGHT = 48; // px per hour in time grid
+  const START_HOUR = 7; // 7 AM
+  const END_HOUR = 23; // 11 PM
+  const TOTAL_HOURS = END_HOUR - START_HOUR;
+  const hours = Array.from({ length: TOTAL_HOURS }, (_, i) => START_HOUR + i);
+
+  const eventStyle = (ev: CalEvent) => {
+    const s = new Date(ev.start);
+    const e = new Date(ev.end);
+    const startMin = s.getHours() * 60 + s.getMinutes();
+    const endMin = e.getHours() * 60 + e.getMinutes();
+    const clampedStart = Math.max(startMin, START_HOUR * 60);
+    const clampedEnd = Math.min(endMin || END_HOUR * 60, END_HOUR * 60);
+    const top = ((clampedStart - START_HOUR * 60) / 60) * HOUR_HEIGHT;
+    const height = Math.max(((clampedEnd - clampedStart) / 60) * HOUR_HEIGHT, 20);
+    return { top, height };
+  };
+
+  const allDayEventsForDate = (dateStr: string) =>
+    calEvents.filter((ev) => ev.allDay && eventOnDate(ev, dateStr));
+  const timedEventsForDate = (dateStr: string) =>
+    calEvents.filter((ev) => !ev.allDay && eventOnDate(ev, dateStr));
+
+  /* ─── month view helpers ─── */
+  const monthViewDate = useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + monthOffset);
+    return d;
+  }, [monthOffset]);
+
+  const monthGrid = useMemo(() => {
+    const year = monthViewDate.getFullYear();
+    const month = monthViewDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const startDay = new Date(firstDay);
+    startDay.setDate(1 - firstDay.getDay()); // back to Sunday
+    const weeks: string[][] = [];
+    let cursor = new Date(startDay);
+    for (let w = 0; w < 6; w++) {
+      const week: string[] = [];
+      for (let d = 0; d < 7; d++) {
+        week.push(cursor.toLocaleDateString('en-CA'));
+        cursor = new Date(cursor.getTime() + 86400000);
+      }
+      weeks.push(week);
+    }
+    return weeks;
+  }, [monthViewDate]);
+
+  const currentMonth = monthViewDate.getMonth();
+
+  const monthLabel = monthViewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
     <AppShell>
@@ -270,7 +463,7 @@ export default function DashboardPage() {
             <span className="text-base">👋</span>
             <h2 className="font-display text-sm font-semibold text-gray-900">People to See</h2>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide" style={{ maxHeight: '160px' }}>
             {friendsToSee.slice(0, 10).map((f) => {
               const localTime = friendLocalTime(f.timezone);
               const typeBadge = TYPE_BADGE[f.friendshipType] || TYPE_BADGE.local;
@@ -299,6 +492,102 @@ export default function DashboardPage() {
                     <p className="mt-0.5 text-[9px] text-blue-500 font-medium">{typeBadge.emoji} {typeBadge.label}</p>
                   )}
                 </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ─── ACTIVITY FEED ─── */}
+      {activities.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">What's happening</h2>
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                const message = prompt("How's the activity feed working for you? Any feedback?");
+                if (message?.trim()) {
+                  user?.getIdToken().then(token => {
+                    fetch('/api/feedback', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                      body: JSON.stringify({ message: `[Activity Feed] ${message.trim()}` }),
+                    });
+                  });
+                  alert('Thanks for your feedback!');
+                }
+              }}
+              className="text-xs text-gray-500 hover:text-slotted-600 transition-colors"
+            >
+              Give feedback
+            </a>
+          </div>
+          <div className="space-y-3">
+            {activities.map((activity, index) => {
+              const activityIcon = {
+                overdue_friends: "⏰",
+                recent_activity: "✨",
+                free_weekend: "📅",
+              }[activity.type] || "💬";
+
+              const activityKey = `${activity.type}-${activity.friendId}-${index}`;
+
+              return (
+                <div
+                  key={activityKey}
+                  className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors relative group"
+                >
+                  {activity.friendPhoto ? (
+                    <img
+                      src={activity.friendPhoto}
+                      alt={activity.friendName}
+                      className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                      <span className="text-lg">{activityIcon}</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-900">{activity.message}</p>
+                    {activity.timestamp && (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {timeAgo(activity.timestamp)}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!user) return;
+                      setDismissingActivity(activityKey);
+                      // Optimistically remove from UI
+                      setActivities(prev => prev.filter((_, i) => i !== index));
+                      // Send to backend
+                      try {
+                        const token = await user.getIdToken();
+                        await fetch('/api/activity-feed/dismiss', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                          body: JSON.stringify({ activityType: activity.type, friendId: activity.friendId }),
+                        });
+                      } catch (err) {
+                        console.error('Failed to dismiss activity:', err);
+                        // Could restore the item here if needed
+                      } finally {
+                        setDismissingActivity(null);
+                      }
+                    }}
+                    disabled={dismissingActivity === activityKey}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-600 p-1"
+                    title="Dismiss"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -362,28 +651,290 @@ export default function DashboardPage() {
               <h2 className="font-display text-sm font-semibold text-gray-900">My Calendar</h2>
             </div>
             <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-              {(['WEEK', 'MONTH'] as const).map((v) => (
+              {(['week', 'month', 'agenda'] as const).map((v) => (
                 <button
                   key={v}
-                  onClick={() => setCalView(v)}
+                  onClick={() => { setCalView(v); if (v === 'week') setWeekOffset(0); }}
                   className={`rounded-md px-3 py-1 text-[11px] font-semibold transition-all ${
                     calView === v
                       ? 'bg-white text-gray-900 shadow-sm'
                       : 'text-gray-400 hover:text-gray-600'
                   }`}
                 >
-                  {v === 'WEEK' ? 'Week' : 'Month'}
+                  {v === 'week' ? 'Week' : v === 'month' ? 'Month' : 'Agenda'}
                 </button>
               ))}
             </div>
           </div>
-          <div className={calView === 'WEEK' ? 'h-[500px]' : 'h-[600px]'}>
-            <iframe
-              src={calendarUrl}
-              className="h-full w-full border-0"
-              title="Google Calendar"
-            />
-          </div>
+
+          {/* Week navigation bar */}
+          {calView === 'week' && (
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-2">
+              <button onClick={() => setWeekOffset((o) => o - 1)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+              </button>
+              <button onClick={() => setWeekOffset(0)} className="text-xs font-semibold text-gray-600 hover:text-slotted-600 transition-colors">
+                {weekOffset === 0 ? 'This Week' : weekLabel}
+              </button>
+              <button onClick={() => setWeekOffset((o) => o + 1)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+              </button>
+            </div>
+          )}
+
+          {calEventsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-slotted-400 border-t-transparent" />
+              <span className="ml-2 text-sm text-gray-400">Loading events...</span>
+            </div>
+          ) : calView === 'week' ? (
+            /* ──── WEEK TIME-GRID VIEW (Google Calendar style) ──── */
+            <div>
+              {/* All-day events row */}
+              {weekDays.some((d) => allDayEventsForDate(d).length > 0) && (
+                <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
+                  <div className="border-r border-gray-100 flex items-center justify-center">
+                    <span className="text-[9px] text-gray-300">ALL DAY</span>
+                  </div>
+                  {weekDays.map((dateStr) => {
+                    const adEvents = allDayEventsForDate(dateStr);
+                    return (
+                      <div key={dateStr} className="border-r border-gray-50 last:border-r-0 px-0.5 py-1 min-h-[28px]">
+                        {adEvents.map((ev) => (
+                          <div
+                            key={ev.id}
+                            className={`rounded px-1 py-0.5 text-[9px] font-medium truncate mb-0.5 ${isBufferEvent(ev) ? 'border border-dashed border-slate-400' : ''}`}
+                            style={{
+                              backgroundColor: isBufferEvent(ev) ? '#f1f5f9' : (ev.color || (ev.source === 'apple' ? '#ff3b30' : '#4285f4')),
+                              color: isBufferEvent(ev) ? '#64748b' : '#fff',
+                              backgroundImage: isBufferEvent(ev) ? 'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(148,163,184,0.2) 3px, rgba(148,163,184,0.2) 5px)' : undefined,
+                            }}
+                            title={ev.title}
+                          >
+                            {isBufferEvent(ev) ? '' : (ev.source === 'apple' ? '🍎 ' : '📧 ')}{ev.title}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Day headers */}
+              <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
+                <div className="border-r border-gray-100" />
+                {weekDays.map((dateStr) => {
+                  const d = new Date(dateStr + 'T12:00:00');
+                  const isToday = dateStr === new Date().toLocaleDateString('en-CA');
+                  return (
+                    <div key={dateStr} className={`py-2 text-center border-r border-gray-100 last:border-r-0 ${isToday ? 'bg-slotted-50/50' : ''}`}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                        {d.toLocaleDateString('en-US', { weekday: 'short' })}
+                      </p>
+                      <p className={`text-lg font-bold leading-tight ${isToday ? 'bg-slotted-500 text-white rounded-full w-8 h-8 flex items-center justify-center mx-auto' : 'text-gray-700'}`}>
+                        {d.getDate()}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Time grid */}
+              <div className="overflow-y-auto max-h-[520px]" style={{ scrollbarWidth: 'thin' }}>
+                <div className="grid relative" style={{ gridTemplateColumns: '48px repeat(7, 1fr)', height: `${TOTAL_HOURS * HOUR_HEIGHT}px` }}>
+                  {/* Hour labels + grid lines */}
+                  <div className="relative border-r border-gray-100">
+                    {hours.map((h) => (
+                      <div
+                        key={h}
+                        className="absolute w-full text-right pr-2"
+                        style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT}px` }}
+                      >
+                        <span className="text-[10px] text-gray-400 -translate-y-1/2 inline-block">
+                          {h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Day columns */}
+                  {weekDays.map((dateStr) => {
+                    const isToday = dateStr === new Date().toLocaleDateString('en-CA');
+                    const dayTimedEvents = timedEventsForDate(dateStr);
+                    return (
+                      <div key={dateStr} className={`relative border-r border-gray-50 last:border-r-0 ${isToday ? 'bg-slotted-50/20' : ''}`}>
+                        {/* Hour gridlines */}
+                        {hours.map((h) => (
+                          <div
+                            key={h}
+                            className="absolute w-full border-t border-gray-100"
+                            style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT}px` }}
+                          />
+                        ))}
+                        {/* Current time indicator */}
+                        {isToday && (() => {
+                          const now = new Date();
+                          const nowMin = now.getHours() * 60 + now.getMinutes();
+                          if (nowMin >= START_HOUR * 60 && nowMin <= END_HOUR * 60) {
+                            const top = ((nowMin - START_HOUR * 60) / 60) * HOUR_HEIGHT;
+                            return (
+                              <div className="absolute w-full z-20" style={{ top: `${top}px` }}>
+                                <div className="flex items-center">
+                                  <div className="h-2.5 w-2.5 rounded-full bg-red-500 -ml-1" />
+                                  <div className="flex-1 h-0.5 bg-red-500" />
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                        {/* Events */}
+                        {dayTimedEvents.map((ev) => {
+                          const { top, height } = eventStyle(ev);
+                          const isBuf = isBufferEvent(ev);
+                          const bgColor = isBuf ? '#94a3b8' : (ev.color || (ev.source === 'apple' ? '#ff3b30' : '#4285f4'));
+                          return (
+                            <div
+                              key={ev.id}
+                              className={`absolute left-0.5 right-0.5 rounded-md px-1.5 py-0.5 overflow-hidden cursor-default z-10 ${isBuf ? 'border-2 border-dashed border-slate-400' : 'border border-white/30'}`}
+                              style={{
+                                top: `${top}px`,
+                                height: `${height}px`,
+                                backgroundColor: isBuf ? '#f1f5f9' : bgColor + 'dd',
+                                backgroundImage: isBuf ? 'repeating-linear-gradient(135deg, transparent, transparent 4px, rgba(148,163,184,0.15) 4px, rgba(148,163,184,0.15) 6px)' : undefined,
+                                minHeight: '20px',
+                              }}
+                              title={`${ev.title}\n${formatEventTime(ev.start, ev.end, ev.allDay)}${ev.location ? '\n📍 ' + ev.location : ''}\n${isBuf ? '🗓️ Slotted' : (ev.source === 'apple' ? '🍎' : '📧') + ' ' + ev.calendarName}`}
+                            >
+                              <p className={`text-[10px] font-semibold truncate leading-tight ${isBuf ? 'text-slate-600' : 'text-white'}`}>{ev.title}</p>
+                              {height >= 36 && (
+                                <p className="text-[9px] text-white/80 truncate">
+                                  {new Date(ev.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                                </p>
+                              )}
+                              {height >= 52 && ev.location && (
+                                <p className="text-[9px] text-white/70 truncate">📍 {ev.location}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : calView === 'month' ? (
+            /* ──── MONTH VIEW ──── */
+            <div>
+              <div className="flex items-center justify-between px-5 py-2 border-b border-gray-100">
+                <button onClick={() => setMonthOffset((o) => o - 1)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <button onClick={() => setMonthOffset(0)} className="text-xs font-semibold text-gray-600 hover:text-slotted-600 transition-colors">
+                  {monthLabel}
+                </button>
+                <button onClick={() => setMonthOffset((o) => o + 1)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </button>
+              </div>
+              {/* Day-of-week headers */}
+              <div className="grid grid-cols-7 border-b border-gray-100">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                  <div key={d} className="py-1.5 text-center">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{d}</p>
+                  </div>
+                ))}
+              </div>
+              {/* Month grid */}
+              {monthGrid.map((week, wi) => (
+                <div key={wi} className="grid grid-cols-7 border-b border-gray-50 last:border-b-0">
+                  {week.map((dateStr) => {
+                    const d = new Date(dateStr + 'T12:00:00');
+                    const isToday = dateStr === new Date().toLocaleDateString('en-CA');
+                    const isCurrentMonth = d.getMonth() === currentMonth;
+                    const dayEvents = eventsForDate(dateStr);
+                    return (
+                      <div key={dateStr} className={`border-r border-gray-50 last:border-r-0 min-h-[72px] p-1 ${isToday ? 'bg-slotted-50/40' : !isCurrentMonth ? 'bg-gray-50/50' : ''}`}>
+                        <p className={`text-[11px] font-semibold text-center ${
+                          isToday ? 'text-white bg-slotted-500 rounded-full w-5 h-5 flex items-center justify-center mx-auto' :
+                          isCurrentMonth ? 'text-gray-700' : 'text-gray-300'
+                        }`}>
+                          {d.getDate()}
+                        </p>
+                        <div className="mt-0.5 space-y-0.5">
+                          {dayEvents.slice(0, 3).map((ev) => {
+                            const isBuf = isBufferEvent(ev);
+                            return (
+                            <div
+                              key={ev.id}
+                              className={`rounded px-1 py-0.5 text-[9px] leading-tight truncate ${isBuf ? 'border border-dashed border-slate-300' : ''}`}
+                              style={{
+                                backgroundColor: isBuf ? '#f1f5f920' : (ev.color || (ev.source === 'apple' ? '#ff3b30' : '#4285f4')) + '20',
+                                color: isBuf ? '#64748b' : (ev.color || (ev.source === 'apple' ? '#ff3b30' : '#4285f4')),
+                                backgroundImage: isBuf ? 'repeating-linear-gradient(135deg, transparent, transparent 2px, rgba(148,163,184,0.15) 2px, rgba(148,163,184,0.15) 3px)' : undefined,
+                              }}
+                              title={`${ev.title} — ${formatEventTime(ev.start, ev.end, ev.allDay)}`}
+                            >
+                              {ev.title}
+                            </div>
+                            );
+                          })}
+                          {dayEvents.length > 3 && (
+                            <p className="text-[8px] text-gray-400 text-center">+{dayEvents.length - 3}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* ──── AGENDA VIEW ──── */
+            calEvents.length === 0 ? (
+              <div className="py-10 text-center">
+                <span className="text-3xl">📭</span>
+                <p className="mt-2 text-sm text-gray-500">No upcoming events</p>
+                <p className="mt-1 text-xs text-gray-400">Events from your connected calendars will appear here</p>
+              </div>
+            ) : (
+              <div className="max-h-[500px] overflow-y-auto">
+                {groupedEvents.map(([dateStr, events]) => (
+                  <div key={dateStr}>
+                    <div className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50/90 px-5 py-2 backdrop-blur-sm">
+                      <p className="text-xs font-semibold text-gray-500">{formatDateHeader(dateStr)}</p>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                      {events.map((ev) => (
+                        <div key={ev.id} className={`flex items-start gap-3 px-5 py-3 transition-colors ${isBufferEvent(ev) ? 'bg-slate-50/60' : 'hover:bg-gray-50/50'}`} style={isBufferEvent(ev) ? { backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 6px, rgba(148,163,184,0.08) 6px, rgba(148,163,184,0.08) 8px)' } : undefined}>
+                          <div
+                            className={`mt-1.5 h-2.5 w-2.5 flex-shrink-0 ${isBufferEvent(ev) ? 'rounded border-2 border-dashed border-slate-400' : 'rounded-full'}`}
+                            style={isBufferEvent(ev) ? {} : { backgroundColor: ev.color || (ev.source === 'apple' ? '#ff3b30' : '#4285f4') }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium truncate ${isBufferEvent(ev) ? 'text-slate-600' : 'text-gray-900'}`}>{ev.title}</p>
+                            <p className="text-[11px] text-gray-400">
+                              {isBufferEvent(ev) ? 'Blocked by Slotted' : formatEventTime(ev.start, ev.end, ev.allDay)}
+                            </p>
+                            {ev.location && (
+                              <p className="text-[11px] text-gray-400 truncate">📍 {ev.location}</p>
+                            )}
+                          </div>
+                          <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold ${
+                            isBufferEvent(ev)
+                              ? 'bg-slate-100 text-slate-500 border border-dashed border-slate-300'
+                              : ev.source === 'apple'
+                                ? 'bg-gray-100 text-gray-500'
+                                : 'bg-blue-50 text-blue-500'
+                          }`}>
+                            {isBufferEvent(ev) ? '🗓️ Slotted' : (ev.source === 'apple' ? '🍎' : '📧') + ' ' + (ev.calendarName.length > 12 ? ev.calendarName.slice(0, 12) + '…' : ev.calendarName)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
         </div>
       )}
 
@@ -535,17 +1086,20 @@ export default function DashboardPage() {
                 ))}
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-gray-400 mr-1">Vibe:</span>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  onClick={() => setLogRating(star === logRating ? 0 : star)}
-                  className={`text-lg transition-all hover:scale-110 ${star <= logRating ? 'opacity-100' : 'opacity-30'}`}
-                >
-                  ⭐
-                </button>
-              ))}
+            <div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-400 mr-1">Vibe:</span>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setLogRating(star === logRating ? 0 : star)}
+                    className={`text-lg transition-all hover:scale-110 ${star <= logRating ? 'opacity-100' : 'opacity-30'}`}
+                  >
+                    ⭐
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-0.5">Only visible to you</p>
             </div>
             <div className="flex items-center gap-3 pt-1">
               <button

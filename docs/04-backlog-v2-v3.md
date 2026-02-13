@@ -71,6 +71,12 @@
   - React Native setup (shared codebase with web)
   - Native calendar API access (iOS EventKit, Android CalendarProvider)
   - Push notification infrastructure (Firebase Cloud Messaging)
+- **Costs:**
+  - **Apple Developer Program:** $99/year (required to publish on iOS App Store)
+  - **Google Play Store:** $25 one-time fee (required to publish on Android)
+  - **In-app purchases/subscriptions:** Apple/Google take 30% commission (15% if under $1M annual revenue via Small Business Program)
+  - **Total upfront:** $124 + ongoing $99/year for iOS renewals
+  - **Alternative to App Store:** No legitimate way to avoid fees for individual developers. Enterprise programs ($299/yr) are for internal distribution only. TestFlight (beta testing) is free but limited to 10,000 users for 90 days.
 - **Effort:** 8 weeks (full native development)
 - **RICE Score:** (1000 users × 9 impact × 70% confidence) / 8 = **788**
 
@@ -133,6 +139,39 @@
   - Highlight when someone is traveling: *"Alex is in London this week (GMT)"*
 - **Effort:** 2 weeks
 - **RICE Score:** (200 users × 6 impact × 70% confidence) / 2 = **420**
+
+#### 11. Multi-Channel Notifications
+
+- **Description:** Add notification channels beyond in-app (web push, email, SMS) to ensure users see time-sensitive alerts
+- **User Value:** Don't miss calendar matches, meetup invites, or confirmations when not actively in the app
+- **Status:** ✅ Web Push implemented, Email & SMS pending
+- **Options:**
+  - **Web Push Notifications** (Tier 1 — ✅ IMPLEMENTED)
+    - Uses Service Worker + Web Push API (PWA infrastructure)
+    - Native OS notifications even when browser is closed (works great on Android/desktop, okay on iOS Safari 16.4+)
+    - **Cost:** Free
+    - **Use for:** Calendar matches, meetup invites, acceptances, reminders
+    - **Setup:** See [docs/08-web-push-notifications-setup.md](./08-web-push-notifications-setup.md)
+    - **Files:** 
+      - `client/public/firebase-messaging-sw.js` - Service worker
+      - `client/src/hooks/usePushNotifications.ts` - FCM token management
+      - `client/src/components/PushNotificationPrompt.tsx` - Permission UI
+      - `functions/src/index.ts` - `createNotification()` sends FCM push
+      - `database/schema.sql` - `fcm_tokens` table
+  - **Email Notifications** (Tier 2 — reliable backup)
+    - SendGrid (100/day free tier), AWS SES ($0.10/1000), Postmark
+    - **Cost:** Free at MVP scale
+    - **Use for:** Daily/weekly digests, meetup confirmations, friend accepted
+    - **Effort:** 2 weeks (templates + sending infrastructure)
+  - **SMS Notifications** (Tier 3 — premium feature)
+    - Twilio (~$0.0079/SMS US), AWS SNS, Plivo
+    - **Cost:** ~$0.01/message (2-4 texts/month = $0.02-0.04/user/month)
+    - **Use for:** Meetup confirmed (1x), reminder 2hrs before (1x)
+    - **Monetization:** Could be Pro tier feature ($2-3/mo)
+    - **Effort:** 2 weeks (Twilio integration + phone number collection + TCPA compliance)
+- **Implementation Priority:** ✅ Web Push → Email → SMS
+- **Total Effort:** 1 week (web push) + 4 weeks (email + SMS)
+- **RICE Score (Web Push only):** (800 users × 8 impact × 80% confidence) / 1 = **5120**
 
 ---
 

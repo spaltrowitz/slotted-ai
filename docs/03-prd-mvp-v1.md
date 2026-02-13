@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | **Version** | 1.1 |
-| **Last Updated** | February 12, 2026 |
+| **Last Updated** | February 13, 2026 |
 | **Product Owner** | [Your Name] |
 | **Status** | Pre-Development |
 
@@ -439,6 +439,13 @@ Where:
 | Apple Calendar integration too complex | Low — workaround exists | Defer to V2; provide manual entry as alternative |
 | Microsoft Outlook not supported | Low — small % of target demo | Google Calendar covers 60-70% of target users; manual entry fallback |
 | Scheduling suggestions miss the mark | Medium — trust loss | Manual override always available; collect feedback on suggestions |
+
+### Implementation Notes (Feb 2026)
+
+**Apple Calendar Integration:** Initial CalDAV-based implementation attempted but encountering authentication issues with iCloud. Backend endpoints and UI exist but connection fails. Needs further investigation of:
+- iCloud CalDAV server requirements (may require OAuth instead of app-specific passwords)
+- Alternative approaches (Apple Calendar OAuth flow, direct iCloud API)
+- Consider deferring to V2 and focusing on Google Calendar reliability for MVP launch
 
 ---
 

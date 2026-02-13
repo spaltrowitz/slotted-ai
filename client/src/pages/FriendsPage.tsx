@@ -25,6 +25,7 @@ interface FriendRecord {
   status: string;
   invitedBy: string;
   friendshipType?: string;
+  visitDurationHours?: number;
   friend: {
     id: string;
     displayName: string;
@@ -56,13 +57,17 @@ export default function FriendsPage() {
   const [newGroupMemberIds, setNewGroupMemberIds] = useState<Set<string>>(new Set());
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editGroupName, setEditGroupName] = useState('');
+  const [editGroupEmoji, setEditGroupEmoji] = useState('');
+  const [savingGroup, setSavingGroup] = useState(false);
 
-  // Friendship type update handler
-  const updateFriendshipType = async (friendshipId: string, type: string) => {
+  // Visit duration update handler
+  const updateVisitDuration = async (friendshipId: string, hours: number | undefined) => {
     try {
-      await api.patch(`/friends/${friendshipId}`, { friendshipType: type });
+      await api.patch(`/friends/${friendshipId}`, { visitDurationHours: hours });
       setFriends((prev) =>
-        prev.map((f) => f.friendshipId === friendshipId ? { ...f, friendshipType: type } : f)
+        prev.map((f) => f.friendshipId === friendshipId ? { ...f, visitDurationHours: hours } : f)
       );
     } catch { /* silent */ }
   };
@@ -229,6 +234,35 @@ export default function FriendsPage() {
       fetchGroups();
     } catch {
       // silent
+    }
+  };
+
+  const startEditingGroup = (g: FriendGroup) => {
+    setEditingGroupId(g.id);
+    setEditGroupName(g.name);
+    setEditGroupEmoji(g.emoji);
+  };
+
+  const cancelEditingGroup = () => {
+    setEditingGroupId(null);
+    setEditGroupName('');
+    setEditGroupEmoji('');
+  };
+
+  const handleUpdateGroup = async () => {
+    if (!editingGroupId || !editGroupName.trim()) return;
+    setSavingGroup(true);
+    try {
+      await api.put(`/groups/${editingGroupId}`, {
+        name: editGroupName.trim(),
+        emoji: editGroupEmoji,
+      });
+      setEditingGroupId(null);
+      fetchGroups();
+    } catch {
+      // silent
+    } finally {
+      setSavingGroup(false);
     }
   };
 
@@ -411,36 +445,83 @@ export default function FriendsPage() {
               {groups.map((g) => (
                 <div key={g.id} className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
                   <div className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">{g.emoji}</span>
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">{g.name}</p>
-                        <p className="text-[11px] text-gray-400">
-                          {g.members.map((m) => m.displayName).join(', ')}
-                        </p>
+                    {editingGroupId === g.id ? (
+                      /* Inline edit mode */
+                      <div className="flex items-center gap-2 flex-1 mr-3">
+                        <input
+                          type="text"
+                          value={editGroupEmoji}
+                          onChange={(e) => setEditGroupEmoji(e.target.value)}
+                          className="w-10 text-center text-xl rounded-lg border border-gray-200 py-1 focus:outline-none focus:ring-2 focus:ring-slotted-500/40"
+                          maxLength={2}
+                        />
+                        <input
+                          type="text"
+                          value={editGroupName}
+                          onChange={(e) => setEditGroupName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateGroup()}
+                          className="flex-1 text-sm font-semibold rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-slotted-500/40"
+                          placeholder="Group name"
+                          autoFocus
+                        />
+                        <button
+                          onClick={handleUpdateGroup}
+                          disabled={savingGroup || !editGroupName.trim()}
+                          className="rounded-lg bg-slotted-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slotted-600 disabled:opacity-50 transition-colors"
+                        >
+                          {savingGroup ? 'Saving…' : 'Save'}
+                        </button>
+                        <button
+                          onClick={cancelEditingGroup}
+                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setActiveGroupId(activeGroupId === g.id ? null : g.id)}
-                        className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
-                          activeGroupId === g.id
-                            ? 'bg-gray-200 text-gray-700'
-                            : 'bg-gradient-to-r from-purple-500 to-slotted-500 text-white'
-                        }`}
-                      >
-                        {activeGroupId === g.id ? 'Close' : '👥 Find times'}
-                      </button>
-                      <button
-                        onClick={() => handleDeleteGroup(g.id)}
-                        className="rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:text-red-500 hover:border-red-200 transition-all"
-                        title="Delete group"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
+                    ) : (
+                      /* Display mode */
+                      <>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xl">{g.emoji}</span>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{g.name}</p>
+                            <p className="text-[11px] text-gray-400">
+                              {g.members.map((m) => m.displayName).join(', ')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => startEditingGroup(g)}
+                            className="rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:text-slotted-500 hover:border-slotted-200 transition-all"
+                            title="Edit group"
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => setActiveGroupId(activeGroupId === g.id ? null : g.id)}
+                            className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
+                              activeGroupId === g.id
+                                ? 'bg-gray-200 text-gray-700'
+                                : 'bg-gradient-to-r from-purple-500 to-slotted-500 text-white'
+                            }`}
+                          >
+                            {activeGroupId === g.id ? 'Close' : '👥 Find times'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteGroup(g.id)}
+                            className="rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:text-red-500 hover:border-red-200 transition-all"
+                            title="Delete group"
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {/* Expandable group availability */}
@@ -562,7 +643,7 @@ export default function FriendsPage() {
               Friends {'\u00B7'} {acceptedFriends.length}
             </h2>
             <p className="text-[11px] text-gray-400">
-              {selectedGroupIds.size === 0 ? 'Tap to select friends' : ''}
+              {selectedGroupIds.size === 0 ? 'Use checkboxes for group scheduling' : `${selectedGroupIds.size} selected`}
             </p>
           </div>
 
@@ -605,14 +686,83 @@ export default function FriendsPage() {
                       i !== acceptedFriends.length - 1 ? 'border-b border-gray-100' : ''
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      {/* Selection indicator */}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {/* Profile */}
+                      {f.friend.photoUrl ? (
+                        <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100 flex-shrink-0" />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white flex-shrink-0">
+                          {f.friend.displayName?.[0] ?? '?'}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900">
+                          {f.friend.displayName}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-gray-400 truncate">{f.friend.email}</p>
+                          {isLongDistance && friendTime && (
+                            <span className="text-[10px] text-gray-400">🕐 {friendTime}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {/* Friendship type indicator (only show if determined) */}
+                      {fType && (
+                        <span 
+                          className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-xs"
+                          title={
+                            fType === 'local' ? 'In-person hangouts' :
+                            fType === 'long_distance' ? 'Phone/video calls only' :
+                            'Both in-person & virtual'
+                          }
+                        >
+                          {fType === 'local' && '📍'}
+                          {fType === 'long_distance' && '📞'}
+                          {fType === 'both' && '🌐'}
+                        </span>
+                      )}
+                      {isLongDistance && f.friend.neighborhood && (
+                        <span className="text-[10px] text-gray-400 max-w-[80px] truncate">{f.friend.neighborhood}</span>
+                      )}
+                      {fType === 'both' && (
+                        <select
+                          value={f.visitDurationHours || ''}
+                          onChange={(e) => { 
+                            e.stopPropagation(); 
+                            updateVisitDuration(f.friendshipId, e.target.value ? parseInt(e.target.value) : undefined);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-[10px] rounded border border-gray-200 px-1.5 py-0.5 text-gray-600 hover:border-slotted-300 focus:outline-none focus:border-slotted-400"
+                        >
+                          <option value="">Visit: Not set</option>
+                          <option value="24">24h (overnight)</option>
+                          <option value="48">48h (weekend)</option>
+                          <option value="72">72h (long weekend)</option>
+                        </select>
+                      )}
+                      {/* Find time button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedFriendId(f.friend.id);
+                          setSelectedGroupIds(new Set([f.friend.id]));
+                          setShowGroupPanel(false);
+                        }}
+                        className="rounded-lg gradient-btn px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+                      >
+                        Find time
+                      </button>
+                      {/* Checkbox for group selection */}
                       <div
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                        onClick={(e) => e.stopPropagation()}
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all cursor-pointer ${
                           isSelected
                             ? 'border-slotted-500 bg-slotted-500 text-white scale-110'
-                            : 'border-gray-300'
+                            : 'border-gray-300 hover:border-slotted-300'
                         }`}
+                        title="Select for group scheduling"
                       >
                         {isSelected && (
                           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -620,50 +770,6 @@ export default function FriendsPage() {
                           </svg>
                         )}
                       </div>
-                      {f.friend.photoUrl ? (
-                        <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" />
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white">
-                          {f.friend.displayName?.[0] ?? '?'}
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {f.friend.displayName}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs text-gray-400">{f.friend.email}</p>
-                          {isLongDistance && friendTime && (
-                            <span className="text-[10px] text-gray-400">🕐 {friendTime}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {/* Friendship type toggle */}
-                      <div className="flex rounded-md border border-gray-200 bg-gray-50 p-0.5" onClick={(e) => e.stopPropagation()}>
-                        {([
-                          { value: 'local', emoji: '📍', tip: 'Local' },
-                          { value: 'long_distance', emoji: '📞', tip: 'Long distance' },
-                          { value: 'both', emoji: '🌐', tip: 'Both' },
-                        ] as const).map((opt) => (
-                          <button
-                            key={opt.value}
-                            title={opt.tip}
-                            onClick={(e) => { e.stopPropagation(); updateFriendshipType(f.friendshipId, opt.value); }}
-                            className={`rounded px-1.5 py-0.5 text-[10px] transition-all ${
-                              fType === opt.value
-                                ? 'bg-white text-gray-800 shadow-sm font-semibold'
-                                : 'text-gray-400 hover:text-gray-600'
-                            }`}
-                          >
-                            {opt.emoji}
-                          </button>
-                        ))}
-                      </div>
-                      {isLongDistance && f.friend.neighborhood && (
-                        <span className="text-[10px] text-gray-400 max-w-[80px] truncate">{f.friend.neighborhood}</span>
-                      )}
                     </div>
                   </button>
                 </div>

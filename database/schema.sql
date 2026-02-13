@@ -26,9 +26,18 @@ CREATE TABLE users (
   recharging_days     INT[] DEFAULT '{}'::INT[],       -- days of week to always recharge (0=Sun, 1=Mon, ..., 6=Sat)
   onboarded           BOOLEAN NOT NULL DEFAULT FALSE,
 
+  -- Privacy settings
+  share_hangouts      BOOLEAN NOT NULL DEFAULT FALSE,  -- Share completed hangouts with friends (like Venmo feed)
+
   -- Call windows (recurring availability for phone/video calls)
   -- JSONB array of { day: 0-6, start: "HH:MM", end: "HH:MM", label?: string }
   call_windows        JSONB DEFAULT '[]'::JSONB,
+
+  -- Location preferences
+  neighborhood        TEXT,                         -- Home neighborhood (e.g. "West Village, NYC")
+  work_neighborhood   TEXT,                         -- Work neighborhood (e.g. "Midtown, NYC")
+  office_days         INT[] DEFAULT '{}'::INT[],    -- Days in office (0=Sun, 1=Mon, ..., 6=Sat)
+  office_schedule_varies BOOLEAN NOT NULL DEFAULT FALSE, -- True if office schedule varies week to week
 
   -- Google Calendar
   google_access_token     TEXT,
@@ -47,6 +56,22 @@ CREATE TABLE users (
 );
 
 CREATE INDEX idx_users_firebase_uid ON users (firebase_uid);
+
+-- ============================================================
+-- FCM TOKENS (Firebase Cloud Messaging for push notifications)
+-- ============================================================
+CREATE TABLE fcm_tokens (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token       TEXT NOT NULL,
+  device_info TEXT,                       -- Optional: browser/device info for debugging
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  
+  UNIQUE (user_id, token)                -- User can have multiple tokens (different devices/browsers)
+);
+
+CREATE INDEX idx_fcm_tokens_user ON fcm_tokens (user_id);
 
 -- ============================================================
 -- FRIENDSHIPS  (bidirectional, stored once per pair)
@@ -71,6 +96,11 @@ CREATE TABLE friendships (
     CHECK (user_a_friendship_type IN ('local', 'long_distance', 'both')),
   user_b_friendship_type TEXT NOT NULL DEFAULT 'local'
     CHECK (user_b_friendship_type IN ('local', 'long_distance', 'both')),
+
+  -- Minimum visit duration for long-distance friends (in hours)
+  -- NULL = no minimum set, applies when friendship includes in-person visits despite distance
+  user_a_visit_duration_hours INT,
+  user_b_visit_duration_hours INT,
 
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -114,6 +144,7 @@ CREATE TABLE meetups (
     CHECK (status IN ('proposed', 'confirmed', 'declined', 'cancelled', 'completed', 'didnt_happen')),
   cancel_reason   TEXT
     CHECK (cancel_reason IN ('sick', 'cancelled', 'something_came_up', 'too_tired', 'scheduling_conflict', 'other', NULL)),
+  reminder_sent_at TIMESTAMPTZ,
   created_by      UUID NOT NULL REFERENCES users(id),
 
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -211,7 +242,7 @@ CREATE TABLE meetup_logs (
 
   -- What happened
   activity_type   TEXT NOT NULL DEFAULT 'other'
-    CHECK (activity_type IN ('coffee', 'meal', 'drinks', 'walk', 'workout', 'movie', 'game_night', 'hangout', 'phone_call', 'facetime', 'video_call', 'other')),
+    CHECK (activity_type IN ('coffee', 'meal', 'drinks', 'walk', 'workout', 'movie', 'game_night', 'phone_call', 'facetime', 'video_call', 'other')),
   duration_min    INT,                                 -- actual duration in minutes
   day_of_week     INT NOT NULL,                        -- 0=Sun … 6=Sat
   time_of_day     TEXT NOT NULL                        -- morning, afternoon, evening, night
@@ -341,6 +372,20 @@ CREATE TABLE pending_invites (
 
 CREATE INDEX idx_pending_invites_email ON pending_invites (invited_email);
 CREATE INDEX idx_pending_invites_inviter ON pending_invites (inviter_id);
+
+-- ============================================================
+-- ACTIVITY DISMISSALS (track when users dismiss activity feed items)
+-- ============================================================
+CREATE TABLE activity_dismissals (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  activity_type   TEXT NOT NULL,                           -- 'overdue_friends', 'recent_activity', 'free_weekend'
+  friend_id       UUID REFERENCES users(id) ON DELETE CASCADE, -- Optional: specific friend for this activity
+  dismissed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_activity_dismissals_user ON activity_dismissals (user_id, activity_type);
+CREATE INDEX idx_activity_dismissals_friend ON activity_dismissals (user_id, friend_id);
 
 -- ============================================================
 -- Row Level Security (RLS) — enable after setting up Supabase auth

@@ -23,6 +23,8 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [rsvpLoading, setRsvpLoading] = useState<string | null>(null);
   const [rsvpDone, setRsvpDone] = useState<Record<string, string>>({});
+  const [friendRequestLoading, setFriendRequestLoading] = useState<string | null>(null);
+  const [friendRequestDone, setFriendRequestDone] = useState<Record<string, string>>({});
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
@@ -73,6 +75,22 @@ export default function NotificationsPage() {
       // silently fail
     } finally {
       setRsvpLoading(null);
+    }
+  };
+
+  const handleFriendRequest = async (notificationId: string, friendshipId: string, action: 'accept' | 'decline') => {
+    setFriendRequestLoading(notificationId);
+    try {
+      await api.patch(`/friends/${friendshipId}`, { action });
+      await api.patch(`/notifications/${notificationId}/read`);
+      setFriendRequestDone((prev) => ({ ...prev, [notificationId]: action }));
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+      );
+    } catch {
+      // silently fail
+    } finally {
+      setFriendRequestLoading(null);
     }
   };
 
@@ -168,6 +186,38 @@ export default function NotificationsPage() {
                     </div>
                     <span className="shrink-0 text-xs text-gray-400">{timeAgo(notification.created_at)}</span>
                   </div>
+
+                  {/* Friend request accept/decline buttons */}
+                  {notification.type === 'friend_request' && notification.related_id && (
+                    <div className="mt-3">
+                      {friendRequestDone[notification.id] ? (
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border ${
+                          friendRequestDone[notification.id] === 'accept'
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : 'border-gray-200 bg-gray-50 text-gray-600'
+                        }`}>
+                          {friendRequestDone[notification.id] === 'accept' ? '✅ Accepted' : '❌ Declined'}
+                        </span>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleFriendRequest(notification.id, notification.related_id!, 'accept'); }}
+                            disabled={friendRequestLoading === notification.id}
+                            className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm disabled:opacity-50"
+                          >
+                            {friendRequestLoading === notification.id ? '...' : '✅ Accept'}
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleFriendRequest(notification.id, notification.related_id!, 'decline'); }}
+                            disabled={friendRequestLoading === notification.id}
+                            className="rounded-lg border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 disabled:opacity-50"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Meetup RSVP buttons */}
                   {notification.type === 'meetup_request' && notification.related_id && (

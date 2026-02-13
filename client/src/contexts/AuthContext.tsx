@@ -220,7 +220,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const connectAppleCalendar = useCallback(async (username: string, password: string) => {
     try {
+      console.log('Connecting Apple Calendar for:', username);
       const { data } = await api.post('/calendar/apple/connect', { username, password });
+      console.log('Apple Calendar connection response:', data);
       if (data?.success) {
         setAppleCalendarConnected(true);
         setCalendarConnected(true);
@@ -230,8 +232,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return { success: false, error: 'Unknown error' };
     } catch (err: any) {
-      console.error('Failed to connect Apple Calendar:', err);
-      return { success: false, error: err.response?.data?.error || 'Failed to connect Apple Calendar' };
+      console.error('Apple Calendar connection error - full details:');
+      console.error('Error object:', err);
+      console.error('Response data:', err.response?.data);
+      console.error('Response status:', err.response?.status);
+      console.error('Response headers:', err.response?.headers);
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to connect Apple Calendar';
+      console.error('Using error message:', errorMessage);
+      return { success: false, error: errorMessage };
     }
   }, []);
 

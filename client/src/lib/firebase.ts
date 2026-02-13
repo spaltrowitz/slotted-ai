@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getMessaging, isSupported as isMessagingSupported } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,6 +14,20 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+
+// Firebase Cloud Messaging (lazy init)
+let messagingInstance: ReturnType<typeof getMessaging> | null = null;
+export const getMessagingInstance = async () => {
+  const supported = await isMessagingSupported();
+  if (!supported) {
+    console.warn('Firebase Messaging is not supported in this browser');
+    return null;
+  }
+  if (!messagingInstance) {
+    messagingInstance = getMessaging(app);
+  }
+  return messagingInstance;
+};
 
 // Calendar scope will be requested server-side via a separate OAuth flow.
 // Adding it here blocks sign-in unless the OAuth consent screen is verified.
