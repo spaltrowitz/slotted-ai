@@ -24,8 +24,11 @@ export default function FriendsPage() {
   const [inviting, setInviting] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
 
-  const inviteUrl = `https://slotted-ai.web.app?ref=${user?.uid ?? ''}`;
+  const inviteUrl = inviteCode
+    ? `https://slotted-ai.web.app/invite/${inviteCode}`
+    : `https://slotted-ai.web.app?ref=${user?.uid ?? ''}`;
   const message = `Let's schedule time to hang :) This app syncs our calendars and finds the best time to meet up. ${inviteUrl}`;
 
   const fetchFriends = useCallback(async () => {
@@ -49,6 +52,25 @@ export default function FriendsPage() {
   useEffect(() => {
     fetchFriends();
   }, [fetchFriends]);
+
+  // Fetch user's invite code
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/users/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.invite_code) setInviteCode(data.invite_code);
+        }
+      } catch {
+        // fall back to UID-based URL
+      }
+    })();
+  }, [user]);
 
   const handleInvite = async () => {
     if (!inviteEmail.trim() || !user) return;
@@ -139,9 +161,6 @@ export default function FriendsPage() {
     <AppShell>
       <div className="mb-8">
         <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">Friends</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Your people. See who's around and feeling social {'\u{1FAF6}'}
-        </p>
       </div>
 
       {/* Invite by email */}
@@ -195,9 +214,6 @@ export default function FriendsPage() {
             </button>
           </div>
         )}
-        <p className="mt-2 text-xs text-gray-400">
-          For friends not yet on Slotted — send them a link to sign up
-        </p>
       </div>
 
       {/* Incoming invites */}
@@ -289,11 +305,10 @@ export default function FriendsPage() {
           <div className="flex flex-col items-center justify-center px-6 py-16">
             <div className="text-5xl mb-2">{'\u{1F91D}'}</div>
             <h3 className="mt-3 font-display text-lg font-bold text-gray-900">
-              No friends yet — but soon!
+              No friends yet
             </h3>
             <p className="mt-2 max-w-sm text-center text-sm text-gray-400 leading-relaxed">
-              Enter their email above to send an invite. Once they accept,
-              you'll see their availability and Slotted will start suggesting times to meet.
+              Invite a friend by email or share your link above.
             </p>
           </div>
         </div>

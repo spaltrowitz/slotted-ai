@@ -15,6 +15,14 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
+// Strip /api prefix so routes work both directly and through Firebase Hosting rewrites
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (req.path.startsWith("/api/")) {
+    req.url = req.url.replace(/^\/api/, "");
+  }
+  next();
+});
+
 // ---------------------------------------------------------------------------
 // Auth middleware — verifies Firebase ID token from Authorization header
 // ---------------------------------------------------------------------------
@@ -63,10 +71,37 @@ app.get("/health", (_req: Request, res: Response) => {
 // User routes
 // ---------------------------------------------------------------------------
 
+/** Generate an invite code from a display name (e.g. "Shari Paltrowitz" → "shari123") */
+async function generateInviteCode(displayName: string): Promise<string> {
+  const base = (displayName || "user")
+    .split(" ")[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  const sb = getSupabase();
+
+  // Try the base name first, then add random digits
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const code = attempt === 0 ? base : `${base}${Math.floor(Math.random() * 900) + 100}`;
+    const { data } = await sb.from("users").select("id").eq("invite_code", code).single();
+    if (!data) return code; // unique — use it
+  }
+  // Fallback: base + timestamp suffix
+  return `${base}${Date.now() % 100000}`;
+}
+
 /** POST /users/me — upsert user on first login / profile update */
 app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { email, displayName, photoUrl, timezone } = req.body;
+
+    // Check if user already exists (to preserve invite_code)
+    const existing = await getDbUser(req.uid!);
+    let inviteCode = existing?.invite_code;
+
+    // Generate invite code for new users
+    if (!inviteCode && displayName) {
+      inviteCode = await generateInviteCode(displayName);
+    }
 
     const { data, error } = await getSupabase()
       .from("users")
@@ -77,6 +112,7 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
           display_name: displayName,
           photo_url: photoUrl,
           timezone: timezone || "America/New_York",
+          ...(inviteCode ? { invite_code: inviteCode } : {}),
         },
         { onConflict: "firebase_uid" },
       )
@@ -102,6 +138,26 @@ app.get("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
     res.json(user);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /users/invite/:code — look up a user by their invite code (public) */
+app.get("/users/invite/:code", async (req: Request, res: Response) => {
+  try {
+    const { code } = req.params;
+    const { data, error } = await getSupabase()
+      .from("users")
+      .select("firebase_uid, display_name, photo_url")
+      .eq("invite_code", (code as string).toLowerCase())
+      .single();
+
+    if (error || !data) {
+      res.status(404).json({ error: "Invite code not found" });
+      return;
+    }
+    res.json({ uid: data.firebase_uid, displayName: data.display_name, photoUrl: data.photo_url });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -843,6 +899,64 @@ app.post("/webhooks/google-calendar", (req: Request, res: Response) => {
   console.log("Calendar webhook:", { channelId, resourceState });
   // TODO: fetch updated events from Google Calendar and sync to availability
   res.status(200).send("OK");
+});
+
+// ---------------------------------------------------------------------------
+// One-time migration endpoint
+// ---------------------------------------------------------------------------
+app.post("/admin/migrate", async (req: Request, res: Response) => {
+  if (req.body.secret !== "slotted-migrate-2026") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const results: string[] = [];
+  const sb = getSupabase();
+
+  // Migration: add invite_code, neighborhood, planning_style to users
+  // We do this by inserting a temp row with the new columns — if columns don't exist, it'll fail
+  // Instead, just try to read/write and let the caller know to add columns manually
+
+  // Test what columns exist by doing a select
+  const { error: testErr } = await sb
+    .from("users")
+    .select("id, invite_code, neighborhood, planning_style")
+    .limit(0);
+
+  if (testErr) {
+    results.push(`Users table missing columns: ${testErr.message}`);
+    results.push("Run these in Supabase SQL Editor:");
+    results.push("ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_code TEXT UNIQUE;");
+    results.push("ALTER TABLE users ADD COLUMN IF NOT EXISTS neighborhood TEXT;");
+    results.push("ALTER TABLE users ADD COLUMN IF NOT EXISTS planning_style TEXT DEFAULT 'flexible';");
+  } else {
+    results.push("✓ Users table has invite_code, neighborhood, planning_style columns");
+  }
+
+  // Test feedback table
+  const { error: fbErr } = await sb.from("feedback").select("id").limit(0);
+  if (fbErr) {
+    results.push("Run in SQL Editor: CREATE TABLE IF NOT EXISTS feedback (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID REFERENCES users(id), text TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW());");
+  } else {
+    results.push("✓ feedback table exists");
+  }
+
+  // Test meetup_logs table
+  const { error: mlErr } = await sb.from("meetup_logs").select("id").limit(0);
+  if (mlErr) {
+    results.push("Run in SQL Editor: CREATE TABLE IF NOT EXISTS meetup_logs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID REFERENCES users(id), activity_type TEXT, duration_min INTEGER, day_of_week INTEGER, time_of_day TEXT, rating INTEGER, created_at TIMESTAMPTZ DEFAULT NOW());");
+  } else {
+    results.push("✓ meetup_logs table exists");
+  }
+
+  // Test user_preferences table
+  const { error: upErr } = await sb.from("user_preferences").select("id").limit(0);
+  if (upErr) {
+    results.push("Run in SQL Editor: CREATE TABLE IF NOT EXISTS user_preferences (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID REFERENCES users(id) UNIQUE, data JSONB DEFAULT '{}', updated_at TIMESTAMPTZ DEFAULT NOW());");
+  } else {
+    results.push("✓ user_preferences table exists");
+  }
+
+  res.json({ results });
 });
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -38,7 +37,6 @@ export default function DashboardPage() {
   const [logActivity, setLogActivity] = useState('hangout');
   const [logDuration, setLogDuration] = useState(60);
   const [logTimeOfDay, setLogTimeOfDay] = useState('afternoon');
-  const [logSpontaneous, setLogSpontaneous] = useState(false);
   const [logRating, setLogRating] = useState(0);
   const [logSaving, setLogSaving] = useState(false);
   const [logSaved, setLogSaved] = useState(false);
@@ -76,22 +74,14 @@ export default function DashboardPage() {
         <div className="md:col-span-2 md:row-span-2 rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
             <h2 className="font-display text-sm font-semibold text-gray-900">This Week</h2>
-            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-400">0 events</span>
+            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-400">📅 My Calendar</span>
           </div>
-          <div className="flex flex-col items-center justify-center px-6 py-14">
-            <div className="animate-float text-5xl">🗓️</div>
-            <h3 className="mt-4 font-display text-lg font-bold text-gray-900">
-              Your week is wide open
-            </h3>
-            <p className="mt-2 max-w-sm text-center text-sm text-gray-400 leading-relaxed">
-              Once you and your friends are connected, Slotted will show upcoming hangouts here and suggest the best times to meet.
-            </p>
-            <Link
-              to="/friends"
-              className="mt-6 inline-flex items-center gap-2 rounded-xl gradient-btn px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
-            >
-              Add friends to get started 👋
-            </Link>
+          <div className="h-[420px] w-full">
+            <iframe
+              src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(user?.email ?? '')}&mode=WEEK&showTitle=0&showNav=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0&wkst=1`}
+              className="h-full w-full border-0"
+              title="Google Calendar"
+            />
           </div>
         </div>
 
@@ -112,22 +102,6 @@ export default function DashboardPage() {
           </div>
           <p className="mt-4 text-4xl font-bold text-gray-900">0</p>
           <p className="mt-1 text-xs text-gray-400">AI will suggest times here</p>
-        </div>
-
-        {/* What is Slotted — explainer for new users */}
-        <div className="md:col-span-3 rounded-2xl border border-teal-100 bg-gradient-to-r from-teal-50/60 via-cyan-50/40 to-blue-50/30 p-6 shadow-sm">
-          <div className="flex items-start gap-4">
-            <span className="mt-0.5 text-2xl">💡</span>
-            <div className="flex-1">
-              <h2 className="font-display text-base font-bold text-gray-900">What is Slotted?</h2>
-              <p className="mt-1 text-sm leading-relaxed text-gray-500">
-                Slotted is a social scheduling app that takes the back-and-forth out of making plans.
-                It syncs with your Google Calendar, compares free times with your friends, and uses AI
-                to suggest the perfect time to hang out. Both people confirm, and it goes straight on the calendar.
-              </p>
-
-            </div>
-          </div>
         </div>
 
         {/* Log a Hangout — Progressive Profiling */}
@@ -212,18 +186,8 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Spontaneous + Rating row */}
+              {/* Rating row */}
               <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setLogSpontaneous(!logSpontaneous)}
-                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
-                    logSpontaneous
-                      ? 'border-amber-300 bg-amber-50 text-amber-700'
-                      : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                  }`}
-                >
-                  ⚡ Spontaneous?
-                </button>
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-gray-400 mr-1">Vibe:</span>
                   {[1, 2, 3, 4, 5].map((star) => (
@@ -254,7 +218,6 @@ export default function DashboardPage() {
                           duration_min: logDuration,
                           day_of_week: new Date().getDay(),
                           time_of_day: logTimeOfDay,
-                          was_spontaneous: logSpontaneous,
                           rating: logRating || null,
                         }),
                       });

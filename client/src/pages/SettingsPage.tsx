@@ -8,6 +8,7 @@ export default function SettingsPage() {
   const [tripBuffer, setTripBuffer] = useState('both');
   const [personalTimeMode, setPersonalTimeMode] = useState('manual');
   const [socialFrequency, setSocialFrequency] = useState('weekly');
+  const [planningStyle, setPlanningStyle] = useState('flexible');
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['weekday-evening', 'weekend-afternoon']);
   const [weeklyDefaults, setWeeklyDefaults] = useState<Record<string, string>>({
     Mon: 'ask_me', Tue: 'ask_me', Wed: 'ask_me', Thu: 'ask_me',
@@ -127,6 +128,12 @@ export default function SettingsPage() {
                 placeholder="e.g. West Village, NYC"
                 className="mt-1.5 w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100 transition-all"
               />
+              <button
+                onClick={handleSave}
+                className="mt-2 rounded-xl gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+              >
+                {saved ? '✓ Saved' : 'Save'}
+              </button>
             </div>
             <div className="mt-4 flex gap-2">
               <button
@@ -311,6 +318,34 @@ export default function SettingsPage() {
                   <option value="2-3-month">2–3 times per month</option>
                   <option value="rarely">Less often</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">
+                  Planning style
+                </label>
+                <p className="mt-0.5 text-[11px] text-gray-400">How do you usually make plans with friends?</p>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'spontaneous', emoji: '⚡', label: 'Spontaneous', desc: 'Last-minute, go with the flow' },
+                    { value: 'flexible', emoji: '🔄', label: 'Flexible', desc: 'Either way works for me' },
+                    { value: 'planner', emoji: '📋', label: 'Planner', desc: 'I like to plan ahead' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setPlanningStyle(opt.value)}
+                      className={`rounded-xl border px-3 py-3 text-center transition-all ${
+                        planningStyle === opt.value
+                          ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 shadow-sm'
+                          : 'border-gray-200 text-gray-600 hover:border-slotted-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="text-lg">{opt.emoji}</span>
+                      <p className={`mt-1 text-xs font-semibold ${planningStyle === opt.value ? 'text-slotted-700' : 'text-gray-800'}`}>{opt.label}</p>
+                      <p className="mt-0.5 text-[10px] text-gray-400">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>

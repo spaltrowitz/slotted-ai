@@ -39,14 +39,7 @@ export default function LoginPage() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-btn text-sm font-bold text-white shadow-md">S</div>
           <span className="font-display text-xl font-bold tracking-tight text-gray-900">Slotted</span>
         </div>
-        {user && (
-          <Link
-            to="/dashboard"
-            className="rounded-xl border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-300 shadow-sm"
-          >
-            Dashboard →
-          </Link>
-        )}
+
       </nav>
 
       {/* Hero section */}
