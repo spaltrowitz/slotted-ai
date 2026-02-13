@@ -84,12 +84,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   >
                     {item.icon}
                     {item.label}
-                    {'badge' in item && item.badge && (
-                      <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
-                      </span>
-                    )}
                   </Link>
                 );
               })}
@@ -137,12 +131,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <span className="h-6 w-6 [&>svg]:h-6 [&>svg]:w-6">{item.icon}</span>
                 <span className="text-[10px] font-medium">{item.label}</span>
-                {'badge' in item && item.badge && (
-                  <span className="absolute top-0.5 right-1 flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-                  </span>
-                )}
               </Link>
             );
           })}
