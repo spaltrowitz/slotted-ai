@@ -283,26 +283,6 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* How it works — quick visual flow */}
-        <div className="md:col-span-3 rounded-2xl border border-gray-200/60 bg-white p-6 shadow-sm">
-          <h2 className="font-display text-sm font-semibold text-gray-900 mb-5">How Slotted Works</h2>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {[
-              { step: '1', emoji: '📅', title: 'Sync', desc: 'Connect your Google Calendar so we know when you\'re free' },
-              { step: '2', emoji: '👋', title: 'Invite', desc: 'Send friends a link — they sign up and sync their calendar too' },
-              { step: '3', emoji: '🤖', title: 'Match', desc: 'AI compares everyone\'s availability to find the best times' },
-              { step: '4', emoji: '🎉', title: 'Hang', desc: 'Both of you accept, it hits both calendars, done!' },
-            ].map((item) => (
-              <div key={item.step} className="text-center">
-                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-xl">
-                  {item.emoji}
-                </div>
-                <p className="mt-2 text-xs font-semibold text-gray-900">{item.title}</p>
-                <p className="mt-1 text-xs leading-snug text-gray-400">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </AppShell>
   );

@@ -295,17 +295,6 @@ export default function FriendsPage() {
               Enter their email above to send an invite. Once they accept,
               you'll see their availability and Slotted will start suggesting times to meet.
             </p>
-            <div className="mt-8 flex items-center gap-6 rounded-2xl border border-slotted-50 bg-gradient-to-r from-slotted-50/50 to-purple-50/50 px-6 py-4">
-              <div className="text-center">
-                <p className="text-2xl">{'\u{1F4C5}'}</p>
-                <p className="mt-1 text-[10px] font-medium text-gray-400">See calendars</p>
-              </div>
-              <div className="h-8 w-px bg-gray-200" />
-              <div className="text-center">
-                <p className="text-2xl">{'\u2728'}</p>
-                <p className="mt-1 text-[10px] font-medium text-gray-400">Auto-schedule</p>
-              </div>
-            </div>
           </div>
         </div>
       ) : acceptedFriends.length > 0 ? (
