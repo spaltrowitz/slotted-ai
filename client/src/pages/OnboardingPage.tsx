@@ -319,9 +319,10 @@ export default function OnboardingPage() {
                     type="email"
                     value={appleEmail}
                     onChange={(e) => { setAppleEmail(e.target.value); setAppleError(null); }}
-                    placeholder="Apple ID email"
+                    placeholder="Apple ID email (e.g. you@icloud.com)"
                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100"
                   />
+                  <p className="text-[11px] text-gray-400">Your Apple ID email — check Settings → Apple ID on your iPhone if unsure</p>
                   <input
                     type="password"
                     value={applePassword}

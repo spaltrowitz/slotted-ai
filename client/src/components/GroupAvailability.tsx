@@ -14,12 +14,10 @@ interface ParticipantStatus {
   id: string;
   name: string;
   synced: boolean;
-  freeSlots: number;
-  calendarConnected: boolean;
 }
 
 interface GroupSyncStatus {
-  me: { synced: boolean; freeSlots: number };
+  me: { synced: boolean };
   participants: ParticipantStatus[];
 }
 
@@ -92,11 +90,6 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
     return '😐';
   };
 
-  const statusBadge = (synced: boolean, connected: boolean, _name: string, freeSlots: number) => {
-    if (synced) return { emoji: '✅', text: `${freeSlots} free blocks`, css: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-    if (connected) return { emoji: '⚠️', text: 'Sync pending', css: 'bg-amber-50 text-amber-700 border-amber-200' };
-    return { emoji: '❌', text: 'Calendar not connected', css: 'bg-red-50 text-red-600 border-red-200' };
-  };
 
   return (
     <div className="rounded-2xl border border-gray-200/60 bg-white shadow-lg overflow-hidden">
@@ -120,29 +113,12 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
         </button>
       </div>
 
-      {/* Sync status banners */}
-      {syncStatus && (
-        <div className="px-5 py-3 border-b border-gray-100 space-y-2">
-          <div className="flex flex-wrap gap-2 text-[11px]">
-            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium ${
-              syncStatus.me.synced ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
-            }`}>
-              {syncStatus.me.synced ? '✅' : '⚠️'} You: {syncStatus.me.synced ? `${syncStatus.me.freeSlots} free blocks` : 'Not synced'}
-            </span>
-            {syncStatus.participants.map((p) => {
-              const badge = statusBadge(p.synced, p.calendarConnected, p.name, p.freeSlots);
-              return (
-                <span key={p.id} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium border ${badge.css}`}>
-                  {badge.emoji} {p.name}: {badge.text}
-                </span>
-              );
-            })}
-          </div>
-          {syncStatus.participants.some((p) => !p.calendarConnected) && (
-            <p className="text-[11px] text-gray-400">
-              💡 Ask friends without connected calendars to set up Google Calendar in Settings for better group suggestions
-            </p>
-          )}
+      {/* Sync status — only show if MY calendar isn't synced */}
+      {syncStatus && !syncStatus.me.synced && (
+        <div className="px-5 py-3 border-b border-gray-100">
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            ⚠️ Your calendar isn't synced yet — connect in Settings for better group suggestions
+          </span>
         </div>
       )}
 
@@ -162,9 +138,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
             <span className="text-4xl">📅</span>
             <h4 className="mt-3 text-sm font-semibold text-gray-800">No overlapping free times for the group</h4>
             <p className="mt-1.5 max-w-sm text-xs text-gray-400 leading-relaxed">
-              {syncStatus?.participants.some((p) => !p.calendarConnected)
-                ? "Some friends haven't connected their calendars yet. Nudge them to connect in Settings!"
-                : "Everyone's calendars are packed for the next 2 weeks. Try adjusting schedules or check back later."}
+              Everyone's calendars are packed for the next 2 weeks. Try adjusting schedules or check back later.
             </p>
           </div>
         ) : (

@@ -24,12 +24,15 @@ interface FriendRecord {
   friendshipId: string;
   status: string;
   invitedBy: string;
+  friendshipType?: string;
   friend: {
     id: string;
     displayName: string;
     email: string;
     photoUrl?: string;
     socialBattery?: string;
+    neighborhood?: string;
+    timezone?: string;
   };
 }
 
@@ -53,6 +56,24 @@ export default function FriendsPage() {
   const [newGroupMemberIds, setNewGroupMemberIds] = useState<Set<string>>(new Set());
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+
+  // Friendship type update handler
+  const updateFriendshipType = async (friendshipId: string, type: string) => {
+    try {
+      await api.patch(`/friends/${friendshipId}`, { friendshipType: type });
+      setFriends((prev) =>
+        prev.map((f) => f.friendshipId === friendshipId ? { ...f, friendshipType: type } : f)
+      );
+    } catch { /* silent */ }
+  };
+
+  // Helper: get friend's local time
+  const getFriendTime = (tz?: string) => {
+    if (!tz) return null;
+    try {
+      return new Date().toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true });
+    } catch { return null; }
+  };
 
   const inviteUrl = inviteCode
     ? `https://slotted-ai.web.app/invite/${inviteCode}`
@@ -130,8 +151,9 @@ export default function FriendsPage() {
         setInviteStatus({ type: 'success', message: `Invite sent to ${inviteEmail}!` });
         setInviteEmail('');
         fetchFriends();
-      } else if (res.status === 404) {
-        setInviteStatus({ type: 'info', message: `${inviteEmail} isn't on Slotted yet — share the invite link below!` });
+      } else if (res.status === 202 || res.status === 404) {
+        setInviteStatus({ type: 'success', message: `Invite saved! ${inviteEmail} will be auto-connected when they join. Share the invite link below to get them on Slotted.` });
+        setInviteEmail('');
       } else {
         setInviteStatus({ type: 'error', message: data.error || 'Something went wrong' });
       }
@@ -210,7 +232,7 @@ export default function FriendsPage() {
     }
   };
 
-  const toggleGroupSelect = (friendId: string) => {
+  const toggleFriendSelect = (friendId: string) => {
     setSelectedGroupIds((prev) => {
       const next = new Set(prev);
       if (next.has(friendId)) {
@@ -220,9 +242,15 @@ export default function FriendsPage() {
       }
       return next;
     });
-    // Close single-friend panel when selecting for group
+    // Close single-friend panel when toggling selection
     setSelectedFriendId(null);
     setShowGroupPanel(false);
+  };
+
+  const clearSelection = () => {
+    setSelectedGroupIds(new Set());
+    setShowGroupPanel(false);
+    setSelectedFriendId(null);
   };
 
   // invitedBy === friend.id means THEY invited ME (incoming)
@@ -235,12 +263,7 @@ export default function FriendsPage() {
   );
   const acceptedFriends = friends.filter((f) => f.status === 'accepted');
 
-  const batteryEmoji = (battery?: string) => {
-    if (battery === 'open') return '\u{1F7E2}';
-    if (battery === 'ask_me') return '\u{1F7E1}';
-    if (battery === 'recharging') return '\u{1F534}';
-    return '';
-  };
+
 
   return (
     <AppShell>
@@ -267,6 +290,7 @@ export default function FriendsPage() {
             {inviting ? 'Sending...' : 'Invite'}
           </button>
         </div>
+
         {inviteStatus && (
           <div className={`mt-2 rounded-xl border px-4 py-2.5 text-xs ${
             inviteStatus.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
@@ -537,20 +561,12 @@ export default function FriendsPage() {
             <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
               Friends {'\u00B7'} {acceptedFriends.length}
             </h2>
-            {selectedGroupIds.size >= 2 && (
-              <button
-                onClick={() => { setShowGroupPanel(true); setSelectedFriendId(null); }}
-                className="rounded-xl bg-gradient-to-r from-purple-500 to-slotted-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
-              >
-                👥 Find group times ({selectedGroupIds.size} selected)
-              </button>
-            )}
-            {selectedGroupIds.size === 1 && (
-              <span className="text-[11px] text-gray-400">Select 1 more friend for group scheduling</span>
-            )}
+            <p className="text-[11px] text-gray-400">
+              {selectedGroupIds.size === 0 ? 'Tap to select friends' : ''}
+            </p>
           </div>
 
-          {/* Group availability panel */}
+          {/* Inline availability panels */}
           {showGroupPanel && selectedGroupIds.size >= 2 && (
             <div className="mb-4">
               <GroupAvailability
@@ -558,88 +574,168 @@ export default function FriendsPage() {
                 friendNames={acceptedFriends
                   .filter((f) => selectedGroupIds.has(f.friend.id))
                   .map((f) => f.friend.displayName || 'Friend')}
-                onClose={() => { setShowGroupPanel(false); setSelectedGroupIds(new Set()); }}
+                onClose={clearSelection}
+              />
+            </div>
+          )}
+          {selectedFriendId && selectedGroupIds.size === 1 && (
+            <div className="mb-4">
+              <FriendAvailability
+                friendId={selectedFriendId}
+                friendName={acceptedFriends.find((f) => f.friend.id === selectedFriendId)?.friend.displayName || 'Friend'}
+                onClose={clearSelection}
               />
             </div>
           )}
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-            {acceptedFriends.map((f, i) => (
-              <div key={f.friendshipId}>
-                <div
-                  className={`flex items-center justify-between px-5 py-4 transition-colors hover:bg-gray-50/50 ${
-                    i !== acceptedFriends.length - 1 && selectedFriendId !== f.friend.id ? 'border-b border-gray-100' : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Group selection checkbox */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleGroupSelect(f.friend.id); }}
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-all ${
-                        selectedGroupIds.has(f.friend.id)
-                          ? 'border-purple-500 bg-purple-500 text-white'
-                          : 'border-gray-300 hover:border-purple-300'
-                      }`}
-                    >
-                      {selectedGroupIds.has(f.friend.id) && (
-                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </button>
-                    {f.friend.photoUrl ? (
-                      <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" />
-                    ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white">
-                        {f.friend.displayName?.[0] ?? '?'}
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {f.friend.displayName}
-                        {f.friend.socialBattery && (
-                          <span className="ml-1.5">{batteryEmoji(f.friend.socialBattery)}</span>
+            {acceptedFriends.map((f, i) => {
+              const isSelected = selectedGroupIds.has(f.friend.id);
+              const friendTime = getFriendTime(f.friend.timezone);
+              const fType = f.friendshipType || 'local';
+              const isLongDistance = fType === 'long_distance' || fType === 'both';
+              return (
+                <div key={f.friendshipId}>
+                  <button
+                    onClick={() => toggleFriendSelect(f.friend.id)}
+                    className={`flex w-full items-center justify-between px-5 py-4 text-left transition-all ${
+                      isSelected
+                        ? 'bg-slotted-50/40'
+                        : 'hover:bg-gray-50/50'
+                    } ${
+                      i !== acceptedFriends.length - 1 ? 'border-b border-gray-100' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {/* Selection indicator */}
+                      <div
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                          isSelected
+                            ? 'border-slotted-500 bg-slotted-500 text-white scale-110'
+                            : 'border-gray-300'
+                        }`}
+                      >
+                        {isSelected && (
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
                         )}
-                      </p>
-                      <p className="text-xs text-gray-400">{f.friend.email}</p>
+                      </div>
+                      {f.friend.photoUrl ? (
+                        <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white">
+                          {f.friend.displayName?.[0] ?? '?'}
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          {f.friend.displayName}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-gray-400">{f.friend.email}</p>
+                          {isLongDistance && friendTime && (
+                            <span className="text-[10px] text-gray-400">🕐 {friendTime}</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() =>
-                        setSelectedFriendId(
-                          selectedFriendId === f.friend.id ? null : f.friend.id,
-                        )
-                      }
-                      className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
-                        selectedFriendId === f.friend.id
-                          ? 'bg-gray-200 text-gray-700'
-                          : 'gradient-btn text-white'
-                      }`}
-                    >
-                      {selectedFriendId === f.friend.id ? 'Close' : '✨ Find times'}
-                    </button>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      Connected
-                    </span>
-                  </div>
+                    <div className="flex items-center gap-2">
+                      {/* Friendship type toggle */}
+                      <div className="flex rounded-md border border-gray-200 bg-gray-50 p-0.5" onClick={(e) => e.stopPropagation()}>
+                        {([
+                          { value: 'local', emoji: '📍', tip: 'Local' },
+                          { value: 'long_distance', emoji: '📞', tip: 'Long distance' },
+                          { value: 'both', emoji: '🌐', tip: 'Both' },
+                        ] as const).map((opt) => (
+                          <button
+                            key={opt.value}
+                            title={opt.tip}
+                            onClick={(e) => { e.stopPropagation(); updateFriendshipType(f.friendshipId, opt.value); }}
+                            className={`rounded px-1.5 py-0.5 text-[10px] transition-all ${
+                              fType === opt.value
+                                ? 'bg-white text-gray-800 shadow-sm font-semibold'
+                                : 'text-gray-400 hover:text-gray-600'
+                            }`}
+                          >
+                            {opt.emoji}
+                          </button>
+                        ))}
+                      </div>
+                      {isLongDistance && f.friend.neighborhood && (
+                        <span className="text-[10px] text-gray-400 max-w-[80px] truncate">{f.friend.neighborhood}</span>
+                      )}
+                    </div>
+                  </button>
                 </div>
-
-                {/* Expandable availability panel */}
-                {selectedFriendId === f.friend.id && (
-                  <div className="px-5 pb-5 border-b border-gray-100">
-                    <FriendAvailability
-                      friendId={f.friend.id}
-                      friendName={f.friend.displayName || 'Friend'}
-                      onClose={() => setSelectedFriendId(null)}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       ) : null}
+
+      {/* ─── Floating action bar ─── */}
+      {selectedGroupIds.size > 0 && !showGroupPanel && !(selectedFriendId && selectedGroupIds.size === 1) && (
+        <div className="fixed bottom-20 inset-x-0 z-50 flex justify-center px-4 md:bottom-6 animate-in slide-in-from-bottom-4 fade-in">
+          <div className="flex items-center gap-3 rounded-2xl border border-gray-200/80 bg-white/95 px-5 py-3 shadow-xl backdrop-blur-xl">
+            {/* Selected avatars */}
+            <div className="flex -space-x-2">
+              {acceptedFriends
+                .filter((f) => selectedGroupIds.has(f.friend.id))
+                .slice(0, 4)
+                .map((f) =>
+                  f.friend.photoUrl ? (
+                    <img key={f.friend.id} src={f.friend.photoUrl} alt="" className="h-8 w-8 rounded-full ring-2 ring-white" />
+                  ) : (
+                    <div key={f.friend.id} className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xs font-semibold text-white ring-2 ring-white">
+                      {f.friend.displayName?.[0] ?? '?'}
+                    </div>
+                  ),
+                )}
+              {selectedGroupIds.size > 4 && (
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-[10px] font-bold text-gray-600 ring-2 ring-white">
+                  +{selectedGroupIds.size - 4}
+                </div>
+              )}
+            </div>
+
+            <div className="text-xs text-gray-500">
+              {selectedGroupIds.size === 1
+                ? acceptedFriends.find((f) => selectedGroupIds.has(f.friend.id))?.friend.displayName
+                : `${selectedGroupIds.size} friends`}
+            </div>
+
+            {/* CTA — adapts to 1 vs 2+ */}
+            {selectedGroupIds.size === 1 ? (
+              <button
+                onClick={() => {
+                  const friendId = Array.from(selectedGroupIds)[0];
+                  setSelectedFriendId(friendId);
+                }}
+                className="rounded-xl gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+              >
+                ✨ Find 1:1 times
+              </button>
+            ) : (
+              <button
+                onClick={() => { setShowGroupPanel(true); setSelectedFriendId(null); }}
+                className="rounded-xl bg-gradient-to-r from-purple-500 to-slotted-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+              >
+                👥 Find group times
+              </button>
+            )}
+
+            {/* Clear */}
+            <button
+              onClick={clearSelection}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

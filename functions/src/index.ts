@@ -258,6 +258,57 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
       res.status(500).json({ error: error.message });
       return;
     }
+
+    // Auto-connect with anyone who previously invited this email
+    if (data && email) {
+      try {
+        const { data: pendingRows } = await getSupabase()
+          .from("pending_invites")
+          .select("inviter_id")
+          .eq("invited_email", email.toLowerCase());
+
+        if (pendingRows && pendingRows.length > 0) {
+          for (const row of pendingRows) {
+            if (row.inviter_id === data.id) continue; // skip self
+            const [userA, userB] =
+              data.id < row.inviter_id
+                ? [data.id, row.inviter_id]
+                : [row.inviter_id, data.id];
+
+            await getSupabase()
+              .from("friendships")
+              .upsert(
+                {
+                  user_a_id: userA,
+                  user_b_id: userB,
+                  invited_by: row.inviter_id,
+                  status: "accepted",
+                },
+                { onConflict: "user_a_id,user_b_id" },
+              );
+
+            // Notify the inviter
+            await createNotification({
+              userId: row.inviter_id,
+              type: "friend_accepted",
+              title: "New friend joined!",
+              body: `${data.display_name || email} joined Slotted and you're now connected.`,
+              relatedUserId: data.id,
+            });
+          }
+
+          // Clean up fulfilled pending invites
+          await getSupabase()
+            .from("pending_invites")
+            .delete()
+            .eq("invited_email", email.toLowerCase());
+        }
+      } catch (pendingErr) {
+        console.error("Pending invite auto-connect failed:", pendingErr);
+        // Non-blocking — don't fail the signup
+      }
+    }
+
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -349,6 +400,7 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
       socialFrequency, preferredTimes, travelBuffer,
       socialBattery, rechargingDays, planningStyle,
       neighborhood, workNeighborhood, officeDays,
+      callWindows, tripBufferBefore, tripBufferAfter,
     } = req.body;
 
     const updates: Record<string, any> = {};
@@ -361,6 +413,9 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
     if (neighborhood !== undefined) updates.neighborhood = neighborhood;
     if (workNeighborhood !== undefined) updates.work_neighborhood = workNeighborhood;
     if (officeDays !== undefined) updates.office_days = officeDays;
+    if (callWindows !== undefined) updates.call_windows = callWindows;
+    if (tripBufferBefore !== undefined) updates.trip_buffer_before = tripBufferBefore;
+    if (tripBufferAfter !== undefined) updates.trip_buffer_after = tripBufferAfter;
 
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ error: "No fields to update" });
@@ -440,17 +495,25 @@ app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
 
     // Flatten: return the *other* user as "friend"
     const friends = (friendships || []).map((f: any) => {
-      const friend = f.user_a.id === me.id ? f.user_b : f.user_a;
+      const iAmA = f.user_a.id === me.id;
+      const friend = iAmA ? f.user_b : f.user_a;
+      // hangoutPref is MY private preference for this friend
+      const hangoutPref = iAmA ? (f.user_a_hangout_pref || "both") : (f.user_b_hangout_pref || "both");
+      const friendshipType = iAmA ? (f.user_a_friendship_type || "local") : (f.user_b_friendship_type || "local");
       return {
         friendshipId: f.id,
         status: f.status,
         invitedBy: f.invited_by,
+        hangoutPref,
+        friendshipType,
         friend: {
           id: friend.id,
           displayName: friend.display_name,
           email: friend.email,
           photoUrl: friend.photo_url,
           socialBattery: friend.social_battery,
+          neighborhood: friend.neighborhood,
+          timezone: friend.timezone,
         },
       };
     });
@@ -463,11 +526,13 @@ app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
 
 /** POST /friends/invite — send a friend invite by email */
 app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response) => {
-  const { email } = req.body;
+  const { email, hangoutPref } = req.body;
   if (!email) {
     res.status(400).json({ error: "Email is required" });
     return;
   }
+  const validPrefs = ["both", "one_on_one", "group"];
+  const pref = validPrefs.includes(hangoutPref) ? hangoutPref : "both";
   try {
     const me = await getDbUser(req.uid!);
     if (!me) {
@@ -483,8 +548,18 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
       .single();
 
     if (!invitee) {
-      // TODO: send an email invite to non-users
-      res.status(404).json({ error: "User not on Slotted yet", email });
+      // Store a pending invite so we auto-connect when they sign up
+      await getSupabase()
+        .from("pending_invites")
+        .upsert(
+          { inviter_id: me.id, invited_email: email.toLowerCase() },
+          { onConflict: "inviter_id,invited_email" },
+        );
+      res.status(202).json({
+        pending: true,
+        message: `${email} isn't on Slotted yet. They'll be auto-connected when they sign up!`,
+        email,
+      });
       return;
     }
 
@@ -494,20 +569,25 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
     }
 
     // Canonical ordering: smaller UUID first
-    const [userA, userB] =
-      me.id < invitee.id ? [me.id, invitee.id] : [invitee.id, me.id];
+    const iAmA = me.id < invitee.id;
+    const [userA, userB] = iAmA ? [me.id, invitee.id] : [invitee.id, me.id];
+
+    const upsertPayload: any = {
+      user_a_id: userA,
+      user_b_id: userB,
+      invited_by: me.id,
+      status: "pending",
+    };
+    // Set MY hangout pref on the correct column
+    if (iAmA) {
+      upsertPayload.user_a_hangout_pref = pref;
+    } else {
+      upsertPayload.user_b_hangout_pref = pref;
+    }
 
     const { data, error } = await getSupabase()
       .from("friendships")
-      .upsert(
-        {
-          user_a_id: userA,
-          user_b_id: userB,
-          invited_by: me.id,
-          status: "pending",
-        },
-        { onConflict: "user_a_id,user_b_id" },
-      )
+      .upsert(upsertPayload, { onConflict: "user_a_id,user_b_id" })
       .select()
       .single();
 
@@ -604,12 +684,21 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
   }
 });
 
-/** PATCH /friends/:friendshipId — accept or decline a friendship */
+/** PATCH /friends/:friendshipId — accept or decline a friendship, update prefs */
 app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: Response) => {
   const { friendshipId } = req.params;
-  const { action } = req.body;
-  if (!["accept", "decline"].includes(action)) {
-    res.status(400).json({ error: "Invalid action" });
+  const { action, hangoutPref, friendshipType } = req.body;
+
+  // Support accept/decline actions AND hangoutPref/friendshipType updates
+  const validActions = ["accept", "decline"];
+  const validPrefs = ["both", "one_on_one", "group"];
+  const validTypes = ["local", "long_distance", "both"];
+  const hasAction = action && validActions.includes(action);
+  const hasPref = hangoutPref && validPrefs.includes(hangoutPref);
+  const hasType = friendshipType && validTypes.includes(friendshipType);
+
+  if (!hasAction && !hasPref && !hasType) {
+    res.status(400).json({ error: "Provide action, hangoutPref, or friendshipType" });
     return;
   }
   try {
@@ -619,11 +708,34 @@ app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: R
       return;
     }
 
-    const newStatus = action === "accept" ? "accepted" : "declined";
+    const updatePayload: any = {};
+    if (hasAction) {
+      updatePayload.status = action === "accept" ? "accepted" : "declined";
+    }
+
+    // Update hangout pref or friendship type on the correct side
+    if (hasPref || hasType) {
+      // Fetch the friendship to determine which side I am
+      const { data: friendship } = await getSupabase()
+        .from("friendships")
+        .select("user_a_id, user_b_id")
+        .eq("id", friendshipId)
+        .or(`user_a_id.eq.${me.id},user_b_id.eq.${me.id}`)
+        .single();
+      if (friendship) {
+        if (friendship.user_a_id === me.id) {
+          if (hasPref) updatePayload.user_a_hangout_pref = hangoutPref;
+          if (hasType) updatePayload.user_a_friendship_type = friendshipType;
+        } else {
+          if (hasPref) updatePayload.user_b_hangout_pref = hangoutPref;
+          if (hasType) updatePayload.user_b_friendship_type = friendshipType;
+        }
+      }
+    }
 
     const { data, error } = await getSupabase()
       .from("friendships")
-      .update({ status: newStatus })
+      .update(updatePayload)
       .eq("id", friendshipId)
       .or(`user_a_id.eq.${me.id},user_b_id.eq.${me.id}`)
       .select()
@@ -1840,17 +1952,22 @@ app.get("/dashboard", requireAuth, async (req: AuthRequest, res: Response) => {
     // 1. Get accepted friends
     const { data: friendships } = await getSupabase()
       .from("friendships")
-      .select("*, user_a:users!friendships_user_a_id_fkey(id,display_name,photo_url,social_battery), user_b:users!friendships_user_b_id_fkey(id,display_name,photo_url,social_battery)")
+      .select("*, user_a:users!friendships_user_a_id_fkey(id,display_name,photo_url,social_battery,neighborhood,timezone), user_b:users!friendships_user_b_id_fkey(id,display_name,photo_url,social_battery,neighborhood,timezone)")
       .or(`user_a_id.eq.${me.id},user_b_id.eq.${me.id}`)
       .eq("status", "accepted");
 
     const friends = (friendships || []).map((f: any) => {
-      const friend = f.user_a.id === me.id ? f.user_b : f.user_a;
+      const iAmA = f.user_a.id === me.id;
+      const friend = iAmA ? f.user_b : f.user_a;
+      const friendshipType = iAmA ? (f.user_a_friendship_type || "local") : (f.user_b_friendship_type || "local");
       return {
         id: friend.id,
         displayName: friend.display_name,
         photoUrl: friend.photo_url,
         socialBattery: friend.social_battery,
+        neighborhood: friend.neighborhood,
+        timezone: friend.timezone,
+        friendshipType,
       };
     });
 
@@ -2814,6 +2931,31 @@ app.post("/admin/migrate", async (req: Request, res: Response) => {
     }
   } else {
     results.push("✓ notifications table exists");
+  }
+
+  // Test pending_invites table
+  const { error: piErr } = await sb.from("pending_invites").select("id").limit(0);
+  if (piErr) {
+    const createPiSql = `
+      CREATE TABLE IF NOT EXISTS pending_invites (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        inviter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        invited_email TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (inviter_id, invited_email)
+      );
+      CREATE INDEX IF NOT EXISTS idx_pending_invites_email ON pending_invites (invited_email);
+      CREATE INDEX IF NOT EXISTS idx_pending_invites_inviter ON pending_invites (inviter_id);
+    `;
+    const { error: piExecErr } = await sb.rpc("exec_sql", { sql: createPiSql });
+    if (piExecErr) {
+      results.push("pending_invites table missing — run this SQL in Supabase SQL Editor:");
+      results.push(createPiSql.trim());
+    } else {
+      results.push("✓ pending_invites table auto-created");
+    }
+  } else {
+    results.push("✓ pending_invites table exists");
   }
 
   res.json({ results });

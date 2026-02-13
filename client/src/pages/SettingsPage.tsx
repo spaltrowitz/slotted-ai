@@ -6,7 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 export default function SettingsPage() {
   const { user, onboardingComplete, googleCalendarConnected, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, signInWithGoogle, signOut } = useAuth();
   const [travelBuffer, setTravelBuffer] = useState(30);
-  const [tripBuffer, setTripBuffer] = useState(1);
+  const [tripBufferBefore, setTripBufferBefore] = useState(false);
+  const [tripBufferAfter, setTripBufferAfter] = useState(true);
   const [personalTimeProtection, setPersonalTimeProtection] = useState(50);
   const [planningStyle, setPlanningStyle] = useState('flexible');
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['weekday-evening', 'weekend-afternoon']);
@@ -36,6 +37,9 @@ export default function SettingsPage() {
     Mon: [], Tue: [], Wed: [], Thu: [], Fri: [], Sat: [], Sun: [],
   });
   const feedbackRef = useRef<HTMLTextAreaElement>(null);
+
+  // Call windows for phone/video availability
+  const [callWindows, setCallWindows] = useState<{ day: number; start: string; end: string; label: string }[]>([]);
 
   // Learned preferences from progressive profiling
   const [learnedPrefs, setLearnedPrefs] = useState<{
@@ -69,7 +73,11 @@ export default function SettingsPage() {
           if (me.social_frequency) setSocialRecharge(me.social_frequency);
           if (me.preferred_times) setPreferredTimes(me.preferred_times);
           if (me.travel_buffer_min) setTravelBuffer(me.travel_buffer_min);
+          if (me.trip_buffer_before !== undefined) setTripBufferBefore(me.trip_buffer_before);
+          if (me.trip_buffer_after !== undefined) setTripBufferAfter(me.trip_buffer_after);
           if (me.recharging_days) setRechargingDays(me.recharging_days);
+          if (me.call_windows && Array.isArray(me.call_windows)) setCallWindows(me.call_windows);
+          if (me.neighborhood) setNeighborhood(me.neighborhood);
         }
       } catch {
         // silently fail
@@ -91,11 +99,14 @@ export default function SettingsPage() {
           socialFrequency: socialRecharge,
           preferredTimes,
           travelBuffer,
+          tripBufferBefore,
+          tripBufferAfter,
           rechargingDays,
           planningStyle,
           neighborhood,
           workNeighborhood,
           officeDays,
+          callWindows,
         }),
       });
     } catch {
@@ -129,7 +140,7 @@ export default function SettingsPage() {
     </svg>
   );
 
-  const tripBufferLabel = tripBuffer === 0 ? 'None' : tripBuffer === 1 ? '1 day' : `${tripBuffer} days`;
+
   const personalTimeLabel = personalTimeProtection <= 20 ? 'Show all free time' : personalTimeProtection <= 50 ? 'Light protection' : personalTimeProtection <= 80 ? 'Moderate protection' : 'Maximum protection';
 
   return (
@@ -314,9 +325,10 @@ export default function SettingsPage() {
                     type="email"
                     value={appleEmail}
                     onChange={(e) => { setAppleEmail(e.target.value); setAppleError(null); }}
-                    placeholder="Apple ID email"
+                    placeholder="Apple ID email (e.g. you@icloud.com)"
                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
                   />
+                  <p className="text-[10px] text-gray-400">Not sure? Check Settings → Apple ID on your iPhone, or go to appleid.apple.com</p>
                   <input
                     type="password"
                     value={applePassword}
@@ -482,6 +494,120 @@ export default function SettingsPage() {
 
           </div>
 
+          {/* ─── Call Windows ─── */}
+          <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📞</span>
+              <h2 className="text-sm font-semibold text-gray-900">Call Windows</h2>
+            </div>
+            <p className="mt-0.5 text-[11px] text-gray-400">
+              Recurring times you're available for phone or video calls — great for long-distance friends
+            </p>
+
+            {callWindows.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {callWindows.map((w, idx) => {
+                  const dayLabel = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w.day] || '?';
+                  return (
+                    <div key={idx} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/30 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-gray-700">{dayLabel}</span>
+                        <span className="text-[11px] text-gray-500">{w.start} – {w.end}</span>
+                        {w.label && <span className="text-[10px] text-gray-400">({w.label})</span>}
+                      </div>
+                      <button
+                        onClick={() => setCallWindows((prev) => prev.filter((_, i) => i !== idx))}
+                        className="text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Quick-add presets */}
+            <div className="mt-3">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mb-2">Quick add</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: '🥪 Weekday lunch', days: [1,2,3,4,5], start: '12:00', end: '13:00', tag: 'Lunch break' },
+                  { label: '🚗 Commute', days: [1,2,3,4,5], start: '17:30', end: '18:30', tag: 'Commute' },
+                  { label: '🌆 Weekday evening', days: [1,2,3,4,5], start: '19:00', end: '21:00', tag: 'Evening' },
+                  { label: '☀️ Weekend morning', days: [0,6], start: '09:00', end: '11:00', tag: 'Morning' },
+                  { label: '🌙 Weekend evening', days: [0,6], start: '18:00', end: '21:00', tag: 'Evening' },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => {
+                      const newWindows = preset.days.map((day) => ({
+                        day,
+                        start: preset.start,
+                        end: preset.end,
+                        label: preset.tag,
+                      }));
+                      // Avoid duplicates
+                      setCallWindows((prev) => {
+                        const existing = new Set(prev.map((w) => `${w.day}-${w.start}-${w.end}`));
+                        const unique = newWindows.filter((w) => !existing.has(`${w.day}-${w.start}-${w.end}`));
+                        return [...prev, ...unique];
+                      });
+                    }}
+                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-600 transition-all hover:border-slotted-200 hover:bg-slotted-50"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom add */}
+            <details className="mt-3">
+              <summary className="text-[11px] font-medium text-gray-400 hover:text-slotted-600 cursor-pointer transition-colors">
+                + Add custom window
+              </summary>
+              <div className="mt-2 flex items-end gap-2">
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-0.5">Day</label>
+                  <select id="cw-day" className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none">
+                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, i) => (
+                      <option key={d} value={i}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-0.5">Start</label>
+                  <input id="cw-start" type="time" defaultValue="12:00" className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-0.5">End</label>
+                  <input id="cw-end" type="time" defaultValue="13:00" className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-0.5">Label</label>
+                  <input id="cw-label" type="text" placeholder="e.g. Lunch" className="w-20 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none" />
+                </div>
+                <button
+                  onClick={() => {
+                    const day = parseInt((document.getElementById('cw-day') as HTMLSelectElement).value);
+                    const start = (document.getElementById('cw-start') as HTMLInputElement).value;
+                    const end = (document.getElementById('cw-end') as HTMLInputElement).value;
+                    const label = (document.getElementById('cw-label') as HTMLInputElement).value;
+                    if (start && end) {
+                      setCallWindows((prev) => [...prev, { day, start, end, label }]);
+                    }
+                  }}
+                  className="rounded-lg gradient-btn px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
+                >
+                  Add
+                </button>
+              </div>
+            </details>
+          </div>
+
           {/* ─── Social Battery (recharge) ─── */}
           <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2">
@@ -489,14 +615,14 @@ export default function SettingsPage() {
               <h2 className="text-sm font-semibold text-gray-900">Social Battery</h2>
             </div>
             <p className="mt-1 text-xs text-gray-400">
-              How much time do you need to recharge between hangouts? This is your total across all friends, not per person.
+              How often do you want to hang out with <span className="font-semibold text-gray-600">anyone</span> — all friends combined, not per person?
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2">
               {[
-                { value: 'daily', emoji: '🥳', label: 'Every day', desc: 'I love having plans and rarely need downtime' },
-                { value: '2-3-week', emoji: '😊', label: '2–3 times a week', desc: 'I like being social but need a couple recharge days' },
-                { value: 'weekly', emoji: '🧘', label: 'About once a week', desc: 'I need plenty of downtime to recharge between hangouts' },
-                { value: 'biweekly', emoji: '🏡', label: 'Every couple weeks', desc: 'I prefer lots of space between social plans' },
+                { value: 'daily', emoji: '🥳', label: 'Every day', desc: "I'm happy to see any friend on any day — no limit" },
+                { value: '2-3-week', emoji: '😊', label: '2–3 plans per week', desc: 'I like being social but need a couple days between any plans' },
+                { value: 'weekly', emoji: '🧘', label: 'About 1 plan per week', desc: 'One hangout (with anyone) per week is my sweet spot' },
+                { value: 'biweekly', emoji: '🏡', label: '1–2 plans per month', desc: 'I prefer lots of downtime between any social plans' },
               ].map((opt) => (
                 <button
                   key={opt.value}
@@ -521,7 +647,7 @@ export default function SettingsPage() {
               <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
                 Always-recharge days
               </label>
-              <p className="mt-0.5 text-[10px] text-gray-400">Select days you always need to recharge — Slotted won't suggest plans on these days</p>
+              <p className="mt-0.5 text-[10px] text-gray-400">Select days you never want plans with anyone — Slotted won't suggest hangouts on these days</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {[
                   { day: 0, label: 'Sun' },
@@ -618,31 +744,55 @@ export default function SettingsPage() {
               <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
                 Preferred hangout times
               </label>
-              <div className="mt-2 grid grid-cols-2 gap-1.5">
-                {[
-                  { value: 'weekday-morning', emoji: '🌅', label: 'Weekday AM' },
-                  { value: 'weekday-lunch', emoji: '🍽️', label: 'Weekday lunch' },
-                  { value: 'weekday-afternoon', emoji: '☀️', label: 'Weekday PM' },
-                  { value: 'weekday-evening', emoji: '🌆', label: 'Weekday evening' },
-                  { value: 'weekend-morning', emoji: '🥐', label: 'Weekend AM' },
-                  { value: 'weekend-afternoon', emoji: '☀️', label: 'Weekend PM' },
-                  { value: 'weekend-evening', emoji: '🌙', label: 'Weekend evening' },
-                ].map((opt) => {
-                  const selected = preferredTimes.includes(opt.value);
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => toggleTime(opt.value)}
-                      className={`rounded-lg border px-3 py-2 text-left text-[11px] transition-all ${
-                        selected
-                          ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm font-semibold'
-                          : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      {opt.emoji} {opt.label}
-                    </button>
-                  );
-                })}
+              <div className="mt-2 grid grid-cols-2 gap-4">
+                {/* Weekdays column */}
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Weekdays</p>
+                  {[
+                    { value: 'weekday-morning', emoji: '🌅', label: 'Morning' },
+                    { value: 'weekday-afternoon', emoji: '☀️', label: 'Afternoon' },
+                    { value: 'weekday-evening', emoji: '🌆', label: 'Evening' },
+                  ].map((opt) => {
+                    const selected = preferredTimes.includes(opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => toggleTime(opt.value)}
+                        className={`w-full rounded-lg border px-3 py-2 text-left text-[11px] transition-all ${
+                          selected
+                            ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm font-semibold'
+                            : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        {opt.emoji} {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Weekends column */}
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Weekends</p>
+                  {[
+                    { value: 'weekend-morning', emoji: '🥐', label: 'Morning' },
+                    { value: 'weekend-afternoon', emoji: '☀️', label: 'Afternoon' },
+                    { value: 'weekend-evening', emoji: '🌙', label: 'Evening' },
+                  ].map((opt) => {
+                    const selected = preferredTimes.includes(opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => toggleTime(opt.value)}
+                        className={`w-full rounded-lg border px-3 py-2 text-left text-[11px] transition-all ${
+                          selected
+                            ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm font-semibold'
+                            : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        {opt.emoji} {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -668,7 +818,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Trip buffer — slider */}
+            {/* Trip buffer — two toggles */}
             <div className="mt-4">
               <div className="flex items-center gap-2">
                 <span className="text-xs">✈️</span>
@@ -676,20 +826,40 @@ export default function SettingsPage() {
                   Trip buffer
                 </label>
               </div>
-              <p className="mt-0.5 text-[10px] text-gray-400">Recovery days blocked around travel</p>
-              <div className="mt-2 flex items-center gap-3">
-                <input
-                  type="range"
-                  min={0}
-                  max={3}
-                  step={1}
-                  value={tripBuffer}
-                  onChange={(e) => setTripBuffer(Number(e.target.value))}
-                  className="flex-1 accent-teal-500 h-1.5 cursor-pointer"
-                />
-                <span className="min-w-[3rem] rounded-lg border border-slotted-200 bg-slotted-50 px-2 py-1 text-center text-[11px] font-bold text-slotted-700">
-                  {tripBufferLabel}
-                </span>
+              <p className="mt-0.5 text-[10px] text-gray-400">Block a recovery day around your trips</p>
+              <div className="mt-2 space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={tripBufferBefore}
+                    onClick={() => setTripBufferBefore(!tripBufferBefore)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                      tripBufferBefore ? 'bg-slotted-500' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                      tripBufferBefore ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                    }`} />
+                  </button>
+                  <span className="text-xs text-gray-600">Day before trip</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={tripBufferAfter}
+                    onClick={() => setTripBufferAfter(!tripBufferAfter)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                      tripBufferAfter ? 'bg-slotted-500' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                      tripBufferAfter ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                    }`} />
+                  </button>
+                  <span className="text-xs text-gray-600">Day after trip</span>
+                </label>
               </div>
             </div>
 

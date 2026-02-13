@@ -19,10 +19,16 @@ CREATE TABLE users (
   social_frequency    TEXT,                           -- daily / 2-3-week / weekly / 2-3-month / rarely
   preferred_times     TEXT[],                         -- weekday-morning, weekend-evening, etc.
   travel_buffer_min   INT NOT NULL DEFAULT 30,
+  trip_buffer_before  BOOLEAN NOT NULL DEFAULT FALSE,
+  trip_buffer_after   BOOLEAN NOT NULL DEFAULT TRUE,
   social_battery      TEXT NOT NULL DEFAULT 'open'    -- open / ask_me / recharging
     CHECK (social_battery IN ('open', 'ask_me', 'recharging')),
   recharging_days     INT[] DEFAULT '{}'::INT[],       -- days of week to always recharge (0=Sun, 1=Mon, ..., 6=Sat)
   onboarded           BOOLEAN NOT NULL DEFAULT FALSE,
+
+  -- Call windows (recurring availability for phone/video calls)
+  -- JSONB array of { day: 0-6, start: "HH:MM", end: "HH:MM", label?: string }
+  call_windows        JSONB DEFAULT '[]'::JSONB,
 
   -- Google Calendar
   google_access_token     TEXT,
@@ -52,6 +58,19 @@ CREATE TABLE friendships (
   status      TEXT NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending', 'accepted', 'declined')),
   invited_by  UUID NOT NULL REFERENCES users(id),
+
+  -- Per-user hangout preference (private — only visible to the setting user)
+  -- 'both' = 1:1 and groups, 'one_on_one' = prefers 1:1, 'group' = prefers group hangs
+  user_a_hangout_pref TEXT NOT NULL DEFAULT 'both'
+    CHECK (user_a_hangout_pref IN ('both', 'one_on_one', 'group')),
+  user_b_hangout_pref TEXT NOT NULL DEFAULT 'both'
+    CHECK (user_b_hangout_pref IN ('both', 'one_on_one', 'group')),
+
+  -- Per-side friendship type: local (in-person), long_distance (calls), or both
+  user_a_friendship_type TEXT NOT NULL DEFAULT 'local'
+    CHECK (user_a_friendship_type IN ('local', 'long_distance', 'both')),
+  user_b_friendship_type TEXT NOT NULL DEFAULT 'local'
+    CHECK (user_b_friendship_type IN ('local', 'long_distance', 'both')),
 
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -192,7 +211,7 @@ CREATE TABLE meetup_logs (
 
   -- What happened
   activity_type   TEXT NOT NULL DEFAULT 'other'
-    CHECK (activity_type IN ('coffee', 'meal', 'drinks', 'walk', 'workout', 'movie', 'game_night', 'hangout', 'other')),
+    CHECK (activity_type IN ('coffee', 'meal', 'drinks', 'walk', 'workout', 'movie', 'game_night', 'hangout', 'phone_call', 'facetime', 'video_call', 'other')),
   duration_min    INT,                                 -- actual duration in minutes
   day_of_week     INT NOT NULL,                        -- 0=Sun … 6=Sat
   time_of_day     TEXT NOT NULL                        -- morning, afternoon, evening, night
@@ -307,6 +326,21 @@ CREATE TABLE friend_group_members (
 
 CREATE INDEX idx_friend_group_members_group ON friend_group_members (group_id);
 CREATE INDEX idx_friend_group_members_user ON friend_group_members (user_id);
+
+-- ============================================================
+-- PENDING INVITES (for users invited by email who haven't signed up yet)
+-- ============================================================
+CREATE TABLE pending_invites (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  inviter_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  invited_email   TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  UNIQUE (inviter_id, invited_email)
+);
+
+CREATE INDEX idx_pending_invites_email ON pending_invites (invited_email);
+CREATE INDEX idx_pending_invites_inviter ON pending_invites (inviter_id);
 
 -- ============================================================
 -- Row Level Security (RLS) — enable after setting up Supabase auth

@@ -60,7 +60,7 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleRsvp = async (notificationId: string, meetupId: string, rsvp: 'accepted' | 'declined') => {
+  const handleRsvp = async (notificationId: string, meetupId: string, rsvp: 'accepted' | 'declined' | 'maybe') => {
     setRsvpLoading(notificationId);
     try {
       await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp });
@@ -176,12 +176,14 @@ export default function NotificationsPage() {
                         <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border ${
                           rsvpDone[notification.id] === 'accepted'
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : 'border-gray-200 bg-gray-50 text-gray-600'
+                            : rsvpDone[notification.id] === 'maybe'
+                              ? 'border-amber-200 bg-amber-50 text-amber-700'
+                              : 'border-gray-200 bg-gray-50 text-gray-600'
                         }`}>
-                          {rsvpDone[notification.id] === 'accepted' ? '✅ Accepted' : '❌ Declined'}
+                          {rsvpDone[notification.id] === 'accepted' ? '✅ Accepted' : rsvpDone[notification.id] === 'maybe' ? '🤔 Maybe' : 'Not this time'}
                         </span>
                       ) : (
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <button
                             onClick={(e) => { e.stopPropagation(); handleRsvp(notification.id, notification.related_id!, 'accepted'); }}
                             disabled={rsvpLoading === notification.id}
@@ -190,11 +192,18 @@ export default function NotificationsPage() {
                             {rsvpLoading === notification.id ? '...' : '✅ Accept'}
                           </button>
                           <button
+                            onClick={(e) => { e.stopPropagation(); handleRsvp(notification.id, notification.related_id!, 'maybe'); }}
+                            disabled={rsvpLoading === notification.id}
+                            className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-medium text-amber-700 transition-all hover:bg-amber-100 disabled:opacity-50"
+                          >
+                            🤔 Maybe
+                          </button>
+                          <button
                             onClick={(e) => { e.stopPropagation(); handleRsvp(notification.id, notification.related_id!, 'declined'); }}
                             disabled={rsvpLoading === notification.id}
                             className="rounded-lg border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 disabled:opacity-50"
                           >
-                            ❌ Decline
+                            Not this time
                           </button>
                         </div>
                       )}

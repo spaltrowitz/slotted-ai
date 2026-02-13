@@ -11,8 +11,8 @@ interface ScoredSlot {
 }
 
 interface SyncStatus {
-  me: { synced: boolean; freeSlots: number };
-  friend: { synced: boolean; freeSlots: number; name: string; calendarConnected: boolean };
+  me: { synced: boolean };
+  friend: { synced: boolean; name: string; calendarConnected: boolean };
 }
 
 interface FriendAvailabilityProps {
@@ -104,33 +104,12 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
         </button>
       </div>
 
-      {/* Sync status banners */}
-      {syncStatus && (
-        <div className="px-5 py-3 border-b border-gray-100 space-y-2">
-          <div className="flex gap-2 text-[11px]">
-            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium ${
-              syncStatus.me.synced ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
-            }`}>
-              {syncStatus.me.synced ? '✅' : '⚠️'} Your calendar: {syncStatus.me.synced ? `${syncStatus.me.freeSlots} free blocks` : 'Not synced'}
-            </span>
-            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium ${
-              syncStatus.friend.synced ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                : syncStatus.friend.calendarConnected ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                : 'bg-red-50 text-red-600 border border-red-200'
-            }`}>
-              {syncStatus.friend.synced ? '✅' : syncStatus.friend.calendarConnected ? '⚠️' : '❌'} {syncStatus.friend.name}:{' '}
-              {syncStatus.friend.synced
-                ? `${syncStatus.friend.freeSlots} free blocks`
-                : syncStatus.friend.calendarConnected
-                  ? 'Sync pending'
-                  : 'Calendar not connected'}
-            </span>
-          </div>
-          {!syncStatus.friend.calendarConnected && (
-            <p className="text-[11px] text-gray-400">
-              💡 Ask {syncStatus.friend.name} to connect their Google Calendar in Settings for better suggestions
-            </p>
-          )}
+      {/* Sync status — only show if MY calendar isn't synced */}
+      {syncStatus && !syncStatus.me.synced && (
+        <div className="px-5 py-3 border-b border-gray-100">
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            ⚠️ Your calendar isn't synced yet — connect in Settings for better suggestions
+          </span>
         </div>
       )}
 
@@ -152,9 +131,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
             <p className="mt-1.5 max-w-sm text-xs text-gray-400 leading-relaxed">
               {!syncStatus?.me.synced
                 ? "Connect your Google Calendar in Settings to let Slotted find available times."
-                : !syncStatus?.friend.calendarConnected
-                  ? `${friendName} hasn't connected their calendar yet. Send them a nudge!`
-                  : "Both calendars are packed for the next 2 weeks. Try adjusting your schedules or check back later."}
+                : "Both calendars are packed for the next 2 weeks. Try adjusting your schedules or check back later."}
             </p>
           </div>
         ) : (
