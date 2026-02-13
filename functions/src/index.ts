@@ -2388,12 +2388,18 @@ app.post("/calendar/apple/connect", requireAuth, async (req: AuthRequest, res: R
     });
   } catch (err: any) {
     console.error("Apple Calendar connect error:", err);
-    if (err.message?.includes("401") || err.message?.includes("Unauthorized") || err.message?.includes("credentials")) {
+    if (
+      err.message?.includes("401") ||
+      err.message?.includes("Unauthorized") ||
+      err.message?.includes("credentials") ||
+      err.message?.includes("cannot find homeUrl") ||
+      err.message?.includes("homeUrl")
+    ) {
       res.status(401).json({
-        error: "Invalid Apple ID or app-specific password. Make sure you're using an app-specific password from appleid.apple.com, not your regular Apple ID password.",
+        error: "Could not connect. Please check: (1) Use your Apple ID email — this may differ from your Gmail. (2) Use an app-specific password from appleid.apple.com, not your regular Apple password.",
       });
     } else {
-      res.status(500).json({ error: "Failed to connect Apple Calendar. Please try again." });
+      res.status(500).json({ error: "Failed to connect Apple Calendar: " + (err.message || "Unknown error") });
     }
   }
 });
