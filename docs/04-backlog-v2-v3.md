@@ -1,0 +1,282 @@
+# Feature Backlog: V2/V3
+
+**Prioritization Framework:** RICE Score (Reach × Impact × Confidence / Effort)
+
+---
+
+## V2 Features (6–12 Months Post-Launch)
+
+**Goal:** Enhance core scheduling with intelligence and broader platform support
+
+---
+
+### P0 (Must-Have for V2)
+
+#### 1. Group Scheduling (3 People, then 4–6)
+
+- **Description:** Support small group scheduling, starting with 3-person matching, expanding to 4–6
+- **User Value:** Enables group dinners, climbing sessions, game nights
+- **Requirements:**
+  - Matching algorithm for 3–6 person groups
+  - Partial availability mode ("4 out of 6 can make it—good enough?")
+  - Group ping flow (all must respond)
+  - Group chat-style thread for coordination
+- **Effort:** 3 weeks (algorithm complexity, UI)
+- **RICE Score:** (600 users × 7 impact × 60% confidence) / 3 = **840**
+
+#### 2. Microsoft Outlook / Apple Calendar Integration
+
+- **Description:** Expand beyond Google Calendar to support Outlook (Microsoft Graph API) and Apple Calendar (CalDAV)
+- **User Value:** Unlocks 30–40% of potential users who don't use Google Calendar
+- **Requirements:**
+  - Microsoft Graph API authentication + webhook sync
+  - CalDAV authentication flow with app-specific passwords for Apple
+  - Unified sync service across all three calendar platforms
+  - Clear setup instructions for each platform
+- **Effort:** 5 weeks (two integrations)
+- **RICE Score:** (400 new users × 8 impact × 60% confidence) / 5 = **384**
+
+#### 3. Activity Type Detection & Suggestions
+
+- **Description:** ML model learns patterns (e.g., "You and Alex typically grab 1hr coffee on weekend mornings") and suggests appropriate activities
+- **User Value:** Reduces decision fatigue; makes suggestions more contextual
+- **Requirements:**
+  - Track activity type when users mark "We met!" (coffee, dinner, hike, gym, etc.)
+  - After 6+ logged meetups, detect patterns
+  - Surface as: *"Based on past hangouts, want to grab coffee Saturday 10am?"*
+- **Effort:** 3 weeks (ML training, UI updates)
+- **RICE Score:** (500 users × 8 impact × 70% confidence) / 3 = **933**
+
+#### 4. Location-Based Activity Suggestions
+
+- **Description:** Suggest nearby activities (restaurants, parks, events) for proposed times
+- **User Value:** Reduces "where should we meet?" friction
+- **Requirements:**
+  - Integrate Yelp or Google Places API
+  - Filter by activity type and user preferences (from survey)
+  - Show 3–5 options when confirming a time
+  - Optional: link to OpenTable/Resy for reservations
+- **Effort:** 2 weeks (API integration, UI)
+- **RICE Score:** (600 users × 5 impact × 80% confidence) / 2 = **1200**
+
+---
+
+### P1 (Should-Have for V2)
+
+#### 5. Native Mobile Apps (iOS & Android)
+
+- **Description:** React Native apps for better push notifications and native calendar access
+- **User Value:** Improved notification delivery; easier calendar permissions on mobile
+- **Requirements:**
+  - React Native setup (shared codebase with web)
+  - Native calendar API access (iOS EventKit, Android CalendarProvider)
+  - Push notification infrastructure (Firebase Cloud Messaging)
+- **Effort:** 8 weeks (full native development)
+- **RICE Score:** (1000 users × 9 impact × 70% confidence) / 8 = **788**
+
+#### 6. Advanced Preference Learning
+
+- **Description:** ML model learns from accepted/rejected suggestions to improve recommendations
+- **User Value:** Suggestions get smarter over time without manual input
+- **Requirements:**
+  - Track which suggested times users accept vs. decline
+  - Train model on features: time-of-day, advance notice, day-of-week, weather (optional)
+  - A/B test ML suggestions vs. rule-based
+- **Effort:** 4 weeks (data pipeline, model training)
+- **RICE Score:** (800 users × 7 impact × 60% confidence) / 4 = **840**
+
+#### 7. Recurring Social Commitments
+
+- **Description:** Set up standing hangouts ("Coffee with Sarah every other Saturday 10am")
+- **User Value:** Automates scheduling for regular meetups
+- **Requirements:**
+  - UI to create recurring meetup (frequency, time, attendees)
+  - Auto-check availability for next occurrence
+  - Notify if someone's calendar conflicts, suggest reschedule
+  - Option to skip individual occurrences
+- **Effort:** 2 weeks
+- **RICE Score:** (500 users × 8 impact × 80% confidence) / 2 = **1600**
+
+---
+
+### P2 (Nice-to-Have for V2)
+
+#### 8. Calendar Write Access (Event Creation)
+
+- **Description:** Automatically create calendar events when meetup is confirmed
+- **User Value:** One less manual step (currently users add to calendar themselves)
+- **Requirements:**
+  - Request elevated OAuth permissions (write access)
+  - Create event with title, time, location, attendees
+  - Handle calendar conflicts gracefully
+- **Effort:** 2 weeks
+- **RICE Score:** (600 users × 5 impact × 70% confidence) / 2 = **1050**
+
+#### 9. Weather-Aware Suggestions
+
+- **Description:** Factor in weather forecasts for outdoor activities
+- **User Value:** Avoids suggesting "hike Saturday" when rain is forecasted
+- **Requirements:**
+  - Integrate OpenWeather or similar API
+  - Tag activities as indoor/outdoor in user preferences
+  - Deprioritize outdoor times if poor weather predicted
+- **Effort:** 1 week
+- **RICE Score:** (300 users × 4 impact × 60% confidence) / 1 = **720**
+
+#### 10. Timezone Intelligence for Traveling Friends
+
+- **Description:** Auto-detect when friends are in different timezones and adjust suggestions
+- **User Value:** Handles remote friends or travel scenarios elegantly
+- **Requirements:**
+  - Detect timezone changes from calendar sync
+  - Show availability in both timezones
+  - Highlight when someone is traveling: *"Alex is in London this week (GMT)"*
+- **Effort:** 2 weeks
+- **RICE Score:** (200 users × 6 impact × 70% confidence) / 2 = **420**
+
+---
+
+## V3 Features (12–24 Months Post-Launch)
+
+**Goal:** Ecosystem expansion and network growth
+
+---
+
+### P0 (Must-Have for V3)
+
+#### 11. "Share Your Socials" Profile Page
+
+- **Description:** Optional profile section where users list social media handles (Strava, Beli, Instagram, etc.)
+- **User Value:** Easy discovery of friends' other platforms without forced integration
+- **Requirements:**
+  - Profile edit page with social media fields
+  - Display on friend profile with clickable icons
+  - No API integration—just static links
+  - Privacy control: hide from specific friends if desired
+- **Effort:** 1 week
+- **RICE Score:** (1000 users × 4 impact × 90% confidence) / 1 = **3600**
+
+#### 12. Friend Group Templates
+
+- **Description:** Save recurring groups (e.g., "Book Club," "Climbing Crew," "Dinner Squad") for quick scheduling
+- **User Value:** Reduces friction for scheduling the same group repeatedly
+- **Requirements:**
+  - Create group with custom name + 3–6 members
+  - "Schedule with [Group Name]" quick action
+  - Group-level preferences (typical activity, meeting length)
+- **Effort:** 2 weeks
+- **RICE Score:** (800 users × 7 impact × 80% confidence) / 2 = **2240**
+
+#### 13. Social Calendar Analytics
+
+- **Description:** Personal insights on social habits (friends seen most/least, busiest times, cadence tracking)
+- **User Value:** Gamification + awareness of social balance
+- **Requirements:**
+  - Dashboard with visualizations:
+    - Friends ranked by meetup frequency
+    - Heatmap of social activity by day/time
+    - Streaks ("You've met someone new 3 weeks in a row!")
+  - Privacy: analytics only visible to user, never shared
+- **Effort:** 2 weeks
+- **RICE Score:** (1200 users × 5 impact × 70% confidence) / 2 = **2100**
+
+---
+
+### P1 (Should-Have for V3)
+
+#### 14. Friend Discovery / New Friend Matching
+
+- **Description:** Integrate with friend-finding platforms (Bumble BFF, Timeleft, Meetup) or build native matching
+- **User Value:** Helps users expand social circles, not just maintain existing friendships
+- **Requirements:**
+  - Partnership discussions with Bumble BFF, Timeleft (affiliate program?)
+  - Alternatively: native "find friends" based on activity preferences + location
+  - Match users with similar availability patterns + interests
+- **Effort:** 6 weeks (partnerships) or 12 weeks (native matching)
+- **RICE Score:** (500 new users × 8 impact × 40% confidence) / 6 = **267**
+
+#### 15. Activity Booking Integrations
+
+- **Description:** Book reservations directly from app (OpenTable, Resy, Eventbrite)
+- **User Value:** One-click "book a table" when confirming dinner plans
+- **Requirements:**
+  - API partnerships with booking platforms
+  - In-app booking flow (or deep links to external apps)
+  - Revenue share: potential commission on bookings
+- **Effort:** 4 weeks per integration
+- **RICE Score:** (600 users × 6 impact × 50% confidence) / 4 = **450**
+
+#### 16. Shared Wishlists / "Want to Try" Lists
+
+- **Description:** Users and friends curate lists of restaurants, activities, events to do together
+- **User Value:** Solves "what should we do?" problem; builds anticipation
+- **Requirements:**
+  - Wishlist creation (add places/activities)
+  - Share with specific friends
+  - When scheduling, suggest items from shared wishlist
+  - Mark as "done" after meetup
+- **Effort:** 3 weeks
+- **RICE Score:** (700 users × 6 impact × 70% confidence) / 3 = **980**
+
+---
+
+### P2 (Nice-to-Have for V3)
+
+#### 17. Group Video Call Integration (Zoom/Google Meet Links)
+
+- **Description:** Generate video call links for virtual hangouts
+- **User Value:** Supports remote friendships
+- **Requirements:**
+  - Zoom/Google Meet API integration
+  - Auto-generate link when scheduling virtual hangout
+  - Calendar event includes link
+- **Effort:** 2 weeks
+- **RICE Score:** (400 users × 5 impact × 60% confidence) / 2 = **600**
+
+#### 18. Gift Reminders & Occasion Tracking
+
+- **Description:** Track birthdays, anniversaries, and auto-suggest hangouts around those dates
+- **User Value:** Helps users be thoughtful friends
+- **Requirements:**
+  - Friend profile includes birthday, anniversary, etc.
+  - Remind 1–2 weeks before: *"Alex's birthday is coming up—schedule a celebration?"*
+  - Optional: gift idea links (affiliate revenue)
+- **Effort:** 2 weeks
+- **RICE Score:** (500 users × 4 impact × 70% confidence) / 2 = **700**
+
+#### 19. Karma / Streak Gamification
+
+- **Description:** Reward users for consistent social activity (badges, streaks, leaderboards)
+- **User Value:** Fun motivation to stay connected
+- **Requirements:**
+  - Track streaks ("Met someone 4 weeks in a row!")
+  - Badges for milestones (10 meetups, 5 friends connected, etc.)
+  - Optional: leaderboard among friend groups (opt-in)
+- **Effort:** 2 weeks
+- **RICE Score:** (800 users × 3 impact × 50% confidence) / 2 = **600**
+
+#### 20. Integration with Existing Social Apps (Low-Code)
+
+- **Description:** Simple OAuth connections to Strava, Beli, Mezzanine to see mutual connections
+- **User Value:** Discover which friends use same platforms
+- **Requirements:**
+  - OAuth with read-only access to friends list
+  - Show *"You and Sarah both use Strava—follow each other?"* prompt
+  - No deep integration, just friend discovery
+  - Strong privacy controls to avoid stalking concerns
+- **Effort:** 3 weeks per platform
+- **RICE Score:** (300 users × 5 impact × 40% confidence) / 3 = **200**
+
+---
+
+## Icebox / Research Ideas (No Timeline)
+
+> Explore these if user research validates demand
+
+- **AI-powered conversation starters:** Suggest topics based on shared interests
+- **Expense splitting:** Built-in Venmo/PayPal for shared costs
+- **Photos & memories:** Add photos to past meetups (like a private social network)
+- **Public events discovery:** Surface local events (concerts, festivals) and invite friends
+- **Transportation coordination:** Rideshare links or carpool matching for meetups
+- **Meal planning:** For dinner hangouts, suggest recipes or meal kits
+- **Habit tracking for friends:** "We said we'd hike monthly—let's book the next one!"
