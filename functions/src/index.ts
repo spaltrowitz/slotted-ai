@@ -1830,6 +1830,104 @@ app.post("/suggestions/:suggestionId/act", requireAuth, async (req: AuthRequest,
 });
 
 // ---------------------------------------------------------------------------
+// Dashboard — aggregated data for the home page
+// ---------------------------------------------------------------------------
+app.get("/dashboard", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    // 1. Get accepted friends
+    const { data: friendships } = await getSupabase()
+      .from("friendships")
+      .select("*, user_a:users!friendships_user_a_id_fkey(id,display_name,photo_url,social_battery), user_b:users!friendships_user_b_id_fkey(id,display_name,photo_url,social_battery)")
+      .or(`user_a_id.eq.${me.id},user_b_id.eq.${me.id}`)
+      .eq("status", "accepted");
+
+    const friends = (friendships || []).map((f: any) => {
+      const friend = f.user_a.id === me.id ? f.user_b : f.user_a;
+      return {
+        id: friend.id,
+        displayName: friend.display_name,
+        photoUrl: friend.photo_url,
+        socialBattery: friend.social_battery,
+      };
+    });
+
+    // 2. Get all meetups this user participated in that are past + confirmed/completed
+    const { data: myParticipations } = await getSupabase()
+      .from("meetup_participants")
+      .select("meetup_id")
+      .eq("user_id", me.id);
+
+    const meetupIds = (myParticipations || []).map((p: any) => p.meetup_id);
+
+    let pastMeetups: any[] = [];
+    if (meetupIds.length > 0) {
+      const { data } = await getSupabase()
+        .from("meetups")
+        .select("id, start_time, end_time, status")
+        .in("id", meetupIds)
+        .in("status", ["confirmed", "completed"])
+        .lt("end_time", new Date().toISOString())
+        .order("start_time", { ascending: false });
+      pastMeetups = data || [];
+    }
+
+    // 3. For past meetups, get co-participants
+    const pastMeetupIds = pastMeetups.map((m: any) => m.id);
+    let coParticipants: any[] = [];
+    if (pastMeetupIds.length > 0) {
+      const { data } = await getSupabase()
+        .from("meetup_participants")
+        .select("meetup_id, user_id")
+        .in("meetup_id", pastMeetupIds)
+        .neq("user_id", me.id);
+      coParticipants = data || [];
+    }
+
+    // 4. For each friend, find most recent shared meetup
+    const meetupStartMap = new Map(pastMeetups.map((m: any) => [m.id, m.start_time]));
+    const friendLastSeen = new Map<string, string>();
+    for (const cp of coParticipants) {
+      const existing = friendLastSeen.get(cp.user_id);
+      const thisDate = meetupStartMap.get(cp.meetup_id);
+      if (thisDate && (!existing || thisDate > existing)) {
+        friendLastSeen.set(cp.user_id, thisDate);
+      }
+    }
+
+    // 5. Build friends-to-see list sorted by longest since last seen
+    const friendsToSee = friends.map((f: any) => ({
+      ...f,
+      lastHangout: friendLastSeen.get(f.id) || null,
+    })).sort((a: any, b: any) => {
+      // Friends never seen first, then oldest last-seen first
+      if (!a.lastHangout && !b.lastHangout) return 0;
+      if (!a.lastHangout) return -1;
+      if (!b.lastHangout) return 1;
+      return new Date(a.lastHangout).getTime() - new Date(b.lastHangout).getTime();
+    });
+
+    // 6. Stats
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const hangoutsThisMonth = pastMeetups.filter((m: any) => m.start_time >= startOfMonth).length;
+
+    res.json({
+      friendsToSee,
+      stats: {
+        totalFriends: friends.length,
+        hangoutsThisMonth,
+        totalPastHangouts: pastMeetups.length,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Feedback — sends user feedback to developer
 // ---------------------------------------------------------------------------
 app.post("/feedback", requireAuth, async (req: AuthRequest, res: Response) => {
