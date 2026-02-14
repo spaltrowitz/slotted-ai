@@ -17,6 +17,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('App crash:', error, info.componentStack);
+    // Also log to a visible place so users can report it
+    try {
+      const existing = sessionStorage.getItem('slotted_crash_log') || '';
+      sessionStorage.setItem('slotted_crash_log', existing + '\n' + error.message + '\n' + error.stack);
+    } catch { /* ignore */ }
   }
   render() {
     if (this.state.error) {

@@ -1519,14 +1519,32 @@ async function scoreGroupOverlaps(
   const friendProfiles = profilesRes.slice(1);
   const userPrefs = prefsRes[0];
 
+  // Use the requesting user's timezone for all time computations
+  const userTz = userProfile?.timezone || "America/New_York";
+
+  /** Get hour and day-of-week in the user's timezone */
+  const getLocalParts = (dt: Date) => {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: userTz,
+      weekday: "short",
+      hour: "numeric",
+      hour12: false,
+    }).formatToParts(dt);
+    const hourStr = parts.find((p) => p.type === "hour")?.value || "0";
+    const weekdayStr = parts.find((p) => p.type === "weekday")?.value || "Mon";
+    const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    return { hour: parseInt(hourStr, 10), dayOfWeek: dayMap[weekdayStr] ?? 1 };
+  };
+
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
   const scored: ScoredSlot[] = overlaps.map((slot) => {
     const startDt = new Date(slot.start);
     const endDt = new Date(slot.end);
     const durationMin = (endDt.getTime() - startDt.getTime()) / 60000;
-    const dayOfWeek = startDt.getDay(); // 0=Sun
-    const hour = startDt.getHours();
+    const localParts = getLocalParts(startDt);
+    const dayOfWeek = localParts.dayOfWeek;
+    const hour = localParts.hour;
     let score = 50; // base score
     const reasons: string[] = [];
 
@@ -1643,21 +1661,24 @@ async function scoreGroupOverlaps(
     // Clamp score 0–100
     score = Math.max(0, Math.min(100, score));
 
-    // Human-readable labels
+    // Human-readable labels (in the requesting user's timezone)
     const dayLabel = startDt.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
       day: "numeric",
+      timeZone: userTz,
     });
     const startTime = startDt.toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
+      timeZone: userTz,
     });
     const endTime = endDt.toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
+      timeZone: userTz,
     });
     const timeLabel = `${startTime} – ${endTime}`;
 

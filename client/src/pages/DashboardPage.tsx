@@ -108,7 +108,7 @@ function friendLocalTime(tz: string | null): string | null {
 }
 
 /** Check if a calendar event is a Slotted trip buffer */
-const isBufferEvent = (ev: CalEvent) => ev.id.startsWith('buffer_');
+const isBufferEvent = (ev: CalEvent) => ev.id?.startsWith('buffer_') ?? false;
 
 const TYPE_BADGE: Record<string, { emoji: string; label: string }> = {
   local: { emoji: '📍', label: 'Local' },
@@ -297,15 +297,17 @@ export default function DashboardPage() {
       const startKey = eventDateStr(ev.start, ev.allDay);
       const endKey = eventEndDateStr(ev.end, ev.allDay);
 
-      // For multi-day events, add to each day
+      // For multi-day events, add to each day (cap at 60 to prevent infinite loops from bad data)
       let cursor = startKey;
-      while (cursor < endKey) {
+      let safety = 0;
+      while (cursor < endKey && safety < 60) {
         if (!groups[cursor]) groups[cursor] = [];
         groups[cursor].push(ev);
         // Advance one day
         const d = new Date(cursor + 'T12:00:00');
         d.setDate(d.getDate() + 1);
         cursor = d.toLocaleDateString('en-CA');
+        safety++;
       }
 
       // For timed events that don't span days, ensure at least start is included
@@ -435,6 +437,8 @@ export default function DashboardPage() {
 
   /* ─── should show history section? ─── */
   // const hasHistory = pastConfirmed.filter((m) => m.status !== 'didnt_happen').length > 0;
+
+  console.log('[Dashboard render]', { dashboardLoading, dashboardLoaded, calSynced, calEventsLoading, friendsToSee: friendsToSee.length, calEvents: calEvents.length, meetups: meetups.length });
 
   return (
     <AppShell>
@@ -982,7 +986,7 @@ export default function DashboardPage() {
                                 ? 'bg-gray-100 text-gray-500'
                                 : 'bg-blue-50 text-blue-500'
                           }`}>
-                            {isBufferEvent(ev) ? '🗓️ Slotted' : (ev.source === 'apple' ? '🍎' : '📧') + ' ' + (ev.calendarName.length > 12 ? ev.calendarName.slice(0, 12) + '…' : ev.calendarName)}
+                            {isBufferEvent(ev) ? '🗓️ Slotted' : (ev.source === 'apple' ? '🍎' : '📧') + ' ' + ((ev.calendarName || '').length > 12 ? (ev.calendarName || '').slice(0, 12) + '…' : (ev.calendarName || 'Calendar'))}
                           </span>
                         </div>
                       ))}
