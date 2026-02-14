@@ -127,7 +127,7 @@ export default function SettingsPage() {
             saved ? 'bg-emerald-500' : 'gradient-btn'
           }`}
         >
-          {saved ? 'Saved! \u2713' : 'Save Changes'}
+          {saved ? 'Saved! ✓' : 'Save Changes'}
         </button>
       </div>
 
@@ -136,7 +136,7 @@ export default function SettingsPage() {
 
         {/* SECTION 1 - Account & Calendar */}
         <div className="rounded-2xl border border-gray-200/60 bg-white p-6 shadow-sm">
-          <SectionHeader icon="\uD83D\uDC64" number={1} title="Account & Calendar" subtitle="Connect your calendar so Slotted knows when you're free" />
+          <SectionHeader icon="👤" number={1} title="Account & Calendar" subtitle="Connect your calendar so Slotted knows when you're free" />
 
           {/* Profile row */}
           <div className="flex items-center gap-4">
@@ -235,7 +235,7 @@ export default function SettingsPage() {
                 onClick={() => setShowAppleHelp(!showAppleHelp)}
                 className="flex w-full items-center justify-between text-left"
               >
-                <span className="text-xs font-medium text-gray-600">{'\uD83C\uDF4E'} Using Apple Calendar?</span>
+                <span className="text-xs font-medium text-gray-600">{'🍎'} Using Apple Calendar?</span>
                 <svg className={`h-4 w-4 text-gray-400 transition-transform ${showAppleHelp ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
@@ -249,7 +249,7 @@ export default function SettingsPage() {
                     <li>Come back here and connect Google Calendar — Slotted will see all your synced events</li>
                   </ol>
                   <p className="text-gray-400 pt-1">
-                    {'\uD83D\uDCA1'} Alternatively, export your Apple Calendar as an .ics file and import it into Google Calendar at{' '}
+                    {'💡'} Alternatively, export your Apple Calendar as an .ics file and import it into Google Calendar at{' '}
                     <a href="https://calendar.google.com/calendar/r/settings/export" target="_blank" rel="noopener noreferrer" className="text-slotted-600 underline">
                       calendar.google.com
                     </a>
@@ -264,7 +264,7 @@ export default function SettingsPage() {
                 onClick={() => setShowManualAvail(!showManualAvail)}
                 className="flex w-full items-center justify-between text-left"
               >
-                <span className="text-xs font-medium text-gray-600">{'\u270F\uFE0F'} Enter availability manually</span>
+                <span className="text-xs font-medium text-gray-600">{'✏️'} Enter availability manually</span>
                 <svg className={`h-4 w-4 text-gray-400 transition-transform ${showManualAvail ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
@@ -277,9 +277,9 @@ export default function SettingsPage() {
                       <span className="w-10 text-xs font-semibold text-gray-700">{day}</span>
                       <div className="flex flex-1 gap-1.5">
                         {[
-                          { value: 'morning', label: 'AM', emoji: '\uD83C\uDF05' },
-                          { value: 'afternoon', label: 'PM', emoji: '\u2600\uFE0F' },
-                          { value: 'evening', label: 'Eve', emoji: '\uD83C\uDF19' },
+                          { value: 'morning', label: 'AM', emoji: '🌅' },
+                          { value: 'afternoon', label: 'PM', emoji: '☀️' },
+                          { value: 'evening', label: 'Eve', emoji: '🌙' },
                         ].map((slot) => {
                           const isSelected = manualAvailability[day]?.includes(slot.value);
                           return (
@@ -317,7 +317,7 @@ export default function SettingsPage() {
 
         {/* SECTION 2 - Your Social Energy */}
         <div className="rounded-2xl border border-gray-200/60 bg-white p-6 shadow-sm">
-          <SectionHeader icon="\uD83D\uDD0B" number={2} title="Your Social Energy" subtitle="Set your default energy level for each day — this applies to both in-person and virtual hangouts" />
+          <SectionHeader icon="🔋" number={2} title="Your Social Energy" subtitle="Set your default energy level for each day — this applies to both in-person and virtual hangouts" />
 
           <div className="space-y-2">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
@@ -325,9 +325,9 @@ export default function SettingsPage() {
                 <span className="w-10 text-xs font-semibold text-gray-700">{day}</span>
                 <div className="flex flex-1 gap-1.5">
                   {[
-                    { value: 'open', emoji: '\uD83D\uDFE2', label: 'Open' },
-                    { value: 'ask_me', emoji: '\uD83D\uDFE1', label: 'Ask Me' },
-                    { value: 'recharging', emoji: '\uD83D\uDD34', label: 'Recharging' },
+                    { value: 'open', emoji: '🟢', label: 'Open' },
+                    { value: 'ask_me', emoji: '🟡', label: 'Ask Me' },
+                    { value: 'recharging', emoji: '🔴', label: 'Recharging' },
                   ].map((opt) => (
                     <button
                       key={opt.value}
@@ -350,7 +350,7 @@ export default function SettingsPage() {
             ))}
           </div>
           <p className="mt-3 text-[11px] text-gray-400">
-            {'\uD83D\uDFE2'} Open = suggest freely · {'\uD83D\uDFE1'} Ask Me = only if there's a great match · {'\uD83D\uDD34'} Recharging = don't suggest
+            {'🟢'} Open = suggest freely · {'🟡'} Ask Me = only if there's a great match · {'🔴'} Recharging = don't suggest
           </p>
 
           {/* Social frequency */}
@@ -374,7 +374,7 @@ export default function SettingsPage() {
 
         {/* SECTION 3 - In-Person Hangouts */}
         <div className="rounded-2xl border border-gray-200/60 bg-white p-6 shadow-sm">
-          <SectionHeader icon="\uD83E\uDD1D" number={3} title="In-Person Hangouts" subtitle="When and where do you like to meet up face-to-face?" />
+          <SectionHeader icon="🤝" number={3} title="In-Person Hangouts" subtitle="When and where do you like to meet up face-to-face?" />
 
           {/* Preferred times */}
           <div>
@@ -383,12 +383,12 @@ export default function SettingsPage() {
             </label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {[
-                { value: 'weekday-morning', emoji: '\uD83C\uDF05', prefix: 'Weekday', suffix: 'mornings' },
-                { value: 'weekday-lunch', emoji: '\u2600\uFE0F', prefix: 'Weekday', suffix: 'lunches' },
-                { value: 'weekday-evening', emoji: '\uD83C\uDF06', prefix: 'Weekday', suffix: 'evenings' },
-                { value: 'weekend-morning', emoji: '\uD83E\uDD50', prefix: 'Weekend', suffix: 'mornings' },
-                { value: 'weekend-afternoon', emoji: '\uD83C\uDFD6\uFE0F', prefix: 'Weekend', suffix: 'afternoons' },
-                { value: 'weekend-evening', emoji: '\uD83C\uDF19', prefix: 'Weekend', suffix: 'evenings' },
+                { value: 'weekday-morning', emoji: '🌅', prefix: 'Weekday', suffix: 'mornings' },
+                { value: 'weekday-lunch', emoji: '☀️', prefix: 'Weekday', suffix: 'lunches' },
+                { value: 'weekday-evening', emoji: '🌆', prefix: 'Weekday', suffix: 'evenings' },
+                { value: 'weekend-morning', emoji: '🥐', prefix: 'Weekend', suffix: 'mornings' },
+                { value: 'weekend-afternoon', emoji: '🏖️', prefix: 'Weekend', suffix: 'afternoons' },
+                { value: 'weekend-evening', emoji: '🌙', prefix: 'Weekend', suffix: 'evenings' },
               ].map((opt) => {
                 const selected = preferredTimes.includes(opt.value);
                 return (
@@ -473,7 +473,7 @@ export default function SettingsPage() {
 
         {/* SECTION 4 - Calls & FaceTime */}
         <div className="rounded-2xl border border-gray-200/60 bg-white p-6 shadow-sm">
-          <SectionHeader icon="\uD83D\uDCF1" number={4} title="Calls & FaceTime" subtitle="When are you down for a phone call or video chat? These can be separate from your in-person availability." />
+          <SectionHeader icon="📱" number={4} title="Calls & FaceTime" subtitle="When are you down for a phone call or video chat? These can be separate from your in-person availability." />
 
           {/* Call windows */}
           <div>
@@ -482,12 +482,12 @@ export default function SettingsPage() {
             </label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {[
-                { value: 'weekday-morning-call', emoji: '\uD83C\uDF05', prefix: 'Weekday', suffix: 'mornings' },
-                { value: 'weekday-lunch-call', emoji: '\u2600\uFE0F', prefix: 'Weekday', suffix: 'lunch break' },
-                { value: 'weekday-evening-call', emoji: '\uD83C\uDF06', prefix: 'Weekday', suffix: 'evenings' },
-                { value: 'weekend-morning-call', emoji: '\uD83E\uDD50', prefix: 'Weekend', suffix: 'mornings' },
-                { value: 'weekend-afternoon-call', emoji: '\uD83C\uDFD6\uFE0F', prefix: 'Weekend', suffix: 'afternoons' },
-                { value: 'weekend-evening-call', emoji: '\uD83C\uDF19', prefix: 'Weekend', suffix: 'evenings' },
+                { value: 'weekday-morning-call', emoji: '🌅', prefix: 'Weekday', suffix: 'mornings' },
+                { value: 'weekday-lunch-call', emoji: '☀️', prefix: 'Weekday', suffix: 'lunch break' },
+                { value: 'weekday-evening-call', emoji: '🌆', prefix: 'Weekday', suffix: 'evenings' },
+                { value: 'weekend-morning-call', emoji: '🥐', prefix: 'Weekend', suffix: 'mornings' },
+                { value: 'weekend-afternoon-call', emoji: '🏖️', prefix: 'Weekend', suffix: 'afternoons' },
+                { value: 'weekend-evening-call', emoji: '🌙', prefix: 'Weekend', suffix: 'evenings' },
               ].map((opt) => {
                 const selected = callTimes.includes(opt.value);
                 return (
@@ -542,7 +542,7 @@ export default function SettingsPage() {
 
         {/* SECTION 5 - Other Preferences */}
         <div className="rounded-2xl border border-gray-200/60 bg-white p-6 shadow-sm">
-          <SectionHeader icon="\u2699\uFE0F" number={5} title="Other Preferences" subtitle="Privacy and personal time settings" />
+          <SectionHeader icon="⚙️" number={5} title="Other Preferences" subtitle="Privacy and personal time settings" />
 
           {/* Protect personal time */}
           <div>
@@ -551,9 +551,9 @@ export default function SettingsPage() {
             </label>
             <div className="space-y-2">
               {[
-                { value: 'manual', label: "\uD83D\uDD27 I'll manually mark blocks as unavailable", desc: 'Full control \u2014 mark specific times as off-limits yourself' },
-                { value: 'recurring', label: '\uD83D\uDD01 Help me set up recurring protected time', desc: 'Automatically block gym, family time, personal time, etc.' },
-                { value: 'open', label: '\uD83D\uDCD6 Show all my free time', desc: "I'm comfortable letting friends see all open slots" },
+                { value: 'manual', label: "🔧 I'll manually mark blocks as unavailable", desc: 'Full control — mark specific times as off-limits yourself' },
+                { value: 'recurring', label: '🔁 Help me set up recurring protected time', desc: 'Automatically block gym, family time, personal time, etc.' },
+                { value: 'open', label: '📖 Show all my free time', desc: "I'm comfortable letting friends see all open slots" },
               ].map((opt) => (
                 <button
                   key={opt.value}
@@ -574,7 +574,7 @@ export default function SettingsPage() {
           {/* Learned Preferences */}
           <div className="mt-5 border-t border-gray-100 pt-5">
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-lg">{'\uD83E\uDDE0'}</span>
+              <span className="text-lg">{'🧠'}</span>
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Learned Preferences</h3>
                 <p className="text-[11px] text-gray-400">Slotted learns your habits as you log hangouts</p>
@@ -586,7 +586,7 @@ export default function SettingsPage() {
                 {learnedPrefs.preferred_activity && (
                   <div className="flex items-center gap-3 rounded-xl border border-violet-100 bg-gradient-to-r from-violet-50/50 to-fuchsia-50/50 px-4 py-3">
                     <span className="text-lg">
-                      {({ coffee: '\u2615', meal: '\uD83C\uDF7D\uFE0F', drinks: '\uD83C\uDF7B', walk: '\uD83D\uDEB6', workout: '\uD83D\uDCAA', movie: '\uD83C\uDFAC', game_night: '\uD83C\uDFAE', hangout: '\uD83D\uDE0E', other: '\u2728' } as Record<string, string>)[learnedPrefs.preferred_activity] || '\u2728'}
+                      {({ coffee: '☕', meal: '🍽️', drinks: '🍻', walk: '🚶', workout: '💪', movie: '🎬', game_night: '🎮', hangout: '😎', other: '✨' } as Record<string, string>)[learnedPrefs.preferred_activity] || '✨'}
                     </span>
                     <div>
                       <p className="text-xs font-semibold text-gray-800">Favorite activity</p>
@@ -596,7 +596,7 @@ export default function SettingsPage() {
                 )}
                 {learnedPrefs.avg_duration_min && (
                   <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50/50 to-cyan-50/50 px-4 py-3">
-                    <span className="text-lg">{'\u23F1\uFE0F'}</span>
+                    <span className="text-lg">{'⏱️'}</span>
                     <div>
                       <p className="text-xs font-semibold text-gray-800">Average duration</p>
                       <p className="text-xs text-gray-500">
@@ -610,17 +610,17 @@ export default function SettingsPage() {
                 {learnedPrefs.preferred_time && (
                   <div className="flex items-center gap-3 rounded-xl border border-amber-100 bg-gradient-to-r from-amber-50/50 to-orange-50/50 px-4 py-3">
                     <span className="text-lg">
-                      {({ morning: '\uD83C\uDF05', afternoon: '\u2600\uFE0F', evening: '\uD83C\uDF06', night: '\uD83C\uDF19' } as Record<string, string>)[learnedPrefs.preferred_time] || '\uD83D\uDD50'}
+                      {({ morning: '🌅', afternoon: '☀️', evening: '🌆', night: '🌙' } as Record<string, string>)[learnedPrefs.preferred_time] || '🕐'}
                     </span>
                     <div>
                       <p className="text-xs font-semibold text-gray-800">Preferred time</p>
-                      <p className="text-xs text-gray-500 capitalize">{learnedPrefs.preferred_time} {learnedPrefs.preferred_day ? `\u00B7 ${learnedPrefs.preferred_day}s` : ''}</p>
+                      <p className="text-xs text-gray-500 capitalize">{learnedPrefs.preferred_time} {learnedPrefs.preferred_day ? `· ${learnedPrefs.preferred_day}s` : ''}</p>
                     </div>
                   </div>
                 )}
                 {learnedPrefs.planning_style && (
                   <div className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-gradient-to-r from-emerald-50/50 to-teal-50/50 px-4 py-3">
-                    <span className="text-lg">{learnedPrefs.planning_style === 'spontaneous' ? '\u26A1' : learnedPrefs.planning_style === 'planner' ? '\uD83D\uDCCB' : '\uD83D\uDD04'}</span>
+                    <span className="text-lg">{learnedPrefs.planning_style === 'spontaneous' ? '⚡' : learnedPrefs.planning_style === 'planner' ? '📋' : '🔄'}</span>
                     <div>
                       <p className="text-xs font-semibold text-gray-800">Planning style</p>
                       <p className="text-xs text-gray-500 capitalize">{learnedPrefs.planning_style}</p>
@@ -633,7 +633,7 @@ export default function SettingsPage() {
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 px-4 py-5 text-center">
-                <span className="text-2xl">{'\uD83D\uDCCA'}</span>
+                <span className="text-2xl">{'📊'}</span>
                 <p className="mt-2 text-xs font-medium text-gray-600">
                   {learnedPrefs.total_meetups_logged === 0
                     ? 'No hangouts logged yet'
@@ -651,7 +651,7 @@ export default function SettingsPage() {
         <div className="rounded-2xl border border-gray-200/60 bg-white p-6 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-50 to-fuchsia-50 text-lg">
-              {'\uD83D\uDCAC'}
+              {'💬'}
             </div>
             <div className="flex-1">
               <h2 className="text-sm font-semibold text-gray-900">Share Feedback</h2>
@@ -696,7 +696,7 @@ export default function SettingsPage() {
                 feedbackSent ? 'bg-emerald-500' : 'gradient-btn'
               }`}
             >
-              {feedbackSending ? 'Sending\u2026' : feedbackSent ? 'Sent! Thank you \u2713' : 'Send Feedback'}
+              {feedbackSending ? 'Sending…' : feedbackSent ? 'Sent! Thank you ✓' : 'Send Feedback'}
             </button>
           </div>
         </div>
