@@ -6,14 +6,16 @@ importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-comp
 
 // Initialize Firebase in the service worker
 // Note: These values are public and safe to expose (they're in every client)
-firebase.initializeApp({
-  apiKey: 'AIzaSyDJ8Z0Z0Z0Z0Z0Z0Z0Z0Z0Z0Z0Z0Z0Z0Z0', // TODO: Get real API key from Firebase console
-  authDomain: 'slotted-ai.firebaseapp.com',
-  projectId: 'slotted-ai',
-  storageBucket: 'slotted-ai.firebasestorage.app',
-  messagingSenderId: '000000000000', // TODO: Get real sender ID from Firebase console  
-  appId: '1:000000000000:web:xxxxxxxxxxxx' // TODO: Get real app ID from Firebase console
-});
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyD9eniByp-HIBWBZSEXGSu7MwqdlT-ZfXc",
+  authDomain: "slotted-ai.firebaseapp.com",
+  projectId: "slotted-ai",
+  storageBucket: "slotted-ai.firebasestorage.app",
+  messagingSenderId: "433491396665",
+  appId: "1:433491396665:web:3bb00098605b700074a5e8",
+  measurementId: "G-L95254NGNR"
+};
 
 const messaging = firebase.messaging();
 

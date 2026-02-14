@@ -91,4 +91,35 @@ html {
   animation: shimmer 3s linear infinite;
 }
 
+/* Wiggle animation for nudge */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-10deg); }
+  45% { transform: rotate(8deg); }
+  60% { transform: rotate(-6deg); }
+  75% { transform: rotate(3deg); }
+}
+.animate-wiggle {
+  animation: wiggle 0.6s ease-in-out;
+}
+
+/* Slide-up entrance for cards */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out both;
+}
+
+/* Glow pulse for open battery */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.3); }
+  50% { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1); }
+}
+.animate-glow-pulse {
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
 

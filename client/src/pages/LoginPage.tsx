@@ -6,15 +6,11 @@ export default function LoginPage() {
   const { user, loading, signInWithGoogle, authError } = useAuth();
 
   // Capture referral param from invite links (e.g. ?ref=abc123)
-  // Default: connect new signups with founder account for testing
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ref = params.get('ref');
     if (ref) {
       localStorage.setItem('slotted_referrer', ref);
-      localStorage.removeItem('slotted_referrer_email');
-    } else if (!localStorage.getItem('slotted_referrer')) {
-      localStorage.setItem('slotted_referrer_email', 'sharipaltrowitz@gmail.com');
     }
   }, []);
 
@@ -39,7 +35,14 @@ export default function LoginPage() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-btn text-sm font-bold text-white shadow-md">S</div>
           <span className="font-display text-xl font-bold tracking-tight text-gray-900">Slotted</span>
         </div>
-
+        {user && (
+          <Link
+            to="/dashboard"
+            className="rounded-xl border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-300 shadow-sm"
+          >
+            Dashboard →
+          </Link>
+        )}
       </nav>
 
       {/* Hero section */}
@@ -63,12 +66,12 @@ export default function LoginPage() {
               Go to Dashboard →
             </Link>
           ) : (
-            <div className="flex flex-col items-stretch gap-3 sm:flex-row">
+            <div className="flex flex-col items-center gap-3 sm:flex-row">
               <button
                 onClick={signInWithGoogle}
-                className="flex flex-1 items-center justify-center gap-3 rounded-2xl gradient-btn px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+                className="flex items-center justify-center gap-3 rounded-2xl gradient-btn px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
               >
-                <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
+                <svg className="h-5 w-5" viewBox="0 0 24 24">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#fff" fillOpacity=".7" />
                   <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#fff" fillOpacity=".8" />
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#fff" fillOpacity=".6" />
@@ -78,9 +81,9 @@ export default function LoginPage() {
               </button>
               <button
                 onClick={signInWithGoogle}
-                className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-8 py-4 text-base font-semibold text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:border-gray-300 hover:-translate-y-0.5 active:translate-y-0"
+                className="flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-8 py-4 text-base font-semibold text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:border-gray-300 hover:-translate-y-0.5 active:translate-y-0"
               >
-                <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
+                <svg className="h-5 w-5" viewBox="0 0 24 24">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
                   <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />

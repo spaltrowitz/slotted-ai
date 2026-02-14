@@ -3,12 +3,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
-import InvitePage from './pages/InvitePage';
 import DashboardPage from './pages/DashboardPage';
 import FriendsPage from './pages/FriendsPage';
 import OnboardingPage from './pages/OnboardingPage';
 import SettingsPage from './pages/SettingsPage';
 import NotificationsPage from './pages/NotificationsPage';
+import EventsPage from './pages/EventsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,13 +24,13 @@ export default function App() {
           <Routes>
             <Route path="/" element={<LoginPage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/invite/:code" element={<InvitePage />} />
 
             {/* Protected routes */}
             <Route element={<ProtectedRoute />}>
               <Route path="/onboarding" element={<OnboardingPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/friends" element={<FriendsPage />} />
+              <Route path="/events" element={<EventsPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
