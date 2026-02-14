@@ -53,12 +53,22 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
   const handleBook = async (slot: ScoredSlot) => {
     setBookingSlot(slot.start);
     try {
-      await api.post('/meetups', {
+      const { data } = await api.post('/meetups', {
         title: `Hangout with ${friendName}`,
         friendId,
         startTime: slot.start,
         endTime: slot.end,
       });
+      // Check for quota warning
+      if (data.quotaWarning) {
+        const proceed = window.confirm(data.quotaWarning.message);
+        if (!proceed) {
+          // Cancel the meetup
+          try { await api.patch(`/meetups/${data.id}/rsvp`, { rsvp: 'declined' }); } catch {}
+          setBookingSlot(null);
+          return;
+        }
+      }
       setBooked(slot.start);
       onBook?.(slot);
       setTimeout(() => setBooked(null), 3000);

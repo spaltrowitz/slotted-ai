@@ -155,67 +155,60 @@ export default function DashboardPage() {
     today.getHours() < 12 ? '☀️' : today.getHours() < 18 ? '🌤️' : '🌙';
 
   /* ─── data fetching ─── */
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+
+  // Load core dashboard data in a single effect
   useEffect(() => {
     if (!user) return;
+    setDashboardLoading(true);
+    const controller = new AbortController();
+    
     (async () => {
       try {
-        const { data } = await api.get('/dashboard');
-        setFriendsToSee(data.friendsToSee || []);
+        // Fetch all lightweight data in parallel
+        const [dashRes, activityRes, meetupsRes] = await Promise.allSettled([
+          api.get('/dashboard', { signal: controller.signal }),
+          api.get('/activity-feed', { signal: controller.signal }),
+          api.get('/meetups', { signal: controller.signal }),
+        ]);
 
-      } catch { /* silent */ }
+        if (dashRes.status === 'fulfilled') setFriendsToSee(dashRes.value.data.friendsToSee || []);
+        if (activityRes.status === 'fulfilled') setActivities(activityRes.value.data.activities || []);
+        if (meetupsRes.status === 'fulfilled') setMeetups(meetupsRes.value.data.meetups || []);
+      } catch { /* aborted or network error */ }
+      finally { setDashboardLoading(false); }
     })();
+
+    return () => controller.abort();
   }, [user]);
 
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        const { data } = await api.get('/activity-feed');
-        setActivities(data.activities || []);
-      } catch { /* silent */ }
-    })();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        const { data } = await api.get('/meetups');
-        setMeetups(data.meetups || []);
-      } catch { /* silent */ }
-    })();
-  }, [user]);
-
+  // Calendar: sync first, then fetch events (sequentially, so events reflect synced state)
   useEffect(() => {
     if (!user || !calendarConnected) return;
-    (async () => {
-      try {
-        const { data: _syncData } = await api.post('/calendar/sync');
-      } catch { /* silent */ }
-    })();
-  }, [user, calendarConnected]);
+    const controller = new AbortController();
 
-  // Fetch combined calendar events (more days for month view, with offset support)
-  useEffect(() => {
-    if (!user || !calendarConnected) return;
     (async () => {
       setCalEventsLoading(true);
       try {
-        // For month view with offset, calculate how many days ahead we need
+        // 1. Sync calendar (heavy — fetches from Google/Apple and recomputes availability)
+        await api.post('/calendar/sync', {}, { signal: controller.signal }).catch(() => {});
+
+        // 2. Now fetch events (they'll be fresh after sync)
         let fetchDays = 14;
         if (calView === 'month') {
           const ref = new Date();
           ref.setMonth(ref.getMonth() + monthOffset);
-          // Fetch from now to end of that month, plus padding
-          const monthEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, 6); // extra days for last week
+          const monthEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, 6);
           fetchDays = Math.ceil((monthEnd.getTime() - new Date().getTime()) / 86400000);
           if (fetchDays < 1) fetchDays = 1;
         }
-        const { data } = await api.get(`/calendar/events?days=${fetchDays}`);
+        const { data } = await api.get(`/calendar/events?days=${fetchDays}`, { signal: controller.signal });
         setCalEvents(data.events || []);
-      } catch { /* silent */ }
+      } catch { /* aborted */ }
       finally { setCalEventsLoading(false); }
     })();
+
+    return () => controller.abort();
   }, [user, calendarConnected, calView, monthOffset]);
 
   /* ─── derived ─── */
@@ -397,28 +390,23 @@ export default function DashboardPage() {
   return (
     <AppShell>
       {/* ─── HEADER ─── */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">
-            {greeting}, {user?.displayName?.split(' ')[0]} {timeEmoji}
-          </h1>
-          <p className="mt-0.5 text-sm text-gray-400">
-            {today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          </p>
-        </div>
+      <div className="mb-5 flex items-center justify-between">
+        <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">
+          {greeting}, {user?.displayName?.split(' ')[0]} {timeEmoji}
+        </h1>
         {/* Quick actions */}
         <div className="flex gap-2">
           <button
             onClick={() => { setShowLogForm(true); document.getElementById('log-section')?.scrollIntoView({ behavior: 'smooth' }); }}
             className="rounded-xl gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
           >
-            📝 Log Hangout
+            📝 Log
           </button>
           <Link
             to="/friends"
             className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-slotted-300"
           >
-            👋 Invite Friend
+            👋 Invite
           </Link>
         </div>
       </div>
@@ -427,13 +415,27 @@ export default function DashboardPage() {
       {calendarJustConnected && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 animate-in fade-in">
           <span className="text-lg">✅</span>
-          <p className="text-sm font-medium text-emerald-700">Calendar connected! Slotted will now use your availability.</p>
+          <p className="text-sm font-medium text-emerald-700">Calendar connected!</p>
         </div>
       )}
 
+      {/* ─── LOADING SKELETON ─── */}
+      {dashboardLoading && (
+        <div className="mb-6 space-y-4 animate-pulse">
+          <div className="flex gap-3 overflow-hidden">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="flex-shrink-0 w-[140px] rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                <div className="mx-auto h-12 w-12 rounded-full bg-gray-200" />
+                <div className="mt-2 mx-auto h-3 w-16 rounded bg-gray-200" />
+                <div className="mt-1 mx-auto h-2 w-20 rounded bg-gray-100" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ─── PEOPLE TO SEE ─── */}
-      {friendsToSee.length > 0 && (
+      {!dashboardLoading && friendsToSee.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-base">👋</span>
@@ -477,28 +479,9 @@ export default function DashboardPage() {
       {/* ─── ACTIVITY FEED ─── */}
       {activities.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">What's happening</h2>
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                const message = prompt("How's the activity feed working for you? Any feedback?");
-                if (message?.trim()) {
-                  user?.getIdToken().then(token => {
-                    fetch('/api/feedback', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                      body: JSON.stringify({ message: `[Activity Feed] ${message.trim()}` }),
-                    });
-                  });
-                  alert('Thanks for your feedback!');
-                }
-              }}
-              className="text-xs text-gray-500 hover:text-slotted-600 transition-colors"
-            >
-              Give feedback
-            </a>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">✨</span>
+            <h2 className="font-display text-sm font-semibold text-gray-900">Activity</h2>
           </div>
           <div className="space-y-3">
             {activities.map((activity, index) => {
@@ -869,7 +852,6 @@ export default function DashboardPage() {
               <div className="py-10 text-center">
                 <span className="text-3xl">📭</span>
                 <p className="mt-2 text-sm text-gray-500">No upcoming events</p>
-                <p className="mt-1 text-xs text-gray-400">Events from your connected calendars will appear here</p>
               </div>
             ) : (
               <div className="max-h-[500px] overflow-y-auto">
@@ -986,12 +968,12 @@ export default function DashboardPage() {
         {/* Empty states */}
         {calendarConnected && pastConfirmed.filter((m) => m.status !== 'didnt_happen').length === 0 && !showLogForm && (
           <p className="mt-3 text-xs text-gray-400">
-            No hangouts detected yet — when you and a friend both accept a meetup, it appears here automatically.
+            No hangouts detected yet.
           </p>
         )}
         {!calendarConnected && !showLogForm && pastConfirmed.length === 0 && (
           <p className="mt-3 text-xs text-gray-400">
-            Log your hangouts so Slotted can learn your preferences.
+            Log hangouts to help Slotted learn your preferences.
           </p>
         )}
 
@@ -1009,7 +991,7 @@ export default function DashboardPage() {
         {showLogForm && (
           <div className="mt-4 space-y-4">
             <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-gray-400 mb-2">What did you do?</label>
+              <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Activity</label>
               <div className="flex flex-wrap gap-1.5">
                 {ACTIVITY_OPTIONS.map((opt) => (
                   <button
@@ -1027,7 +1009,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-gray-400 mb-2">How long?</label>
+              <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Duration</label>
               <div className="flex gap-1.5">
                 {DURATION_OPTIONS.map((opt) => (
                   <button
@@ -1045,7 +1027,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-gray-400 mb-2">What time?</label>
+              <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Time</label>
               <div className="flex gap-1.5">
                 {TIME_OPTIONS.map((opt) => (
                   <button
@@ -1111,17 +1093,14 @@ export default function DashboardPage() {
 
       {/* Connect calendar CTA (only if no calendar) */}
       {!calendarConnected && (
-        <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50/50 p-6 text-center">
-          <span className="text-3xl">📅</span>
-          <p className="mt-2 text-sm font-medium text-gray-700">Connect your calendar</p>
-          <p className="mt-1 text-xs text-gray-400">
-            See your week at a glance and let Slotted auto-detect hangouts
-          </p>
+        <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50/50 p-5 text-center">
+          <span className="text-2xl">📅</span>
+          <p className="mt-1.5 text-sm font-medium text-gray-700">Connect your calendar</p>
           <Link
             to="/settings"
-            className="mt-3 inline-block rounded-xl gradient-btn px-5 py-2 text-xs font-semibold text-white shadow-sm"
+            className="mt-2 inline-block rounded-xl gradient-btn px-5 py-2 text-xs font-semibold text-white shadow-sm"
           >
-            Connect in Settings →
+            Connect →
           </Link>
         </div>
       )}

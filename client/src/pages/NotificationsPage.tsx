@@ -65,7 +65,17 @@ export default function NotificationsPage() {
   const handleRsvp = async (notificationId: string, meetupId: string, rsvp: 'accepted' | 'declined' | 'maybe') => {
     setRsvpLoading(notificationId);
     try {
-      await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp });
+      const { data } = await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp });
+      // Check for quota warning before finalizing
+      if (data.quotaWarning && rsvp === 'accepted') {
+        const proceed = window.confirm(data.quotaWarning.message);
+        if (!proceed) {
+          // Undo the RSVP
+          await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'declined' });
+          setRsvpLoading(null);
+          return;
+        }
+      }
       await api.patch(`/notifications/${notificationId}/read`);
       setRsvpDone((prev) => ({ ...prev, [notificationId]: rsvp }));
       setNotifications((prev) =>

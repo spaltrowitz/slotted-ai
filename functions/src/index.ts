@@ -1232,6 +1232,136 @@ function zonedToUtc(dateStr: string, timeStr: string, tz: string): Date {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers: Travel Buffer, Weekly Quota, Planning Horizon
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply travel buffer to free slots — shrink each slot by `bufferMin` on both ends.
+ * If the resulting slot is shorter than `minDurationMin`, discard it.
+ */
+function applyTravelBuffer(
+  slots: { start_time: string; end_time: string }[],
+  bufferMin: number,
+  minDurationMin = 30,
+): { start_time: string; end_time: string }[] {
+  if (bufferMin <= 0) return slots;
+  const bufferMs = bufferMin * 60000;
+  return slots
+    .map((s) => {
+      const start = new Date(new Date(s.start_time).getTime() + bufferMs);
+      const end = new Date(new Date(s.end_time).getTime() - bufferMs);
+      return { start_time: start.toISOString(), end_time: end.toISOString() };
+    })
+    .filter((s) => {
+      const durMin = (new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 60000;
+      return durMin >= minDurationMin;
+    });
+}
+
+/**
+ * Count user's upcoming meetups this week (confirmed + proposed + accepted).
+ * Returns { count, limit, isOverLimit, message? }.
+ */
+async function getWeeklyMeetupStatus(userId: string) {
+  const sb = getSupabase();
+
+  // Get user's social_frequency setting
+  const { data: user } = await sb
+    .from("users")
+    .select("social_frequency")
+    .eq("id", userId)
+    .single();
+
+  // Map social_frequency to weekly limit
+  const frequencyToLimit: Record<string, number> = {
+    daily: 7,
+    "2-3-week": 3,
+    weekly: 1,
+    biweekly: 1, // 1 per 2 weeks, but we check weekly
+  };
+  const limit = frequencyToLimit[user?.social_frequency || "2-3-week"] || 3;
+
+  // Count meetups this week (Mon-Sun window)
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=Sun
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() + mondayOffset);
+  weekStart.setHours(0, 0, 0, 0);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 7);
+
+  // Get meetup IDs where user is participating and accepted/confirmed
+  const { data: participations } = await sb
+    .from("meetup_participants")
+    .select("meetup_id")
+    .eq("user_id", userId)
+    .in("rsvp", ["accepted", "pending"]);
+
+  if (!participations || participations.length === 0) {
+    return { count: 0, limit, isOverLimit: false };
+  }
+
+  const meetupIds = participations.map((p: any) => p.meetup_id);
+
+  // Count those meetups that fall this week and aren't cancelled
+  const { data: weekMeetups, count } = await sb
+    .from("meetups")
+    .select("id", { count: "exact" })
+    .in("id", meetupIds)
+    .gte("start_time", weekStart.toISOString())
+    .lt("start_time", weekEnd.toISOString())
+    .in("status", ["proposed", "confirmed"]);
+
+  const meetupCount = count || weekMeetups?.length || 0;
+  const isOverLimit = meetupCount >= limit;
+
+  return {
+    count: meetupCount,
+    limit,
+    isOverLimit,
+    socialFrequency: user?.social_frequency || "2-3-week",
+  };
+}
+
+/**
+ * Get planning horizon scoring adjustments based on user's planning_style.
+ * Returns { minDays, maxDays, bonusDaysRange, penaltyDaysRange }.
+ */
+function getPlanningHorizon(planningStyle: string | null | undefined) {
+  switch (planningStyle) {
+    case "spontaneous":
+      return {
+        // Spontaneous: strong preference for 0-3 days, penalize >7 days
+        nearBonus: 20,     // bonus for slots 0-3 days out
+        midBonus: 5,       // small bonus for 4-7 days
+        farPenalty: -15,   // penalty for 7+ days
+        nearRange: 3,
+        midRange: 7,
+      };
+    case "planner":
+      return {
+        // Planner: penalize same-day, prefer 5-28 days out
+        nearBonus: -10,    // penalty for 0-2 days (too spontaneous)
+        midBonus: 10,      // bonus for 3-7 days
+        farPenalty: 15,    // bonus (not penalty!) for 7+ days
+        nearRange: 2,
+        midRange: 7,
+      };
+    case "flexible":
+    default:
+      return {
+        // Flexible: slight near-term preference, adapts
+        nearBonus: 8,
+        midBonus: 5,
+        farPenalty: -3,
+        nearRange: 3,
+        midRange: 7,
+      };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // AI Suggestion Scoring
 // ---------------------------------------------------------------------------
 
@@ -1378,13 +1508,31 @@ async function scoreGroupOverlaps(
       reasons.push("Your favorite day");
     }
 
-    // 7. Soon-ness — slight preference for sooner slots
-    const daysAway = (startDt.getTime() - Date.now()) / (86400000);
-    if (daysAway <= 2) {
-      score += 5;
-      reasons.push("Coming up soon");
-    } else if (daysAway <= 5) {
-      score += 2;
+    // 7. Planning horizon — adjust score based on user's planning style
+    const daysAway = (startDt.getTime() - Date.now()) / 86400000;
+    const horizon = getPlanningHorizon(userProfile?.planning_style);
+    if (daysAway <= horizon.nearRange) {
+      score += horizon.nearBonus;
+      if (horizon.nearBonus > 0) reasons.push("Fits your spontaneous style");
+      else if (horizon.nearBonus < -5) reasons.push("Might be too last-minute for you");
+    } else if (daysAway <= horizon.midRange) {
+      score += horizon.midBonus;
+    } else {
+      score += horizon.farPenalty;
+      if (horizon.farPenalty > 0) reasons.push("Good planning-ahead window");
+      else if (horizon.farPenalty < -5) reasons.push("Far out — you prefer spontaneous");
+    }
+
+    // Also factor in friend planning styles — if both are planners, boost far-out slots
+    for (const fp of friendProfiles) {
+      if (fp?.planning_style === "planner" && userProfile?.planning_style === "planner" && daysAway > 5) {
+        score += 5;
+        reasons.push("Both planners — great to book ahead");
+      }
+      if (fp?.planning_style === "spontaneous" && userProfile?.planning_style === "spontaneous" && daysAway <= 2) {
+        score += 5;
+        reasons.push("Both spontaneous — grab it!");
+      }
     }
 
     // Clamp score 0–100
@@ -1508,10 +1656,16 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
       return;
     }
 
-    // Compute overlaps
+    // Apply travel buffer to both users' free slots
+    const myBuffer = me.travel_buffer_min || 0;
+    const friendBuffer = friendUser?.travel_buffer_min || 0;
+    const myBuffered = applyTravelBuffer(mySlots.data || [], myBuffer);
+    const friendBuffered = applyTravelBuffer(friendSlots.data || [], friendBuffer);
+
+    // Compute overlaps (using buffered slots)
     const overlaps: { start: string; end: string }[] = [];
-    for (const a of mySlots.data || []) {
-      for (const b of friendSlots.data || []) {
+    for (const a of myBuffered) {
+      for (const b of friendBuffered) {
         const start = a.start_time > b.start_time ? a.start_time : b.start_time;
         const end = a.end_time < b.end_time ? a.end_time : b.end_time;
         if (start < end) {
@@ -1598,10 +1752,11 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
     const now = new Date().toISOString();
     const sb = getSupabase();
 
-    // Fetch free slots for all participants (me + friends)
+    // Fetch free slots for all participants (me + friends) with travel buffer
     const allUserIds = [me.id, ...friendIds];
+    const allProfiles = [me, ...friendUsers];
     const slotsByUser = await Promise.all(
-      allUserIds.map((uid) =>
+      allUserIds.map((uid, idx) =>
         sb
           .from("availability")
           .select("start_time, end_time")
@@ -1609,7 +1764,10 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
           .eq("status", "free")
           .gte("end_time", now)
           .order("start_time")
-          .then((r) => r.data || []),
+          .then((r) => {
+            const buffer = allProfiles[idx]?.travel_buffer_min || 0;
+            return applyTravelBuffer(r.data || [], buffer);
+          }),
       ),
     );
 
@@ -1881,6 +2039,9 @@ app.post("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    // Check weekly quota — soft warning (not a block)
+    const quotaStatus = await getWeeklyMeetupStatus(me.id);
+
     // Create the meetup
     const { data: meetup, error: meetupErr } = await getSupabase()
       .from("meetups")
@@ -1935,7 +2096,17 @@ app.post("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
       });
     }
 
-    res.json(meetup);
+    // Return meetup with quota warning if applicable
+    const response: any = { ...meetup };
+    if (quotaStatus.isOverLimit) {
+      response.quotaWarning = {
+        message: `Heads up — you already have ${quotaStatus.count} plans this week. Your preference is ${quotaStatus.limit === 1 ? "about 1 plan" : `${quotaStatus.limit} plans`} per week. Want to keep this one?`,
+        count: quotaStatus.count,
+        limit: quotaStatus.limit,
+        socialFrequency: quotaStatus.socialFrequency,
+      };
+    }
+    res.json(response);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -2035,6 +2206,20 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
       return;
     }
 
+    // Check weekly quota before accepting — soft warning
+    let quotaWarning = null;
+    if (rsvp === "accepted") {
+      const quotaStatus = await getWeeklyMeetupStatus(me.id);
+      if (quotaStatus.isOverLimit) {
+        quotaWarning = {
+          message: `It looks like you've already accepted ${quotaStatus.count} events this week and may be at your social limit — are you sure you want to commit to this event?`,
+          count: quotaStatus.count,
+          limit: quotaStatus.limit,
+          socialFrequency: quotaStatus.socialFrequency,
+        };
+      }
+    }
+
     const { data, error } = await getSupabase()
       .from("meetup_participants")
       .update({ rsvp })
@@ -2067,7 +2252,10 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
       });
     }
 
-    res.json(data);
+    // Return RSVP data with quota warning if applicable
+    const response: any = { ...data };
+    if (quotaWarning) response.quotaWarning = quotaWarning;
+    res.json(response);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -3936,34 +4124,145 @@ export const sendMeetupReminders = onSchedule("every 1 hours", async (event) => 
 });
 
 /**
- * Scheduled function to find calendar matches and notify users
- * Runs daily to analyze mutual availability and suggest hangouts
- * V2 feature — currently disabled
+ * Scheduled function: Behavior Divergence Detector + Calendar Matching
+ * Runs daily at 9am to:
+ * 1. Detect when users' actual social activity diverges from their settings
+ * 2. Send gentle recommendations to update settings
+ * 3. Find calendar matches for proactive suggestions
  */
 export const findCalendarMatches = onSchedule("every day 09:00", async (event) => {
-  // TODO: Implement calendar matching algorithm
-  // 1. For each user, get their accepted friends
-  // 2. Find overlapping free time in the next 2 weeks
-  // 3. Score opportunities based on:
-  //    - Social battery (time since last hangout with anyone)
-  //    - Friendship activity (time since last hangout with this friend)
-  //    - Mutual availability (longer blocks = better)
-  //    - Preferred times/days
-  // 4. Send calendar_match notifications for top opportunities
-  //
-  // Example notification:
-  // await createNotification({
-  //   userId: user.id,
-  //   type: "calendar_match",
-  //   title: "You and 3 friends are free Thursday!",
-  //   body: "Alex, Jamie, and Sam are all free Thursday 6-9pm. Want to grab dinner?",
-  //   relatedId: JSON.stringify({ friendIds: [id1, id2, id3], timeSlot: "..." }),
-  // });
-  
-  console.log("Calendar matching not yet implemented — V2 feature");
+  const sb = getSupabase();
+
+  // Get all active users
+  const { data: users } = await sb
+    .from("users")
+    .select("id, display_name, social_frequency, planning_style")
+    .eq("onboarded", true);
+
+  if (!users || users.length === 0) {
+    console.log("No onboarded users found");
+    return;
+  }
+
+  // Map social_frequency to expected weekly rate
+  const frequencyToWeeklyRate: Record<string, { min: number; max: number; label: string }> = {
+    daily: { min: 5, max: 7, label: "every day" },
+    "2-3-week": { min: 2, max: 3, label: "2-3 times per week" },
+    weekly: { min: 0.8, max: 1.5, label: "about once per week" },
+    biweekly: { min: 0.3, max: 0.7, label: "1-2 times per month" },
+  };
+
+  const now = new Date();
+  const fourWeeksAgo = new Date(now.getTime() - 28 * 86400000);
+  const oneWeekAgo = new Date(now.getTime() - 7 * 86400000);
+
+  for (const user of users) {
+    try {
+      // Count meetups completed/confirmed in the last 4 weeks
+      const { data: recentParticipations } = await sb
+        .from("meetup_participants")
+        .select("meetup_id")
+        .eq("user_id", user.id)
+        .in("rsvp", ["accepted"]);
+
+      if (!recentParticipations || recentParticipations.length === 0) continue;
+
+      const meetupIds = recentParticipations.map((p: any) => p.meetup_id);
+
+      const { data: recentMeetups } = await sb
+        .from("meetups")
+        .select("id, start_time, status")
+        .in("id", meetupIds)
+        .gte("start_time", fourWeeksAgo.toISOString())
+        .lte("start_time", now.toISOString())
+        .in("status", ["confirmed", "completed"]);
+
+      if (!recentMeetups || recentMeetups.length === 0) continue;
+
+      const meetupCount = recentMeetups.length;
+      const weeklyRate = meetupCount / 4; // average per week over 4 weeks
+
+      const expected = frequencyToWeeklyRate[user.social_frequency || "2-3-week"];
+      if (!expected) continue;
+
+      // Check if they haven't been notified about this recently (throttle to max once per 2 weeks)
+      const { data: recentNotifs } = await sb
+        .from("notifications")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("type", "calendar_match") // reuse type since we can't add new DB enum easily
+        .gte("created_at", new Date(now.getTime() - 14 * 86400000).toISOString())
+        .limit(1);
+
+      if (recentNotifs && recentNotifs.length > 0) continue; // Already notified recently
+
+      // Divergence detection
+      if (weeklyRate > expected.max * 1.5) {
+        // User is WAY more social than their setting suggests
+        const roundedRate = Math.round(weeklyRate * 10) / 10;
+        await createNotification({
+          userId: user.id,
+          type: "calendar_match", // reusing this type for settings recommendations
+          title: "📊 Your social schedule looks busier than expected",
+          body: `You've been hanging out about ${roundedRate}x per week over the last month, but your setting is "${expected.label}." Want to update your social battery settings so Slotted can suggest plans that better match your actual rhythm?`,
+        });
+        console.log(`Sent divergence notification to ${user.display_name}: ${roundedRate}/week vs "${expected.label}"`);
+      } else if (weeklyRate < expected.min * 0.5 && meetupCount >= 1) {
+        // User is much LESS social than their setting — maybe they want to be nudged more?
+        const roundedRate = Math.round(weeklyRate * 10) / 10;
+        await createNotification({
+          userId: user.id,
+          type: "calendar_match",
+          title: "💡 Looks like you've been less social lately",
+          body: `You've had about ${roundedRate} plans per week over the last month, but your preference is "${expected.label}." Need a recharge? You can update your social battery in Settings, or we can help nudge you to reconnect.`,
+        });
+        console.log(`Sent under-activity notification to ${user.display_name}: ${roundedRate}/week vs "${expected.label}"`);
+      }
+
+      // Planning style divergence — check if meetup booking patterns don't match
+      if (user.planning_style && recentMeetups.length >= 3) {
+        // Check how far in advance meetups were created vs when they happened
+        const { data: meetupsWithCreation } = await sb
+          .from("meetups")
+          .select("start_time, created_at")
+          .in("id", recentMeetups.map((m: any) => m.id));
+
+        if (meetupsWithCreation && meetupsWithCreation.length >= 3) {
+          const leadTimes = meetupsWithCreation.map((m: any) => {
+            const start = new Date(m.start_time).getTime();
+            const created = new Date(m.created_at).getTime();
+            return (start - created) / 86400000; // days of advance notice
+          });
+          const avgLeadDays = leadTimes.reduce((a: number, b: number) => a + b, 0) / leadTimes.length;
+
+          if (user.planning_style === "planner" && avgLeadDays < 2) {
+            // Says they're a planner but books last-minute
+            await createNotification({
+              userId: user.id,
+              type: "calendar_match",
+              title: "🔄 Your booking style has shifted",
+              body: `Most of your recent plans were made ${Math.round(avgLeadDays * 10) / 10} days ahead — looks like you're more spontaneous than "Planner." Want to switch your planning style to Flexible or Spontaneous so we suggest more last-minute plans?`,
+            });
+          } else if (user.planning_style === "spontaneous" && avgLeadDays > 7) {
+            // Says they're spontaneous but actually plans ahead
+            await createNotification({
+              userId: user.id,
+              type: "calendar_match",
+              title: "🔄 Your booking style has shifted",
+              body: `Your recent plans were booked about ${Math.round(avgLeadDays)} days in advance — looks like you're more of a planner! Want to switch your planning style so we help you book further out?`,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`Error processing behavior divergence for user ${user.id}:`, err);
+    }
+  }
+
+  console.log(`Behavior divergence check complete for ${users.length} users`);
 });
 
 // ---------------------------------------------------------------------------
 // Export as Firebase Cloud Function
 // ---------------------------------------------------------------------------
-export const api = onRequest(app);
+export const api = onRequest({ memory: "512MiB" }, app);

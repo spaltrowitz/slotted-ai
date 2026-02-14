@@ -60,12 +60,21 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
       const title = friendNames.length <= 2
         ? `Hangout with ${friendNames.join(' & ')}`
         : `Group hangout (${friendNames.length + 1} people)`;
-      await api.post('/meetups', {
+      const { data } = await api.post('/meetups', {
         title,
         friendIds,
         startTime: slot.start,
         endTime: slot.end,
       });
+      // Check for quota warning
+      if (data.quotaWarning) {
+        const proceed = window.confirm(data.quotaWarning.message);
+        if (!proceed) {
+          try { await api.patch(`/meetups/${data.id}/rsvp`, { rsvp: 'declined' }); } catch {}
+          setBookingSlot(null);
+          return;
+        }
+      }
       setBooked(slot.start);
       onBook?.(slot);
       setTimeout(() => setBooked(null), 3000);

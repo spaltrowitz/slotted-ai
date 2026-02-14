@@ -407,11 +407,24 @@ export default function FriendsPage() {
         </p>
       </div>
 
-      {/* Saved Groups */}
-      {groups.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Saved Groups</h2>
-          <div className="space-y-2">
+      {/* Groups Section — always visible */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            👥 Groups {groups.length > 0 ? `· ${groups.length}` : ''}
+          </h2>
+          {!showCreateGroup && (
+            <button
+              onClick={() => setShowCreateGroup(true)}
+              className="text-xs font-semibold text-purple-600 hover:text-purple-700 transition-colors"
+            >
+              + New group
+            </button>
+          )}
+        </div>
+
+        {groups.length > 0 && (
+          <div className="space-y-2 mb-3">
             {groups.map(group => (
               <div key={group.id} className="flex items-center justify-between rounded-2xl border border-purple-100 bg-gradient-to-r from-purple-50/30 to-fuchsia-50/20 px-5 py-3 shadow-sm">
                 <div className="flex items-center gap-3">
@@ -440,20 +453,26 @@ export default function FriendsPage() {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Create new group */}
-      {!showCreateGroup && acceptedFriends.length >= 2 && (
-        <div className="mb-6">
-          <button
-            onClick={() => setShowCreateGroup(true)}
-            className="flex items-center gap-2 rounded-xl border border-dashed border-purple-200 bg-purple-50/30 px-5 py-2.5 text-sm font-medium text-purple-600 transition-all hover:bg-purple-50 hover:border-purple-300"
-          >
-            <span>➕</span> Create a group
-          </button>
-        </div>
-      )}
+        {groups.length === 0 && !showCreateGroup && (
+          <div className="rounded-2xl border border-dashed border-purple-200 bg-purple-50/20 p-5 mb-3">
+            <div className="flex flex-col items-center text-center">
+              <span className="text-2xl mb-1">👯</span>
+              <p className="text-sm font-medium text-gray-600">No groups yet</p>
+              <p className="mt-1 text-xs text-gray-400 max-w-xs">
+                Create a group to find times when multiple friends are free — like brunch crews, game nights, or study buddies.
+              </p>
+              <button
+                onClick={() => setShowCreateGroup(true)}
+                className="mt-3 rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+              >
+                + Create your first group
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {showCreateGroup && (
         <div className="mb-6 rounded-2xl border border-purple-200 bg-white p-5 shadow-sm">
@@ -615,17 +634,27 @@ export default function FriendsPage() {
             </div>
           )}
 
-          {/* Long-distance friends section */}
-          {longDistanceFriends.length > 0 && (
-            <div className="mb-6">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-                ✈️ Long Distance · {longDistanceFriends.length}
-              </h2>
+          {/* Long-distance friends section — always visible */}
+          <div className="mb-6">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
+              ✈️ Long Distance {longDistanceFriends.length > 0 ? `· ${longDistanceFriends.length}` : ''}
+            </h2>
+            {longDistanceFriends.length > 0 ? (
               <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
                 {longDistanceFriends.map((f, i) => renderFriendCard(f, i, longDistanceFriends))}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/20 p-5">
+                <div className="flex flex-col items-center text-center">
+                  <span className="text-2xl mb-1">🌎</span>
+                  <p className="text-sm font-medium text-gray-600">No long-distance friends yet</p>
+                  <p className="mt-1 text-xs text-gray-400 max-w-xs">
+                    Friends in different cities or time zones will appear here automatically based on location, or you can change a friend's type in settings.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </>
       )}
     </AppShell>
