@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../components/AppShell';
+import AddToCalendarModal from '../components/AddToCalendarModal';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -23,6 +24,12 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [rsvpLoading, setRsvpLoading] = useState<string | null>(null);
   const [rsvpDone, setRsvpDone] = useState<Record<string, string>>({});
+  const [calendarModal, setCalendarModal] = useState<{
+    meetupId: string;
+    title: string;
+    startTime: string;
+    endTime: string;
+  } | null>(null);
   const [friendRequestLoading, setFriendRequestLoading] = useState<string | null>(null);
   const [friendRequestDone, setFriendRequestDone] = useState<Record<string, string>>({});
 
@@ -81,6 +88,24 @@ export default function NotificationsPage() {
       setNotifications((prev) =>
         prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
       );
+
+      // If accepted, prompt to add to calendar
+      if (rsvp === 'accepted') {
+        try {
+          const { data: meetupData } = await api.get(`/meetups`);
+          const meetup = (meetupData.meetups || []).find((m: any) => m.id === meetupId);
+          if (meetup) {
+            setCalendarModal({
+              meetupId: meetup.id,
+              title: meetup.title || 'Hangout',
+              startTime: meetup.start_time,
+              endTime: meetup.end_time,
+            });
+          }
+        } catch {
+          // Can't fetch meetup details — skip calendar prompt
+        }
+      }
     } catch {
       // silently fail
     } finally {
@@ -317,11 +342,74 @@ export default function NotificationsPage() {
                       )}
                     </div>
                   )}
+
+                  {/* Add to calendar button for confirmed meetups */}
+                  {notification.type === 'meetup_confirmed' && notification.related_id && (
+                    <div className="mt-3">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            const { data: meetupData } = await api.get('/meetups');
+                            const meetup = (meetupData.meetups || []).find((m: any) => m.id === notification.related_id);
+                            if (meetup) {
+                              setCalendarModal({
+                                meetupId: meetup.id,
+                                title: meetup.title || 'Hangout',
+                                startTime: meetup.start_time,
+                                endTime: meetup.end_time,
+                              });
+                            }
+                          } catch { /* silent */ }
+                        }}
+                        className="rounded-lg border border-slotted-200 bg-slotted-50 px-4 py-1.5 text-xs font-semibold text-slotted-700 transition-all hover:bg-slotted-100 shadow-sm"
+                      >
+                        📅 Add to calendar
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Add to calendar button after accepting RSVP */}
+                  {notification.type === 'meetup_request' && rsvpDone[notification.id] === 'accepted' && notification.related_id && (
+                    <div className="mt-2">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            const { data: meetupData } = await api.get('/meetups');
+                            const meetup = (meetupData.meetups || []).find((m: any) => m.id === notification.related_id);
+                            if (meetup) {
+                              setCalendarModal({
+                                meetupId: meetup.id,
+                                title: meetup.title || 'Hangout',
+                                startTime: meetup.start_time,
+                                endTime: meetup.end_time,
+                              });
+                            }
+                          } catch { /* silent */ }
+                        }}
+                        className="rounded-lg border border-slotted-200 bg-slotted-50 px-4 py-1.5 text-xs font-semibold text-slotted-700 transition-all hover:bg-slotted-100 shadow-sm"
+                      >
+                        📅 Add to calendar
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* Add to Calendar modal */}
+      {calendarModal && (
+        <AddToCalendarModal
+          meetupId={calendarModal.meetupId}
+          meetupTitle={calendarModal.title}
+          startTime={calendarModal.startTime}
+          endTime={calendarModal.endTime}
+          onClose={() => setCalendarModal(null)}
+        />
       )}
     </AppShell>
   );

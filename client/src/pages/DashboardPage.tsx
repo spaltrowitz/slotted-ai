@@ -156,44 +156,59 @@ export default function DashboardPage() {
 
   /* ─── data fetching ─── */
   const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardLoaded, setDashboardLoaded] = useState(false);
+  const [calSynced, setCalSynced] = useState(false);
 
-  // Load core dashboard data in a single effect
+  // Load core dashboard data once when user is available
   useEffect(() => {
-    if (!user) return;
+    if (!user || dashboardLoaded) return;
+    let cancelled = false;
     setDashboardLoading(true);
-    const controller = new AbortController();
-    
+
     (async () => {
       try {
-        // Fetch all lightweight data in parallel
         const [dashRes, activityRes, meetupsRes] = await Promise.allSettled([
-          api.get('/dashboard', { signal: controller.signal }),
-          api.get('/activity-feed', { signal: controller.signal }),
-          api.get('/meetups', { signal: controller.signal }),
+          api.get('/dashboard'),
+          api.get('/activity-feed'),
+          api.get('/meetups'),
         ]);
 
+        if (cancelled) return;
         if (dashRes.status === 'fulfilled') setFriendsToSee(dashRes.value.data.friendsToSee || []);
         if (activityRes.status === 'fulfilled') setActivities(activityRes.value.data.activities || []);
         if (meetupsRes.status === 'fulfilled') setMeetups(meetupsRes.value.data.meetups || []);
-      } catch { /* aborted or network error */ }
-      finally { setDashboardLoading(false); }
+        setDashboardLoaded(true);
+      } catch { /* network error */ }
+      finally { if (!cancelled) setDashboardLoading(false); }
     })();
 
-    return () => controller.abort();
-  }, [user]);
+    return () => { cancelled = true; };
+  }, [user, dashboardLoaded]);
 
-  // Calendar: sync first, then fetch events (sequentially, so events reflect synced state)
+  // Calendar: sync once, then fetch events
   useEffect(() => {
     if (!user || !calendarConnected) return;
-    const controller = new AbortController();
+    if (calSynced) return; // only sync once per session
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await api.post('/calendar/sync').catch(() => {});
+        if (!cancelled) setCalSynced(true);
+      } catch { /* silent */ }
+    })();
+
+    return () => { cancelled = true; };
+  }, [user, calendarConnected, calSynced]);
+
+  // Fetch calendar events (depends on view/offset, re-runs when those change)
+  useEffect(() => {
+    if (!user || !calendarConnected) return;
+    let cancelled = false;
 
     (async () => {
       setCalEventsLoading(true);
       try {
-        // 1. Sync calendar (heavy — fetches from Google/Apple and recomputes availability)
-        await api.post('/calendar/sync', {}, { signal: controller.signal }).catch(() => {});
-
-        // 2. Now fetch events (they'll be fresh after sync)
         let fetchDays = 14;
         if (calView === 'month') {
           const ref = new Date();
@@ -202,13 +217,13 @@ export default function DashboardPage() {
           fetchDays = Math.ceil((monthEnd.getTime() - new Date().getTime()) / 86400000);
           if (fetchDays < 1) fetchDays = 1;
         }
-        const { data } = await api.get(`/calendar/events?days=${fetchDays}`, { signal: controller.signal });
-        setCalEvents(data.events || []);
-      } catch { /* aborted */ }
-      finally { setCalEventsLoading(false); }
+        const { data } = await api.get(`/calendar/events?days=${fetchDays}`);
+        if (!cancelled) setCalEvents(data.events || []);
+      } catch { /* silent */ }
+      finally { if (!cancelled) setCalEventsLoading(false); }
     })();
 
-    return () => controller.abort();
+    return () => { cancelled = true; };
   }, [user, calendarConnected, calView, monthOffset]);
 
   /* ─── derived ─── */
@@ -240,6 +255,27 @@ export default function DashboardPage() {
 
   const otherParticipants = (m: Meetup) =>
     m.participants.filter((p) => p.userId !== user?.uid?.replace(/^firebase_/, ''));
+
+  /* helper: get the date string (YYYY-MM-DD) for an event's start, handling all-day vs timed */
+  const eventDateStr = (isoStr: string, isAllDay: boolean) => {
+    // All-day events come as "YYYY-MM-DD" (no timezone), timed events as full ISO
+    if (isAllDay && isoStr.length === 10) return isoStr;
+    return new Date(isoStr).toLocaleDateString('en-CA');
+  };
+
+  const eventEndDateStr = (isoStr: string, isAllDay: boolean) => {
+    if (isAllDay && isoStr.length === 10) return isoStr;
+    return new Date(isoStr).toLocaleDateString('en-CA');
+  };
+
+  /* event falls on a given date (handles multi-day) */
+  const eventOnDate = (ev: CalEvent, dateStr: string) => {
+    const evStart = eventDateStr(ev.start, ev.allDay);
+    const evEnd = eventEndDateStr(ev.end, ev.allDay);
+    // For all-day events, end date in iCal is exclusive (day after last day)
+    // So a Feb 26-Mar 1 trip has end = Mar 2
+    return dateStr >= evStart && dateStr < evEnd;
+  };
 
   /* ─── group events by date (expand multi-day into each day) ─── */
   const groupedEvents = useMemo(() => {
@@ -308,27 +344,6 @@ export default function DashboardPage() {
     }
     return `${s.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${e.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
   }, [weekDays]);
-
-  /* helper: get the date string (YYYY-MM-DD) for an event's start, handling all-day vs timed */
-  const eventDateStr = (isoStr: string, isAllDay: boolean) => {
-    // All-day events come as "YYYY-MM-DD" (no timezone), timed events as full ISO
-    if (isAllDay && isoStr.length === 10) return isoStr;
-    return new Date(isoStr).toLocaleDateString('en-CA');
-  };
-
-  const eventEndDateStr = (isoStr: string, isAllDay: boolean) => {
-    if (isAllDay && isoStr.length === 10) return isoStr;
-    return new Date(isoStr).toLocaleDateString('en-CA');
-  };
-
-  /* event falls on a given date (handles multi-day) */
-  const eventOnDate = (ev: CalEvent, dateStr: string) => {
-    const evStart = eventDateStr(ev.start, ev.allDay);
-    const evEnd = eventEndDateStr(ev.end, ev.allDay);
-    // For all-day events, end date in iCal is exclusive (day after last day)
-    // So a Feb 26-Mar 1 trip has end = Mar 2
-    return dateStr >= evStart && dateStr < evEnd;
-  };
 
   const eventsForDate = (dateStr: string) =>
     calEvents.filter((ev) => eventOnDate(ev, dateStr));

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
+import AddToCalendarModal from './AddToCalendarModal';
 
 interface ScoredSlot {
   start: string;
@@ -30,6 +31,12 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
   const [error, setError] = useState<string | null>(null);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [booked, setBooked] = useState<string | null>(null);
+  const [calendarModal, setCalendarModal] = useState<{
+    meetupId: string;
+    title: string;
+    startTime: string;
+    endTime: string;
+  } | null>(null);
 
   const fetchOverlaps = useCallback(async () => {
     setLoading(true);
@@ -71,7 +78,14 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
       }
       setBooked(slot.start);
       onBook?.(slot);
-      setTimeout(() => setBooked(null), 3000);
+      // Show "Add to Calendar" modal
+      setCalendarModal({
+        meetupId: data.id,
+        title: data.title || `Hangout with ${friendName}`,
+        startTime: slot.start,
+        endTime: slot.end,
+      });
+      setTimeout(() => setBooked(null), 5000);
     } catch {
       // silent fail
     } finally {
@@ -218,6 +232,17 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
           {loading ? 'Syncing…' : '🔄 Refresh'}
         </button>
       </div>
+
+      {/* Add to Calendar modal */}
+      {calendarModal && (
+        <AddToCalendarModal
+          meetupId={calendarModal.meetupId}
+          meetupTitle={calendarModal.title}
+          startTime={calendarModal.startTime}
+          endTime={calendarModal.endTime}
+          onClose={() => setCalendarModal(null)}
+        />
+      )}
     </div>
   );
 }

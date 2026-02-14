@@ -7,8 +7,6 @@ import { useAuth } from '../contexts/AuthContext';
 export default function SettingsPage() {
   const { user, onboardingComplete, googleCalendarConnected, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, signInWithGoogle, signOut } = useAuth();
   const [travelBuffer, setTravelBuffer] = useState(30);
-  const [tripBufferBefore, setTripBufferBefore] = useState(false);
-  const [tripBufferAfter, setTripBufferAfter] = useState(true);
   const [planningStyle, setPlanningStyle] = useState('flexible');
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['weekday-evening', 'weekend-afternoon']);
   const [saved, setSaved] = useState(false);
@@ -56,8 +54,7 @@ export default function SettingsPage() {
           if (me.social_frequency) setSocialRecharge(me.social_frequency);
           if (me.preferred_times) setPreferredTimes(me.preferred_times);
           if (me.travel_buffer_min) setTravelBuffer(me.travel_buffer_min);
-          if (me.trip_buffer_before !== undefined) setTripBufferBefore(me.trip_buffer_before);
-          if (me.trip_buffer_after !== undefined) setTripBufferAfter(me.trip_buffer_after);
+          if (me.planning_style) setPlanningStyle(me.planning_style);
           if (me.recharging_days) setRechargingDays(me.recharging_days);
           if (me.share_hangouts !== undefined) setShareHangouts(me.share_hangouts);
           if (me.call_windows && Array.isArray(me.call_windows)) setCallWindows(me.call_windows);
@@ -97,8 +94,6 @@ export default function SettingsPage() {
           socialFrequency: socialRecharge,
           preferredTimes,
           travelBuffer,
-          tripBufferBefore,
-          tripBufferAfter,
           rechargingDays,
           shareHangouts,
           planningStyle,
@@ -390,6 +385,41 @@ export default function SettingsPage() {
 
             {/* Push Notifications */}
             <PushNotificationPrompt />
+
+            {/* Share hangout activity */}
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs">👥</span>
+                    <label className="text-[11px] font-semibold text-gray-700">
+                      Share hangout activity
+                    </label>
+                  </div>
+                  <p className="mt-0.5 text-[10px] text-gray-400">Let friends see when you complete hangouts</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={shareHangouts}
+                  onClick={() => setShareHangouts(!shareHangouts)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    shareHangouts ? 'bg-slotted-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                    shareHangouts ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                  }`} />
+                </button>
+              </div>
+              <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
+                <p className="text-[11px] text-gray-500">
+                  {shareHangouts
+                    ? '\u2705 Friends will see "You caught up with [Name]" in their activity feed'
+                    : '\uD83D\uDD12 Your hangouts are completely private \u2014 only you can see them'}
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -873,103 +903,6 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </details>
-            </div>
-          </div>
-        </section>
-
-        {/* ═══════════════════════════════════════════════ */}
-        {/* STEP 5: MORE PREFERENCES                       */}
-        {/* ═══════════════════════════════════════════════ */}
-        <section>
-          <div className="flex items-center gap-3 mb-4">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">5</span>
-            <div>
-              <h2 className="text-sm font-bold text-gray-800">More Preferences</h2>
-              <p className="text-[11px] text-gray-400">Fine-tune extra scheduling details</p>
-            </div>
-          </div>
-
-          <div className="space-y-4 pl-10">
-            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-              {/* Trip buffer */}
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs">✈️</span>
-                  <label className="text-[11px] font-semibold text-gray-700">
-                    Trip buffer
-                  </label>
-                </div>
-                <p className="mt-0.5 text-[10px] text-gray-400">Block a recovery day around your trips</p>
-                <div className="mt-2 space-y-2">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={tripBufferBefore}
-                      onClick={() => setTripBufferBefore(!tripBufferBefore)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                        tripBufferBefore ? 'bg-slotted-500' : 'bg-gray-200'
-                      }`}
-                    >
-                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                        tripBufferBefore ? 'translate-x-[18px]' : 'translate-x-[3px]'
-                      }`} />
-                    </button>
-                    <span className="text-xs text-gray-600">Day before trip</span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={tripBufferAfter}
-                      onClick={() => setTripBufferAfter(!tripBufferAfter)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                        tripBufferAfter ? 'bg-slotted-500' : 'bg-gray-200'
-                      }`}
-                    >
-                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                        tripBufferAfter ? 'translate-x-[18px]' : 'translate-x-[3px]'
-                      }`} />
-                    </button>
-                    <span className="text-xs text-gray-600">Day after trip</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Share hangout activity */}
-              <div className="mt-5 border-t border-gray-100 pt-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs">👥</span>
-                      <label className="text-[11px] font-semibold text-gray-700">
-                        Share hangout activity
-                      </label>
-                    </div>
-                    <p className="mt-0.5 text-[10px] text-gray-400">Let friends see when you complete hangouts</p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={shareHangouts}
-                    onClick={() => setShareHangouts(!shareHangouts)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                      shareHangouts ? 'bg-slotted-500' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                      shareHangouts ? 'translate-x-[18px]' : 'translate-x-[3px]'
-                    }`} />
-                  </button>
-                </div>
-                <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
-                  <p className="text-[11px] text-gray-500">
-                    {shareHangouts
-                      ? '✅ Friends will see "You caught up with [Name]" in their activity feed'
-                      : '🔒 Your hangouts are completely private — only you can see them'}
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         </section>

@@ -468,6 +468,7 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
       socialBattery, rechargingDays, planningStyle,
       neighborhood, workNeighborhood, officeDays,
       callWindows, tripBufferBefore, tripBufferAfter, shareHangouts, officeScheduleVaries,
+      eventInterests, eventCity,
     } = req.body;
 
     const updates: Record<string, any> = {};
@@ -485,6 +486,8 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
     if (tripBufferBefore !== undefined) updates.trip_buffer_before = tripBufferBefore;
     if (tripBufferAfter !== undefined) updates.trip_buffer_after = tripBufferAfter;
     if (shareHangouts !== undefined) updates.share_hangouts = shareHangouts;
+    if (eventInterests !== undefined) updates.event_interests = eventInterests;
+    if (eventCity !== undefined) updates.event_city = eventCity;
 
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ error: "No fields to update" });
@@ -2295,6 +2298,277 @@ app.patch("/meetups/:meetupId/didnt-happen", requireAuth, async (req: AuthReques
 });
 
 // ---------------------------------------------------------------------------
+// Add to Calendar routes
+// ---------------------------------------------------------------------------
+
+/** GET /meetups/:meetupId/writable-calendars — list the user's writable Google + Apple calendars */
+app.get("/meetups/:meetupId/writable-calendars", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const calendars: { id: string; name: string; color: string | null; source: string }[] = [];
+
+    // Google calendars the user owns or can write to
+    if (me.google_refresh_token) {
+      const { data: gcals } = await getSupabase()
+        .from("user_calendars")
+        .select("calendar_id, calendar_name, calendar_color, access_role, source")
+        .eq("user_id", me.id)
+        .eq("source", "google")
+        .in("access_role", ["owner", "writer"])
+        .order("calendar_name");
+
+      (gcals || []).forEach((c: any) => {
+        calendars.push({
+          id: c.calendar_id,
+          name: c.calendar_name,
+          color: c.calendar_color,
+          source: "google",
+        });
+      });
+    }
+
+    // Apple calendars (the user has stored via CalDAV)
+    if (me.apple_calendar_connected) {
+      const { data: acals } = await getSupabase()
+        .from("user_calendars")
+        .select("calendar_id, calendar_name, calendar_color, source")
+        .eq("user_id", me.id)
+        .eq("source", "apple")
+        .order("calendar_name");
+
+      (acals || []).forEach((c: any) => {
+        calendars.push({
+          id: c.calendar_id,
+          name: c.calendar_name,
+          color: c.calendar_color,
+          source: "apple",
+        });
+      });
+    }
+
+    // Always offer ICS download as a fallback
+    res.json({
+      calendars,
+      googleConnected: !!me.google_refresh_token,
+      appleConnected: !!me.apple_calendar_connected,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /meetups/:meetupId/add-to-calendar — create event in user's Google or Apple calendar (or return ICS) */
+app.post("/meetups/:meetupId/add-to-calendar", requireAuth, async (req: AuthRequest, res: Response) => {
+  const { meetupId } = req.params;
+  const { calendarId, source } = req.body; // source: "google" | "apple" | "ics"
+
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    // Fetch the meetup details
+    const { data: meetup, error: meetupErr } = await getSupabase()
+      .from("meetups")
+      .select("*")
+      .eq("id", meetupId)
+      .single();
+
+    if (meetupErr || !meetup) {
+      res.status(404).json({ error: "Meetup not found" });
+      return;
+    }
+
+    // Fetch participants for the event description / attendees
+    const { data: parts } = await getSupabase()
+      .from("meetup_participants")
+      .select("user_id, rsvp")
+      .eq("meetup_id", meetupId);
+
+    const participantUserIds = (parts || []).map((p: any) => p.user_id);
+    const { data: partUsers } = participantUserIds.length > 0
+      ? await getSupabase().from("users").select("id, display_name, email").in("id", participantUserIds)
+      : { data: [] };
+
+    const attendees = (partUsers || []).map((u: any) => ({
+      email: u.email,
+      displayName: u.display_name,
+    }));
+
+    const eventTitle = meetup.title || "Hangout";
+    const eventDescription = meetup.description || `Scheduled via Slotted with ${attendees.map((a: any) => a.displayName).join(", ")}`;
+
+    // ─── Google Calendar ───
+    if (source === "google") {
+      if (!me.google_refresh_token) {
+        res.status(400).json({ error: "Google Calendar not connected. Please connect in Settings first." });
+        return;
+      }
+
+      const oauth2 = await getAuthedCalendarClient(req.uid!);
+      if (!oauth2) {
+        res.status(400).json({ error: "Could not authenticate with Google" });
+        return;
+      }
+
+      const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+
+      const targetCalendar = calendarId || "primary";
+
+      const gcalEvent = await calendarApi.events.insert({
+        calendarId: targetCalendar,
+        requestBody: {
+          summary: eventTitle,
+          description: eventDescription,
+          location: meetup.location || undefined,
+          start: {
+            dateTime: meetup.start_time,
+            timeZone: me.timezone || "America/New_York",
+          },
+          end: {
+            dateTime: meetup.end_time,
+            timeZone: me.timezone || "America/New_York",
+          },
+          attendees: attendees.filter((a: any) => a.email !== me.email),
+          reminders: {
+            useDefault: false,
+            overrides: [
+              { method: "popup", minutes: 60 },
+              { method: "popup", minutes: 15 },
+            ],
+          },
+        },
+      });
+
+      // Store the Google event ID on the meetup_participant row for reference
+      await getSupabase()
+        .from("meetup_participants")
+        .update({ google_event_id: gcalEvent.data.id })
+        .eq("meetup_id", meetupId)
+        .eq("user_id", me.id);
+
+      res.json({
+        success: true,
+        source: "google",
+        calendarId: targetCalendar,
+        eventId: gcalEvent.data.id,
+        eventLink: gcalEvent.data.htmlLink,
+      });
+      return;
+    }
+
+    // ─── Apple Calendar (CalDAV) ───
+    if (source === "apple") {
+      if (!me.apple_calendar_connected || !me.apple_caldav_username || !me.apple_caldav_password) {
+        res.status(400).json({ error: "Apple Calendar not connected. Please connect in Settings first." });
+        return;
+      }
+
+      // Generate ICS content for the CalDAV PUT
+      const uid = `slotted-${meetupId}-${me.id}@slotted-ai.web.app`;
+      const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+      const dtStart = new Date(meetup.start_time).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+      const dtEnd = new Date(meetup.end_time).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+
+      const icsContent = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Slotted//EN",
+        "BEGIN:VEVENT",
+        `UID:${uid}`,
+        `DTSTAMP:${now}`,
+        `DTSTART:${dtStart}`,
+        `DTEND:${dtEnd}`,
+        `SUMMARY:${eventTitle}`,
+        `DESCRIPTION:${eventDescription}`,
+        meetup.location ? `LOCATION:${meetup.location}` : "",
+        "BEGIN:VALARM",
+        "TRIGGER:-PT60M",
+        "ACTION:DISPLAY",
+        `DESCRIPTION:${eventTitle} in 1 hour`,
+        "END:VALARM",
+        "BEGIN:VALARM",
+        "TRIGGER:-PT15M",
+        "ACTION:DISPLAY",
+        `DESCRIPTION:${eventTitle} in 15 minutes`,
+        "END:VALARM",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].filter(Boolean).join("\r\n");
+
+      try {
+        const client = await createDAVClient({
+          serverUrl: "https://caldav.icloud.com",
+          credentials: {
+            username: me.apple_caldav_username,
+            password: me.apple_caldav_password,
+          },
+          authMethod: "Basic",
+          defaultAccountType: "caldav",
+        });
+
+        const targetUrl = calendarId
+          ? `${calendarId}${uid}.ics`
+          : `https://caldav.icloud.com/${me.apple_caldav_username}/calendars/home/${uid}.ics`;
+
+        await client.createCalendarObject({
+          calendar: { url: calendarId || `https://caldav.icloud.com/${me.apple_caldav_username}/calendars/home/` } as DAVCalendar,
+          filename: `${uid}.ics`,
+          iCalString: icsContent,
+        });
+
+        res.json({ success: true, source: "apple", eventId: uid });
+        return;
+      } catch (appleErr: any) {
+        console.error("Apple CalDAV event creation error:", appleErr);
+        // Fall through to ICS download if CalDAV fails
+      }
+    }
+
+    // ─── ICS download fallback ───
+    const uid = `slotted-${meetupId}-${me.id}@slotted-ai.web.app`;
+    const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const dtStart = new Date(meetup.start_time).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const dtEnd = new Date(meetup.end_time).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+
+    const icsContent = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Slotted//EN",
+      "CALSCALE:GREGORIAN",
+      "METHOD:PUBLISH",
+      "BEGIN:VEVENT",
+      `UID:${uid}`,
+      `DTSTAMP:${now}`,
+      `DTSTART:${dtStart}`,
+      `DTEND:${dtEnd}`,
+      `SUMMARY:${eventTitle}`,
+      `DESCRIPTION:${eventDescription}`,
+      meetup.location ? `LOCATION:${meetup.location}` : "",
+      ...attendees.map((a: any) => `ATTENDEE;CN=${a.displayName}:mailto:${a.email}`),
+      "BEGIN:VALARM",
+      "TRIGGER:-PT60M",
+      "ACTION:DISPLAY",
+      `DESCRIPTION:${eventTitle} in 1 hour`,
+      "END:VALARM",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].filter(Boolean).join("\r\n");
+
+    res.json({
+      success: true,
+      source: "ics",
+      icsContent,
+      filename: `${eventTitle.replace(/[^a-zA-Z0-9]/g, "_")}.ics`,
+    });
+  } catch (err: any) {
+    console.error("Add to calendar error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Suggestions routes (AI scoring — placeholder logic for now)
 // ---------------------------------------------------------------------------
 
@@ -2726,6 +3000,577 @@ app.post("/activity-feed/dismiss", requireAuth, async (req: AuthRequest, res: Re
 });
 
 // ---------------------------------------------------------------------------
+// Events — search SeatGeek & Ticketmaster, match with friend availability
+// ---------------------------------------------------------------------------
+
+const SEATGEEK_CLIENT_ID = process.env.SEATGEEK_CLIENT_ID || "";
+const TICKETMASTER_API_KEY = process.env.TICKETMASTER_API_KEY || "";
+
+interface ExternalEvent {
+  id: string;
+  source: "seatgeek" | "ticketmaster";
+  title: string;
+  type: string;
+  venue: string;
+  city: string;
+  datetime: string;
+  datetimeLocal: string;
+  url: string;
+  imageUrl?: string;
+  priceMin?: number;
+  priceMax?: number;
+  performers?: string[];
+}
+
+/** Search SeatGeek for events */
+async function searchSeatGeek(params: {
+  q: string;
+  city?: string;
+  type?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  perPage?: number;
+}): Promise<ExternalEvent[]> {
+  if (!SEATGEEK_CLIENT_ID) return [];
+  try {
+    const url = new URL("https://api.seatgeek.com/2/events");
+    url.searchParams.set("client_id", SEATGEEK_CLIENT_ID);
+    url.searchParams.set("q", params.q);
+    url.searchParams.set("per_page", String(params.perPage || 25));
+    url.searchParams.set("sort", "score.desc");
+
+    if (params.city) {
+      // SeatGeek uses venue.city for location filtering
+      url.searchParams.set("venue.city", params.city);
+    }
+    if (params.type) {
+      // Map our types to SeatGeek taxonomy
+      const typeMap: Record<string, string> = {
+        theater: "theater",
+        concert: "concert",
+        sports: "sports",
+        comedy: "comedy",
+        festivals: "festival",
+        dance: "dance_performance_tour",
+        opera: "theater",
+        family: "family",
+      };
+      const sgType = typeMap[params.type];
+      if (sgType) url.searchParams.set("type", sgType);
+    }
+    if (params.dateFrom) {
+      url.searchParams.set("datetime_utc.gte", new Date(params.dateFrom).toISOString());
+    }
+    if (params.dateTo) {
+      url.searchParams.set("datetime_utc.lte", new Date(params.dateTo + "T23:59:59").toISOString());
+    }
+
+    const resp = await fetch(url.toString());
+    if (!resp.ok) {
+      console.error("SeatGeek API error:", resp.status, await resp.text());
+      return [];
+    }
+    const data = await resp.json();
+    return (data.events || []).map((ev: any) => ({
+      id: `sg-${ev.id}`,
+      source: "seatgeek" as const,
+      title: ev.title || ev.short_title || "",
+      type: ev.type || ev.taxonomies?.[0]?.name || "event",
+      venue: ev.venue?.name || "",
+      city: ev.venue?.city || "",
+      datetime: ev.datetime_utc || "",
+      datetimeLocal: ev.datetime_local || ev.datetime_utc || "",
+      url: ev.url || "",
+      imageUrl: ev.performers?.[0]?.image || ev.performers?.[0]?.images?.huge || "",
+      priceMin: ev.stats?.lowest_sg_base_price || ev.stats?.lowest_price || undefined,
+      priceMax: ev.stats?.highest_price || undefined,
+      performers: (ev.performers || []).map((p: any) => p.name).filter(Boolean),
+    }));
+  } catch (err) {
+    console.error("SeatGeek search error:", err);
+    return [];
+  }
+}
+
+/** Search Ticketmaster for events */
+async function searchTicketmaster(params: {
+  q: string;
+  city?: string;
+  type?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  perPage?: number;
+}): Promise<ExternalEvent[]> {
+  if (!TICKETMASTER_API_KEY) return [];
+  try {
+    const url = new URL("https://app.ticketmaster.com/discovery/v2/events.json");
+    url.searchParams.set("apikey", TICKETMASTER_API_KEY);
+    url.searchParams.set("keyword", params.q);
+    url.searchParams.set("size", String(params.perPage || 25));
+    url.searchParams.set("sort", "relevance,desc");
+
+    if (params.city) {
+      url.searchParams.set("city", params.city);
+    }
+    if (params.type) {
+      // Map our types to Ticketmaster classification
+      const classMap: Record<string, string> = {
+        theater: "Arts & Theatre",
+        concert: "Music",
+        sports: "Sports",
+        comedy: "Arts & Theatre",
+        festivals: "Music",
+        dance: "Arts & Theatre",
+        opera: "Arts & Theatre",
+        family: "Family",
+      };
+      const cls = classMap[params.type];
+      if (cls) url.searchParams.set("classificationName", cls);
+    }
+    if (params.dateFrom) {
+      url.searchParams.set("startDateTime", new Date(params.dateFrom).toISOString().replace(".000Z", "Z"));
+    }
+    if (params.dateTo) {
+      url.searchParams.set("endDateTime", new Date(params.dateTo + "T23:59:59").toISOString().replace(".000Z", "Z"));
+    }
+
+    const resp = await fetch(url.toString());
+    if (!resp.ok) {
+      console.error("Ticketmaster API error:", resp.status, await resp.text());
+      return [];
+    }
+    const data = await resp.json();
+    const events = data._embedded?.events || [];
+    return events.map((ev: any) => {
+      const venue = ev._embedded?.venues?.[0];
+      const prices = ev.priceRanges?.[0];
+      const startDate = ev.dates?.start;
+      return {
+        id: `tm-${ev.id}`,
+        source: "ticketmaster" as const,
+        title: ev.name || "",
+        type: ev.classifications?.[0]?.segment?.name?.toLowerCase() || "event",
+        venue: venue?.name || "",
+        city: venue?.city?.name || "",
+        datetime: startDate?.dateTime || "",
+        datetimeLocal: startDate?.localDate
+          ? `${startDate.localDate}T${startDate.localTime || "19:00:00"}`
+          : startDate?.dateTime || "",
+        url: ev.url || "",
+        imageUrl: ev.images?.find((img: any) => img.ratio === "16_9" && img.width >= 500)?.url
+          || ev.images?.[0]?.url || "",
+        priceMin: prices?.min || undefined,
+        priceMax: prices?.max || undefined,
+        performers: (ev._embedded?.attractions || []).map((a: any) => a.name).filter(Boolean),
+      };
+    });
+  } catch (err) {
+    console.error("Ticketmaster search error:", err);
+    return [];
+  }
+}
+
+/** GET /events/search — search external event APIs */
+app.get("/events/search", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { q, city, type, dateFrom, dateTo } = req.query as Record<string, string>;
+    if (!q?.trim()) {
+      res.status(400).json({ error: "Query parameter 'q' is required" });
+      return;
+    }
+
+    // Search both APIs in parallel
+    const [sgEvents, tmEvents] = await Promise.all([
+      searchSeatGeek({ q, city, type, dateFrom, dateTo }),
+      searchTicketmaster({ q, city, type, dateFrom, dateTo }),
+    ]);
+
+    // Merge and deduplicate (by title + date similarity)
+    const allEvents = [...sgEvents, ...tmEvents];
+    allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+
+    res.json({
+      events: allEvents,
+      sources: {
+        seatgeek: sgEvents.length,
+        ticketmaster: tmEvents.length,
+      },
+    });
+  } catch (err: any) {
+    console.error("Event search error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /events/match — search events AND cross-reference with friends' availability */
+app.post("/events/match", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { query: q, friendIds, city, type, dateFrom, dateTo } = req.body;
+    if (!q?.trim()) {
+      res.status(400).json({ error: "Query is required" });
+      return;
+    }
+    if (!Array.isArray(friendIds) || friendIds.length === 0) {
+      res.status(400).json({ error: "friendIds must be a non-empty array" });
+      return;
+    }
+
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    // 1. Search events
+    const [sgEvents, tmEvents] = await Promise.all([
+      searchSeatGeek({ q, city, type, dateFrom, dateTo }),
+      searchTicketmaster({ q, city, type, dateFrom, dateTo }),
+    ]);
+    const allEvents = [...sgEvents, ...tmEvents];
+    allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+
+    // 2. Sync calendars for all participants
+    const friendUsers = await Promise.all(friendIds.map((fid: string) => getDbUserById(fid)));
+    const allUids = [
+      req.uid!,
+      ...friendUsers.map((u) => u?.firebase_uid).filter(Boolean) as string[],
+    ];
+    await Promise.allSettled(allUids.map((uid) => syncUserCalendar(uid)));
+
+    // 3. Fetch free slots for all participants
+    const now = new Date().toISOString();
+    const sb = getSupabase();
+    const allUserIds = [me.id, ...friendIds];
+    const allProfiles = [me, ...friendUsers];
+    const slotsByUser = await Promise.all(
+      allUserIds.map((uid, idx) =>
+        sb
+          .from("availability")
+          .select("start_time, end_time")
+          .eq("user_id", uid)
+          .eq("status", "free")
+          .gte("end_time", now)
+          .order("start_time")
+          .then((r) => {
+            const buffer = allProfiles[idx]?.travel_buffer_min || 0;
+            return applyTravelBuffer(r.data || [], buffer);
+          }),
+      ),
+    );
+
+    // 4. For each event, check if its time falls within everyone's free slots
+    const matches: (ExternalEvent & { availabilityScore: number; note: string })[] = [];
+
+    for (const ev of allEvents) {
+      if (!ev.datetime) continue;
+      const eventStart = new Date(ev.datetime);
+      const eventEnd = new Date(eventStart.getTime() + 3 * 3600000); // Assume ~3hr event
+
+      let freeCount = 0;
+      const freeNames: string[] = [];
+      const busyNames: string[] = [];
+
+      for (let i = 0; i < allUserIds.length; i++) {
+        const userSlots = slotsByUser[i];
+        const name = i === 0 ? "You" : (allProfiles[i]?.display_name?.split(" ")[0] || "Friend");
+        let isFree = false;
+        for (const slot of userSlots) {
+          const slotStart = new Date(slot.start_time).getTime();
+          const slotEnd = new Date(slot.end_time).getTime();
+          // Check if event fits within this free slot (at least 2hr overlap)
+          const overlapStart = Math.max(eventStart.getTime(), slotStart);
+          const overlapEnd = Math.min(eventEnd.getTime(), slotEnd);
+          if (overlapEnd - overlapStart >= 2 * 3600000) {
+            isFree = true;
+            break;
+          }
+        }
+        if (isFree) {
+          freeCount++;
+          freeNames.push(name);
+        } else {
+          busyNames.push(name);
+        }
+      }
+
+      if (freeCount === 0) continue; // No one is free, skip
+
+      const score = Math.round((freeCount / allUserIds.length) * 100);
+      let note = "";
+      if (freeCount === allUserIds.length) {
+        note = `Everyone is free! ${freeNames.join(", ")} can all make it.`;
+      } else {
+        note = `${freeNames.join(", ")} ${freeNames.length === 1 ? "is" : "are"} free. ${busyNames.join(", ")} may be busy.`;
+      }
+
+      matches.push({ ...ev, availabilityScore: score, note });
+    }
+
+    // Sort matches by score (best first), then by date
+    matches.sort((a, b) => b.availabilityScore - a.availabilityScore || new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+
+    const message = matches.length > 0
+      ? `Found ${matches.length} showtime${matches.length !== 1 ? "s" : ""} that work for ${freeCount(matches)} of your group.`
+      : "No showtimes match everyone's availability. Try expanding the date range.";
+
+    res.json({
+      events: allEvents,
+      matches,
+      message,
+      sources: {
+        seatgeek: sgEvents.length,
+        ticketmaster: tmEvents.length,
+      },
+    });
+  } catch (err: any) {
+    console.error("Event match error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Helper for match message */
+function freeCount(matches: { availabilityScore: number }[]) {
+  const best = matches[0]?.availabilityScore || 0;
+  return best >= 100 ? "everyone" : "some";
+}
+
+// ---------------------------------------------------------------------------
+// Saved Events — bookmark events for later
+// ---------------------------------------------------------------------------
+
+/** POST /events/save — save/bookmark an event */
+app.post("/events/save", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { event, status } = req.body;
+    if (!event?.id || !event?.source || !event?.title || !event?.url) {
+      res.status(400).json({ error: "Missing required event fields (id, source, title, url)" });
+      return;
+    }
+
+    const { data, error } = await getSupabase()
+      .from("saved_events")
+      .upsert(
+        {
+          user_id: me.id,
+          external_id: event.id,
+          source: event.source,
+          title: event.title,
+          event_type: event.type || null,
+          venue: event.venue || null,
+          city: event.city || null,
+          datetime_utc: event.datetime || new Date().toISOString(),
+          datetime_local: event.datetimeLocal || null,
+          url: event.url,
+          image_url: event.imageUrl || null,
+          price_min: event.priceMin || null,
+          price_max: event.priceMax || null,
+          performers: event.performers || [],
+          status: status || "saved",
+        },
+        { onConflict: "user_id,external_id,source" },
+      )
+      .select()
+      .single();
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /events/saved — get user's saved events */
+app.get("/events/saved", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const status = req.query.status as string || undefined;
+    let query = getSupabase()
+      .from("saved_events")
+      .select("*")
+      .eq("user_id", me.id)
+      .order("datetime_utc", { ascending: true });
+
+    if (status) {
+      query = query.eq("status", status);
+    } else {
+      query = query.neq("status", "dismissed");
+    }
+
+    const { data, error } = await query;
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ events: data || [] });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /events/saved/:id — remove a saved event */
+app.delete("/events/saved/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { error } = await getSupabase()
+      .from("saved_events")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("user_id", me.id);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PATCH /events/saved/:id — update status of a saved event */
+app.patch("/events/saved/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { status, notes } = req.body;
+    const updates: Record<string, any> = {};
+    if (status) updates.status = status;
+    if (notes !== undefined) updates.notes = notes;
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: "No fields to update" });
+      return;
+    }
+
+    const { data, error } = await getSupabase()
+      .from("saved_events")
+      .update(updates)
+      .eq("id", req.params.id)
+      .eq("user_id", me.id)
+      .select()
+      .single();
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /events/invite — invite friends to a saved event */
+app.post("/events/invite", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { savedEventId, friendIds } = req.body;
+    if (!savedEventId || !Array.isArray(friendIds) || friendIds.length === 0) {
+      res.status(400).json({ error: "savedEventId and friendIds are required" });
+      return;
+    }
+
+    // Verify the saved event belongs to this user
+    const { data: savedEvent } = await getSupabase()
+      .from("saved_events")
+      .select("*")
+      .eq("id", savedEventId)
+      .eq("user_id", me.id)
+      .single();
+
+    if (!savedEvent) {
+      res.status(404).json({ error: "Saved event not found" });
+      return;
+    }
+
+    // Create invites and notifications
+    const results = [];
+    for (const friendId of friendIds) {
+      const { data: invite, error } = await getSupabase()
+        .from("event_invites")
+        .upsert(
+          {
+            saved_event_id: savedEventId,
+            invited_by: me.id,
+            invited_user_id: friendId,
+          },
+          { onConflict: "saved_event_id,invited_user_id" },
+        )
+        .select()
+        .single();
+
+      if (!error && invite) {
+        results.push(invite);
+        // Send notification
+        await createNotification({
+          userId: friendId,
+          type: "meetup_request",
+          title: `${me.display_name || "A friend"} wants to go to ${savedEvent.title}!`,
+          body: `You've been invited to ${savedEvent.title} on ${new Date(savedEvent.datetime_utc).toLocaleDateString()}. Check it out!`,
+          relatedUserId: me.id,
+          relatedId: savedEventId,
+        });
+      }
+    }
+
+    res.json({ invites: results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /events/invites — get event invites received by the current user */
+app.get("/events/invites", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { data, error } = await getSupabase()
+      .from("event_invites")
+      .select(`
+        *,
+        saved_event:saved_event_id (
+          title, venue, city, datetime_utc, datetime_local, url, image_url, 
+          price_min, price_max, event_type, source, performers
+        ),
+        inviter:invited_by (display_name, photo_url)
+      `)
+      .eq("invited_user_id", me.id)
+      .order("created_at", { ascending: false });
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ invites: data || [] });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PATCH /events/invites/:id — respond to an event invite */
+app.patch("/events/invites/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { rsvp } = req.body;
+    if (!["interested", "going", "declined"].includes(rsvp)) {
+      res.status(400).json({ error: "Invalid RSVP value" });
+      return;
+    }
+
+    const { data, error } = await getSupabase()
+      .from("event_invites")
+      .update({ rsvp })
+      .eq("id", req.params.id)
+      .eq("invited_user_id", me.id)
+      .select()
+      .single();
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Feedback — sends user feedback to developer
 // ---------------------------------------------------------------------------
 app.post("/feedback", requireAuth, async (req: AuthRequest, res: Response) => {
@@ -2970,6 +3815,7 @@ app.get("/calendar/auth-url", requireAuth, async (req: AuthRequest, res: Respons
       scope: [
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/calendar.events.readonly",
+        "https://www.googleapis.com/auth/calendar.events",
       ],
       state: req.uid, // pass Firebase UID so the callback can associate the tokens
     });
