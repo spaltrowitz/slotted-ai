@@ -394,11 +394,53 @@ export default function SettingsPage() {
         </section>
 
         {/* ═══════════════════════════════════════════════ */}
-        {/* STEP 2: SOCIAL BATTERY                         */}
+        {/* STEP 2: PLANNING STYLE                         */}
         {/* ═══════════════════════════════════════════════ */}
         <section>
           <div className="flex items-center gap-3 mb-4">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">2</span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-800">Planning Style</h2>
+              <p className="text-[11px] text-gray-400">This shapes how Slotted suggests plans for every friendship</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 pl-10">
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+              <p className="text-xs text-gray-500 mb-4">
+                Are you more of a planner or spontaneous person? This tells the AI how far in advance to suggest hangouts.
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { value: 'spontaneous', emoji: '\u26A1', label: 'Spontaneous', desc: 'Same-day & next-day plans, "are you free tonight?" nudges' },
+                  { value: 'flexible', emoji: '\uD83D\uDD04', label: 'Flexible', desc: 'Adapts per friendship \u2014 books ahead with planners, last-minute with spontaneous friends' },
+                  { value: 'planner', emoji: '\uD83D\uDCCB', label: 'Planner', desc: 'Plans 1\u20134 weeks out, recurring hangouts, early confirmations' },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setPlanningStyle(opt.value)}
+                    className={`rounded-xl border px-4 py-4 text-center transition-all ${
+                      planningStyle === opt.value
+                        ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 shadow-md ring-1 ring-slotted-200'
+                        : 'border-gray-200 text-gray-600 hover:border-slotted-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="text-2xl">{opt.emoji}</span>
+                    <p className={`mt-1.5 text-xs font-bold ${planningStyle === opt.value ? 'text-slotted-700' : 'text-gray-800'}`}>{opt.label}</p>
+                    <p className={`mt-1 text-[10px] leading-snug ${planningStyle === opt.value ? 'text-slotted-600' : 'text-gray-400'}`}>{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════ */}
+        {/* STEP 3: SOCIAL BATTERY                         */}
+        {/* ═══════════════════════════════════════════════ */}
+        <section>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">3</span>
             <div>
               <h2 className="text-sm font-bold text-gray-800">Social Battery</h2>
               <p className="text-[11px] text-gray-400">How much social time works for you across all friends?</p>
@@ -491,11 +533,11 @@ export default function SettingsPage() {
         </section>
 
         {/* ═══════════════════════════════════════════════ */}
-        {/* STEP 3: HOW YOU CONNECT (THE CENTERPIECE)      */}
+        {/* STEP 4: HOW YOU CONNECT (THE CENTERPIECE)      */}
         {/* ═══════════════════════════════════════════════ */}
         <section>
           <div className="flex items-center gap-3 mb-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">3</span>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">4</span>
             <div>
               <h2 className="text-sm font-bold text-gray-800">How You Connect</h2>
               <p className="text-[11px] text-gray-400">Set up your preferences for each type of hangout</p>
@@ -836,57 +878,21 @@ export default function SettingsPage() {
         </section>
 
         {/* ═══════════════════════════════════════════════ */}
-        {/* STEP 4: MORE PREFERENCES                       */}
+        {/* STEP 5: MORE PREFERENCES                       */}
         {/* ═══════════════════════════════════════════════ */}
         <section>
           <div className="flex items-center gap-3 mb-4">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">4</span>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">5</span>
             <div>
               <h2 className="text-sm font-bold text-gray-800">More Preferences</h2>
-              <p className="text-[11px] text-gray-400">Fine-tune how Slotted's AI suggests plans</p>
+              <p className="text-[11px] text-gray-400">Fine-tune extra scheduling details</p>
             </div>
           </div>
 
           <div className="space-y-4 pl-10">
             <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-              {/* Planning style */}
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700">
-                  Planning style
-                </label>
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {[
-                    { value: 'spontaneous', emoji: '⚡', label: 'Spontaneous' },
-                    { value: 'flexible', emoji: '🔄', label: 'Flexible' },
-                    { value: 'planner', emoji: '📋', label: 'Planner' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setPlanningStyle(opt.value)}
-                      className={`rounded-xl border px-3 py-2.5 text-center transition-all ${
-                        planningStyle === opt.value
-                          ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 shadow-sm'
-                          : 'border-gray-200 text-gray-600 hover:border-slotted-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className="text-base">{opt.emoji}</span>
-                      <p className={`mt-0.5 text-[11px] font-semibold ${planningStyle === opt.value ? 'text-slotted-700' : 'text-gray-800'}`}>{opt.label}</p>
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2">
-                  <p className="text-[10px] text-gray-500">
-                    {planningStyle === 'spontaneous'
-                      ? '⚡ AI will suggest same-day and next-day plans, prioritize friends who are free right now, and send quick "are you free tonight?" nudges.'
-                      : planningStyle === 'planner'
-                        ? '📋 AI will suggest plans 1–4 weeks in advance, help you lock in recurring hangouts, and send gentle reminders to confirm early.'
-                        : '🔄 AI adapts to each friendship — when matching with another planner, it\'ll book further out. With spontaneous friends, it\'ll surface last-minute opportunities.'}
-                  </p>
-                </div>
-              </div>
-
               {/* Trip buffer */}
-              <div className="mt-5 border-t border-gray-100 pt-4">
+              <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs">✈️</span>
                   <label className="text-[11px] font-semibold text-gray-700">
@@ -967,10 +973,9 @@ export default function SettingsPage() {
             </div>
           </div>
         </section>
-      </div>
 
-      {/* Feedback */}
-      <div className="mt-10 rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+        {/* Feedback */}
+        <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
         <div className="flex items-start gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-50 to-fuchsia-50 text-base">
             💬
@@ -1021,6 +1026,7 @@ export default function SettingsPage() {
             {feedbackSending ? 'Sending\u2026' : feedbackSent ? 'Sent! Thank you \u2713' : 'Send Feedback'}
           </button>
         </div>
+      </div>
       </div>
     </AppShell>
   );

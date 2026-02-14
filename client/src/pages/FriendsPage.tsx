@@ -298,7 +298,13 @@ export default function FriendsPage() {
               </span>
             )}
           </p>
-          <p className="text-xs text-gray-400">{f.friend.email}</p>
+          <p className="text-xs text-gray-400">
+            {f.friend.email}
+            <span className={`ml-2 inline-flex items-center gap-0.5 ${f.friend.calendarConnected ? 'text-green-500' : 'text-gray-300'}`}>
+              {f.friend.calendarConnected ? '📅' : '📅'}
+              <span className="text-[10px]">{f.friend.calendarConnected ? 'Cal synced' : 'No cal'}</span>
+            </span>
+          </p>
         </div>
       </div>
       <button

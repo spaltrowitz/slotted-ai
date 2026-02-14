@@ -658,6 +658,7 @@ app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
           socialBattery: friend.social_battery,
           neighborhood: friend.neighborhood,
           timezone: friend.timezone,
+          calendarConnected: !!(friend.google_refresh_token || friend.apple_calendar_connected),
         },
       };
     });
