@@ -313,7 +313,8 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
           email,
           display_name: displayName,
           photo_url: photoUrl,
-          timezone: timezone || "America/New_York",
+          // Only set timezone on first login; don't overwrite if the user already has one
+          ...(existing?.timezone ? {} : { timezone: timezone || "America/New_York" }),
           ...(inviteCode ? { invite_code: inviteCode } : {}),
         },
         { onConflict: "firebase_uid" },
