@@ -1,24 +1,25 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
 
-interface CalendarInfo {
+interface CalendarEntry {
   id: string;
-  summary: string;
-  description?: string;
-  primary?: boolean;
-  backgroundColor?: string;
-  accessRole: string; // 'owner' | 'writer' | 'reader' | 'freeBusyReader'
-  selected: boolean;
+  user_id: string;
+  calendar_id: string;
+  calendar_name: string;
+  calendar_color: string | null;
+  is_selected: boolean;
+  access_role: string | null;
 }
 
 interface CalendarPickerProps {
-  onClose?: () => void;
-  compact?: boolean;
+  /** Which calendar source to show: 'google' (default) or 'apple' */
+  source?: 'google' | 'apple';
+  /** Called when the user saves their selection */
+  onSaved?: () => void;
 }
 
-export default function CalendarPicker({ onClose, compact = false }: CalendarPickerProps) {
-  const [calendars, setCalendars] = useState<CalendarInfo[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+export default function CalendarPicker({ source = 'google', onSaved }: CalendarPickerProps) {
+  const [calendars, setCalendars] = useState<CalendarEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -28,209 +29,220 @@ export default function CalendarPicker({ onClose, compact = false }: CalendarPic
     setLoading(true);
     setError(null);
     try {
-      const [calRes, selRes] = await Promise.all([
-        api.get('/calendar/list'),
-        api.get('/calendar/selected'),
-      ]);
-      const cals: CalendarInfo[] = calRes.data.calendars || [];
-      const selected: string[] = selRes.data.selectedCalendarIds || [];
-      setCalendars(cals);
-      // If no selection saved yet, default to all owned calendars
-      if (selected.length === 0) {
-        setSelectedIds(new Set(cals.filter(c => c.accessRole === 'owner').map(c => c.id)));
-      } else {
-        setSelectedIds(new Set(selected));
-      }
+      const endpoint = source === 'apple' ? '/calendar/apple/list' : '/calendar/list';
+      const { data } = await api.get(endpoint);
+      setCalendars(data.calendars || []);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load calendars');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [source]);
 
   useEffect(() => {
     fetchCalendars();
   }, [fetchCalendars]);
 
-  const toggleCalendar = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+  const toggleCalendar = (calendarId: string) => {
+    setCalendars((prev) =>
+      prev.map((c) =>
+        c.calendar_id === calendarId ? { ...c, is_selected: !c.is_selected } : c,
+      ),
+    );
     setSaved(false);
   };
 
   const selectAll = () => {
-    setSelectedIds(new Set(calendars.map(c => c.id)));
+    setCalendars((prev) => prev.map((c) => ({ ...c, is_selected: true })));
     setSaved(false);
   };
 
   const deselectAll = () => {
-    setSelectedIds(new Set());
+    setCalendars((prev) => prev.map((c) => ({ ...c, is_selected: false })));
     setSaved(false);
   };
 
   const handleSave = async () => {
     setSaving(true);
+    setError(null);
     try {
-      await api.put('/calendar/selected', {
-        calendarIds: Array.from(selectedIds),
-      });
+      const selectedIds = calendars.filter((c) => c.is_selected).map((c) => c.calendar_id);
+      await api.put('/calendar/selected', { calendarIds: selectedIds });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+      onSaved?.();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save calendar selection');
+      setError(err.response?.data?.error || 'Failed to save selection');
     } finally {
       setSaving(false);
     }
   };
 
-  // Group calendars: owned, shared/subscribed
-  const ownedCalendars = calendars.filter(c => c.accessRole === 'owner');
-  const sharedCalendars = calendars.filter(c => c.accessRole !== 'owner');
-
-  const CalendarRow = ({ cal }: { cal: CalendarInfo }) => (
-    <label
-      key={cal.id}
-      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 cursor-pointer transition-all ${
-        selectedIds.has(cal.id)
-          ? 'bg-gradient-to-r from-gray-50 to-gray-100/50'
-          : 'hover:bg-gray-50/50'
-      }`}
-    >
-      <input
-        type="checkbox"
-        checked={selectedIds.has(cal.id)}
-        onChange={() => toggleCalendar(cal.id)}
-        className="h-4 w-4 rounded border-gray-300 text-slotted-500 focus:ring-slotted-400"
-      />
-      <div
-        className="h-3 w-3 rounded-full flex-shrink-0"
-        style={{ backgroundColor: cal.backgroundColor || '#4285f4' }}
-      />
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${selectedIds.has(cal.id) ? 'text-gray-900' : 'text-gray-500'}`}>
-          {cal.summary}
-          {cal.primary && (
-            <span className="ml-1.5 text-[10px] font-semibold text-slotted-500">PRIMARY</span>
-          )}
-        </p>
-        {cal.description && (
-          <p className="text-[11px] text-gray-400 truncate">{cal.description}</p>
-        )}
-      </div>
-      <span className="text-[10px] font-medium text-gray-400 flex-shrink-0 capitalize">
-        {cal.accessRole === 'owner' ? '' : cal.accessRole}
-      </span>
-    </label>
-  );
+  const selectedCount = calendars.filter((c) => c.is_selected).length;
 
   if (loading) {
     return (
-      <div className={`${compact ? 'py-4' : 'rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm'}`}>
-        <div className="flex items-center justify-center py-8">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-slotted-400 border-t-transparent" />
-          <span className="ml-2 text-sm text-gray-400">Loading calendars...</span>
-        </div>
+      <div className="mt-4 flex items-center justify-center py-8">
+        <div className="h-6 w-6 animate-spin rounded-full border-3 border-teal-500 border-t-transparent" />
+        <span className="ml-2 text-xs text-gray-400">Loading calendars…</span>
       </div>
     );
   }
 
+  if (error && calendars.length === 0) {
+    return (
+      <div className="mt-4 rounded-xl border border-red-100 bg-red-50/50 px-4 py-3 text-xs text-red-600">
+        {error}
+      </div>
+    );
+  }
+
+  if (calendars.length === 0) {
+    return (
+      <div className="mt-4 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 px-4 py-6 text-center">
+        <p className="text-xs text-gray-500">No calendars found in your {source === 'apple' ? 'Apple' : 'Google'} account.</p>
+      </div>
+    );
+  }
+
+  // Group calendars by access role
+  const ownedCalendars = calendars.filter((c) => c.access_role === 'owner');
+  const otherCalendars = calendars.filter((c) => c.access_role !== 'owner');
+
   return (
-    <div className={compact ? '' : 'rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden'}>
-      {/* Header */}
-      {!compact && (
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">📅 Choose Calendars</h3>
-            <p className="mt-0.5 text-[11px] text-gray-400">
-              Select which calendars Slotted should read for availability
-            </p>
+    <div className="mt-4 space-y-4">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-gray-600">
+          Select which calendars Slotted should check for availability
+        </p>
+        <div className="flex gap-1.5">
+          <button
+            onClick={selectAll}
+            className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-50 transition-all"
+          >
+            All
+          </button>
+          <button
+            onClick={deselectAll}
+            className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-50 transition-all"
+          >
+            None
+          </button>
+        </div>
+      </div>
+
+      {/* Owned calendars */}
+      {ownedCalendars.length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+            Your calendars
+          </p>
+          <div className="space-y-1.5">
+            {ownedCalendars.map((cal) => (
+              <CalendarRow key={cal.calendar_id} calendar={cal} onToggle={toggleCalendar} />
+            ))}
           </div>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-all"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
+        </div>
+      )}
+
+      {/* Other / shared calendars */}
+      {otherCalendars.length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+            Shared &amp; subscribed
+          </p>
+          <div className="space-y-1.5">
+            {otherCalendars.map((cal) => (
+              <CalendarRow key={cal.calendar_id} calendar={cal} onToggle={toggleCalendar} />
+            ))}
+          </div>
         </div>
       )}
 
       {error && (
-        <div className="mx-5 mt-3 rounded-xl border border-red-100 bg-red-50/50 px-4 py-2 text-xs text-red-600">
+        <div className="rounded-xl border border-red-100 bg-red-50/50 px-3 py-2 text-[11px] text-red-600">
           {error}
         </div>
       )}
 
-      <div className={compact ? 'space-y-3' : 'px-5 py-4 space-y-4'}>
-        {/* Quick actions */}
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] text-gray-400">
-            {selectedIds.size} of {calendars.length} selected
-          </p>
-          <div className="flex gap-2">
-            <button onClick={selectAll} className="text-[11px] font-medium text-slotted-500 hover:text-slotted-600">
-              Select all
-            </button>
-            <span className="text-gray-300">·</span>
-            <button onClick={deselectAll} className="text-[11px] font-medium text-gray-400 hover:text-gray-600">
-              None
-            </button>
-          </div>
-        </div>
-
-        {/* Owned calendars */}
-        {ownedCalendars.length > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-              My Calendars
-            </p>
-            <div className="space-y-0.5">
-              {ownedCalendars.map(cal => <CalendarRow key={cal.id} cal={cal} />)}
-            </div>
-          </div>
-        )}
-
-        {/* Shared / subscribed calendars */}
-        {sharedCalendars.length > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-              Shared with Me
-            </p>
-            <div className="space-y-0.5">
-              {sharedCalendars.map(cal => <CalendarRow key={cal.id} cal={cal} />)}
-            </div>
-          </div>
-        )}
-
-        {calendars.length === 0 && !error && (
-          <p className="text-center text-sm text-gray-400 py-4">
-            No calendars found. Make sure your Google Calendar has at least one calendar.
-          </p>
-        )}
-      </div>
-
       {/* Save button */}
-      <div className={`flex items-center justify-end gap-3 ${compact ? 'pt-3' : 'border-t border-gray-100 px-5 py-3'}`}>
+      <div className="flex items-center justify-between pt-1">
+        <p className="text-[11px] text-gray-400">
+          {selectedCount} of {calendars.length} calendar{calendars.length !== 1 ? 's' : ''} selected
+        </p>
         <button
           onClick={handleSave}
           disabled={saving}
-          className={`rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 ${
+          className={`rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed ${
             saved ? 'bg-emerald-500' : 'gradient-btn'
           }`}
         >
-          {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save Selection'}
+          {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save Selection'}
         </button>
       </div>
     </div>
+  );
+}
+
+/** Individual calendar row with toggle */
+function CalendarRow({
+  calendar,
+  onToggle,
+}: {
+  calendar: CalendarEntry;
+  onToggle: (calendarId: string) => void;
+}) {
+  const roleLabel =
+    calendar.access_role === 'owner'
+      ? null
+      : calendar.access_role === 'writer'
+        ? 'Editor'
+        : calendar.access_role === 'reader'
+          ? 'Viewer'
+          : calendar.access_role === 'freeBusyReader'
+            ? 'Free/Busy'
+            : null;
+
+  return (
+    <button
+      onClick={() => onToggle(calendar.calendar_id)}
+      className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
+        calendar.is_selected
+          ? 'border-slotted-300 bg-gradient-to-r from-slotted-50/60 to-purple-50/40 shadow-sm'
+          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
+      }`}
+    >
+      {/* Color dot */}
+      <span
+        className="h-3.5 w-3.5 shrink-0 rounded-full border border-white shadow-sm"
+        style={{ backgroundColor: calendar.calendar_color || '#4285f4' }}
+      />
+
+      {/* Name & role */}
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-medium truncate ${calendar.is_selected ? 'text-gray-900' : 'text-gray-700'}`}>
+          {calendar.calendar_name}
+        </p>
+        {roleLabel && (
+          <p className="text-[11px] text-gray-400">{roleLabel}</p>
+        )}
+      </div>
+
+      {/* Checkbox */}
+      <div
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-all ${
+          calendar.is_selected
+            ? 'border-slotted-500 bg-slotted-500'
+            : 'border-gray-300'
+        }`}
+      >
+        {calendar.is_selected && (
+          <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        )}
+      </div>
+    </button>
   );
 }

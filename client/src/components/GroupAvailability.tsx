@@ -10,11 +10,15 @@ interface ScoredSlot {
   timeLabel: string;
 }
 
-interface ParticipantSync {
-  userId: string;
-  displayName: string;
+interface ParticipantStatus {
+  id: string;
+  name: string;
   synced: boolean;
-  calendarConnected: boolean;
+}
+
+interface GroupSyncStatus {
+  me: { synced: boolean };
+  participants: ParticipantStatus[];
 }
 
 interface GroupAvailabilityProps {
@@ -28,21 +32,21 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
   const [loading, setLoading] = useState(true);
   const [suggestions, setSuggestions] = useState<ScoredSlot[]>([]);
   const [overlaps, setOverlaps] = useState<{ start: string; end: string }[]>([]);
-  const [participants, setParticipants] = useState<ParticipantSync[]>([]);
+  const [syncStatus, setSyncStatus] = useState<GroupSyncStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [booked, setBooked] = useState<string | null>(null);
 
-  const fetchGroupOverlaps = useCallback(async () => {
+  const groupLabel = friendNames.join(' & ');
+
+  const fetchOverlaps = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.post('/availability/group-overlap', {
-        friendIds,
-      });
+      const { data } = await api.post('/availability/group-overlap', { friendIds });
       setSuggestions(data.suggestions || []);
       setOverlaps(data.overlaps || []);
-      setParticipants(data.participants || []);
+      setSyncStatus(data.syncStatus || null);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to find group availability');
     } finally {
@@ -51,17 +55,14 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
   }, [friendIds]);
 
   useEffect(() => {
-    fetchGroupOverlaps();
-  }, [fetchGroupOverlaps]);
+    fetchOverlaps();
+  }, [fetchOverlaps]);
 
   const handleBook = async (slot: ScoredSlot) => {
     setBookingSlot(slot.start);
     try {
-      const title = friendNames.length <= 2
-        ? `Hangout with ${friendNames.join(' & ')}`
-        : `Group hangout (${friendNames.length + 1} people)`;
       await api.post('/meetups', {
-        title,
+        title: `Group hangout with ${groupLabel}`,
         friendIds,
         startTime: slot.start,
         endTime: slot.end,
@@ -89,16 +90,17 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
     return '😐';
   };
 
+
   return (
-    <div className="rounded-2xl border border-purple-200/60 bg-white shadow-lg overflow-hidden">
-      {/* Header — purple gradient for groups */}
-      <div className="flex items-center justify-between border-b border-purple-100 px-5 py-4 bg-gradient-to-r from-purple-50/50 to-fuchsia-50/30">
+    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-lg overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 bg-gradient-to-r from-purple-50/40 to-slotted-50/30">
         <div>
           <h3 className="font-display text-sm font-bold text-gray-900">
-            👥 Group Availability ({friendNames.length + 1} people)
+            👥 Group Availability — {groupLabel}
           </h3>
           <p className="mt-0.5 text-[11px] text-gray-400">
-            Finding times that work for {friendNames.join(', ')} &amp; you
+            Best times when everyone is free, scored by AI
           </p>
         </div>
         <button
@@ -111,27 +113,12 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
         </button>
       </div>
 
-      {/* Participant sync status */}
-      {participants.length > 0 && (
-        <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap gap-2">
-          {participants.map(p => (
-            <span
-              key={p.userId}
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border ${
-                p.synced
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : p.calendarConnected
-                    ? 'border-amber-200 bg-amber-50 text-amber-700'
-                    : 'border-gray-200 bg-gray-50 text-gray-500'
-              }`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${
-                p.synced ? 'bg-emerald-500' : p.calendarConnected ? 'bg-amber-400' : 'bg-gray-300'
-              }`} />
-              {p.displayName.split(' ')[0]}
-              {p.synced ? '' : p.calendarConnected ? ' (syncing…)' : ' (no cal)'}
-            </span>
-          ))}
+      {/* Sync status — only show if MY calendar isn't synced */}
+      {syncStatus && !syncStatus.me.synced && (
+        <div className="px-5 py-3 border-b border-gray-100">
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            ⚠️ Your calendar isn't synced yet — connect in Settings for better group suggestions
+          </span>
         </div>
       )}
 
@@ -140,7 +127,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="h-8 w-8 animate-spin rounded-full border-3 border-purple-400 border-t-transparent" />
-            <p className="mt-3 text-xs text-gray-400">Syncing {friendNames.length + 1} calendars &amp; finding overlaps…</p>
+            <p className="mt-3 text-xs text-gray-400">Syncing {friendNames.length + 1} calendars &amp; finding the best group times…</p>
           </div>
         ) : error ? (
           <div className="rounded-xl border border-red-100 bg-red-50/50 px-4 py-3 text-xs text-red-600">
@@ -149,10 +136,9 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
         ) : suggestions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <span className="text-4xl">📅</span>
-            <h4 className="mt-3 text-sm font-semibold text-gray-800">No common free times found</h4>
+            <h4 className="mt-3 text-sm font-semibold text-gray-800">No overlapping free times for the group</h4>
             <p className="mt-1.5 max-w-sm text-xs text-gray-400 leading-relaxed">
-              All {friendNames.length + 1} people are busy for the next 2 weeks.
-              Try reducing the group size or checking back later.
+              Everyone's calendars are packed for the next 2 weeks. Try adjusting schedules or check back later.
             </p>
           </div>
         ) : (
@@ -162,7 +148,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
                 key={slot.start}
                 className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
                   idx === 0
-                    ? 'border-purple-200 bg-gradient-to-r from-purple-50/60 to-fuchsia-50/40 shadow-sm'
+                    ? 'border-purple-200 bg-gradient-to-r from-purple-50/60 to-slotted-50/40 shadow-sm'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
                 }`}
               >
@@ -176,15 +162,15 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-gray-900">{slot.dayLabel}</p>
                     {idx === 0 && (
-                      <span className="rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                        Best match
+                      <span className="rounded-full bg-gradient-to-r from-purple-500 to-slotted-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                        Best for everyone
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-gray-500">{slot.timeLabel}</p>
                   {slot.reasons.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {slot.reasons.slice(0, 3).map((r) => (
+                      {slot.reasons.slice(0, 4).map((r) => (
                         <span key={r} className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500">
                           {r}
                         </span>
@@ -202,7 +188,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
                     className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 ${
                       booked === slot.start
                         ? 'bg-emerald-500 text-white'
-                        : 'bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white'
+                        : 'bg-gradient-to-r from-purple-500 to-slotted-500 text-white'
                     }`}
                   >
                     {bookingSlot === slot.start ? '...' : booked === slot.start ? 'Booked ✓' : 'Book it'}
@@ -212,7 +198,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
             ))}
 
             <p className="pt-2 text-center text-[11px] text-gray-400">
-              {overlaps.length} overlapping windows · Showing top {suggestions.length} for all {friendNames.length + 1} people
+              {overlaps.length} group-wide windows found · Showing top {suggestions.length} suggestions
             </p>
           </div>
         )}
@@ -220,9 +206,9 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
 
       {/* Footer */}
       <div className="border-t border-gray-100 px-5 py-3 flex justify-between items-center">
-        <p className="text-[11px] text-gray-400">Based on the next 2 weeks of all calendars</p>
+        <p className="text-[11px] text-gray-400">Based on the next 2 weeks of {friendNames.length + 1} calendars</p>
         <button
-          onClick={fetchGroupOverlaps}
+          onClick={fetchOverlaps}
           disabled={loading}
           className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
         >

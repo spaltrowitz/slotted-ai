@@ -120,7 +120,7 @@ export default function DashboardPage() {
   const { user, calendarConnected, calendarJustConnected } = useAuth();
 
   // Calendar view state
-  const [calView, setCalView] = useState<'agenda' | 'week' | 'month'>('month');
+  const [calView, setCalView] = useState<'agenda' | 'week' | 'month'>('week');
   const [calEvents, setCalEvents] = useState<CalEvent[]>([]);
   const [calEventsLoading, setCalEventsLoading] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 1 = next week, etc.
@@ -128,7 +128,7 @@ export default function DashboardPage() {
 
   // Dashboard data
   const [friendsToSee, setFriendsToSee] = useState<FriendToSee[]>([]);
-
+  const [stats, setStats] = useState({ totalFriends: 0, hangoutsThisMonth: 0, totalPastHangouts: 0 });
   const [activities, setActivities] = useState<ActivityFeedItem[]>([]);
   const [dismissingActivity, setDismissingActivity] = useState<string | null>(null);
 
@@ -138,6 +138,7 @@ export default function DashboardPage() {
   const [reasonSaving, setReasonSaving] = useState(false);
 
   // Calendar sync
+  const [syncing, setSyncing] = useState(false);
 
   // Log form
   const [showLogForm, setShowLogForm] = useState(false);
@@ -161,7 +162,7 @@ export default function DashboardPage() {
       try {
         const { data } = await api.get('/dashboard');
         setFriendsToSee(data.friendsToSee || []);
-
+        setStats(data.stats || { totalFriends: 0, hangoutsThisMonth: 0, totalPastHangouts: 0 });
       } catch { /* silent */ }
     })();
   }, [user]);
@@ -189,9 +190,11 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user || !calendarConnected) return;
     (async () => {
+      setSyncing(true);
       try {
         const { data: _syncData } = await api.post('/calendar/sync');
       } catch { /* silent */ }
+      finally { setSyncing(false); }
     })();
   }, [user, calendarConnected]);
 
@@ -431,6 +434,27 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ─── STATS ROW ─── */}
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        <Link to="/friends" className="rounded-2xl border border-gray-200/60 bg-gradient-to-br from-violet-50 to-fuchsia-50 p-4 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 text-center">
+          <p className="text-3xl font-bold text-gray-900">{stats.totalFriends}</p>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mt-1">Friends</p>
+        </Link>
+        <div className="rounded-2xl border border-gray-200/60 bg-gradient-to-br from-amber-50 to-orange-50 p-4 shadow-sm text-center">
+          <p className="text-3xl font-bold text-gray-900">{stats.hangoutsThisMonth}</p>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mt-1">This Month</p>
+        </div>
+        <div className="rounded-2xl border border-gray-200/60 bg-gradient-to-br from-emerald-50 to-teal-50 p-4 shadow-sm text-center">
+          <p className="text-3xl font-bold text-gray-900">
+            {syncing ? (
+              <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
+            ) : calendarConnected ? '✅' : '–'}
+          </p>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mt-1">
+            {calendarConnected ? 'Cal synced' : 'Calendar'}
+          </p>
+        </div>
+      </div>
 
       {/* ─── PEOPLE TO SEE ─── */}
       {friendsToSee.length > 0 && (
@@ -447,7 +471,7 @@ export default function DashboardPage() {
               return (
                 <Link
                   key={f.id}
-                  to={`/friends?findTimes=${f.id}`}
+                  to="/friends"
                   className="flex-shrink-0 w-[140px] rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 text-center"
                 >
                   {f.photoUrl ? (

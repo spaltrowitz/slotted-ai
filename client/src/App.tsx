@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
+import InvitePage from './pages/InvitePage';
 import DashboardPage from './pages/DashboardPage';
 import FriendsPage from './pages/FriendsPage';
 import OnboardingPage from './pages/OnboardingPage';
@@ -24,6 +25,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<LoginPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/invite/:code" element={<InvitePage />} />
 
             {/* Protected routes */}
             <Route element={<ProtectedRoute />}>
