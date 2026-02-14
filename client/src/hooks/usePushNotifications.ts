@@ -102,13 +102,29 @@ export function usePushNotifications() {
     };
   }, [permission]);
 
-  // Auto-request permission if user is logged in and hasn't been asked yet
+  // If permission is already granted, try to get the FCM token on mount
+  // so the UI can distinguish "fully working" from "partial"
   useEffect(() => {
-    if (user && permission === 'default') {
-      // Don't auto-request — let user trigger it from UI
-      // This prevents annoying permission prompts on first visit
-    }
-  }, [user, permission]);
+    if (permission !== 'granted' || fcmToken || !user) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const messaging = await getMessagingInstance();
+        if (!messaging || cancelled) return;
+        const token = await getToken(messaging, {
+          vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY || 'YOUR_VAPID_KEY_HERE',
+        });
+        if (token && !cancelled) {
+          setFcmToken(token);
+          await api.post('/users/me/fcm-token', { token });
+        }
+      } catch {
+        // Silently fail — the UI will show "partial" state
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [permission, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     permission,

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import AppShell from '../components/AppShell';
 import CalendarPicker from '../components/CalendarPicker';
 import PushNotificationPrompt from '../components/PushNotificationPrompt';
+import InstallPrompt from '../components/InstallPrompt';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function SettingsPage() {
@@ -391,7 +392,8 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Push Notifications */}
+            {/* Install as app + Push Notifications */}
+            <InstallPrompt alwaysShow />
             <PushNotificationPrompt />
 
             {/* Share hangout activity */}
@@ -1003,13 +1005,14 @@ export default function SettingsPage() {
         </section>
 
         {/* Feedback */}
-        <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-50 to-fuchsia-50 text-base">
-              💬
-            </div>
-            <div className="flex-1">
-              <h2 className="text-sm font-semibold text-gray-900">Share Feedback</h2>
+        <div className="pl-10">
+          <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-50 to-fuchsia-50 text-base">
+                💬
+              </div>
+              <div className="flex-1">
+                <h2 className="text-sm font-semibold text-gray-900">Share Feedback</h2>
               <p className="mt-0.5 text-[11px] text-gray-400">
                 Found a bug? Have an idea? Every message goes straight to the developer.
               </p>
@@ -1054,6 +1057,7 @@ export default function SettingsPage() {
               {feedbackSending ? 'Sending\u2026' : feedbackSent ? 'Sent! Thank you \u2713' : 'Send Feedback'}
             </button>
           </div>
+        </div>
         </div>
       </div>
     </AppShell>

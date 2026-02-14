@@ -34,7 +34,7 @@ function getDeviceInfo() {
   return { isIOS, isAndroid, isMobile };
 }
 
-export default function InstallPrompt() {
+export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boolean }) {
   const [visible, setVisible] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstructions, setShowInstructions] = useState(false);
@@ -52,13 +52,23 @@ export default function InstallPrompt() {
 
   // Decide whether to show the banner
   useEffect(() => {
-    if (isStandalone()) return;
+    if (isStandalone()) {
+      // If alwaysShow, still set visible so we can show "already installed" state
+      if (alwaysShow) setVisible(true);
+      return;
+    }
+    if (alwaysShow) {
+      setVisible(true);
+      return;
+    }
     if (isDismissed()) return;
     if (!isMobile) return;
     // Small delay so it doesn't flash on load
     const t = setTimeout(() => setVisible(true), 1500);
     return () => clearTimeout(t);
-  }, [isMobile]);
+  }, [isMobile, alwaysShow]);
+
+  const standalone = isStandalone();
 
   const handleInstall = async () => {
     if (deferredPrompt) {
@@ -82,6 +92,21 @@ export default function InstallPrompt() {
   };
 
   if (!visible) return null;
+
+  // Already installed as PWA
+  if (standalone) {
+    return (
+      <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">📱</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-emerald-900">App installed</p>
+            <p className="text-xs text-emerald-600">You're using Slotted as an installed app — great!</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

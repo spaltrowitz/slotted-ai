@@ -59,6 +59,7 @@ interface Meetup {
   start_time: string;
   end_time: string;
   status: string;
+  created_by: string;
   participants: { userId: string; displayName: string; photoUrl: string | null; rsvp: string }[];
   myRsvp: string;
 }
@@ -136,6 +137,8 @@ export default function DashboardPage() {
   const [meetups, setMeetups] = useState<Meetup[]>([]);
   const [didntHappenId, setDidntHappenId] = useState<string | null>(null);
   const [reasonSaving, setReasonSaving] = useState(false);
+  const [cancellingMeetupId, setCancellingMeetupId] = useState<string | null>(null);
+  const [expandedMeetupId, setExpandedMeetupId] = useState<string | null>(null);
 
   // Calendar sync
 
@@ -236,6 +239,16 @@ export default function DashboardPage() {
     const end = new Date(m.end_time);
     return end < now && (m.status === 'confirmed' || (m.status === 'proposed' && m.myRsvp === 'accepted'));
   });
+
+  const handleCancelMeetup = async (meetupId: string) => {
+    if (!window.confirm('Cancel this hangout? The other person will be notified.')) return;
+    setCancellingMeetupId(meetupId);
+    try {
+      await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'declined' });
+      setMeetups((prev) => prev.map((m) => m.id === meetupId ? { ...m, myRsvp: 'declined', status: 'cancelled' } : m));
+    } catch { /* silent */ }
+    finally { setCancellingMeetupId(null); }
+  };
 
   const handleDidntHappen = async (meetupId: string, reason: string) => {
     setReasonSaving(true);
@@ -402,28 +415,54 @@ export default function DashboardPage() {
 
   const monthLabel = monthViewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
+  /* ─── today at a glance ─── */
+  const todayStr = new Date().toLocaleDateString('en-CA');
+  const todayEvents = calEvents.filter((ev) => eventOnDate(ev, todayStr) && !isBufferEvent(ev));
+  const nextEvent = todayEvents
+    .filter((ev) => !ev.allDay && new Date(ev.start) > new Date())
+    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())[0];
+  const todaySummary = (() => {
+    const parts: string[] = [];
+    if (todayEvents.length > 0) parts.push(`${todayEvents.length} event${todayEvents.length !== 1 ? 's' : ''} today`);
+    if (upcoming.length > 0) parts.push(`${upcoming.length} upcoming hangout${upcoming.length !== 1 ? 's' : ''}`);
+    if (nextEvent) {
+      const t = new Date(nextEvent.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      parts.push(`Next: ${nextEvent.title.length > 20 ? nextEvent.title.slice(0, 20) + '…' : nextEvent.title} at ${t}`);
+    }
+    if (parts.length === 0 && friendsToSee.length > 0) parts.push(`${friendsToSee.length} friend${friendsToSee.length !== 1 ? 's' : ''} to catch up with`);
+    return parts.join(' · ');
+  })();
+
+  /* ─── should show history section? ─── */
+  // const hasHistory = pastConfirmed.filter((m) => m.status !== 'didnt_happen').length > 0;
+
   return (
     <AppShell>
       {/* ─── HEADER ─── */}
-      <div className="mb-5 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">
-          {greeting}, {user?.displayName?.split(' ')[0]} {timeEmoji}
-        </h1>
-        {/* Quick actions */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => { setShowLogForm(true); document.getElementById('log-section')?.scrollIntoView({ behavior: 'smooth' }); }}
-            className="rounded-xl gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
-          >
-            📝 Log
-          </button>
-          <Link
-            to="/friends"
-            className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-slotted-300"
-          >
-            👋 Invite
-          </Link>
+      <div className="mb-5">
+        <div className="flex items-center justify-between">
+          <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">
+            {greeting}, {user?.displayName?.split(' ')[0]} {timeEmoji}
+          </h1>
+          {/* Quick actions */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setShowLogForm(true); document.getElementById('log-section')?.scrollIntoView({ behavior: 'smooth' }); }}
+              className="rounded-xl gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+            >
+              📝 Log
+            </button>
+            <Link
+              to="/friends"
+              className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-slotted-300"
+            >
+              👋 Invite
+            </Link>
+          </div>
         </div>
+        {!dashboardLoading && todaySummary && (
+          <p className="mt-1 text-xs text-gray-400">{todaySummary}</p>
+        )}
       </div>
 
       {/* Calendar just connected toast */}
@@ -593,36 +632,67 @@ export default function DashboardPage() {
           <div className="space-y-2">
             {upcoming.slice(0, 4).map((m) => {
               const others = otherParticipants(m);
+              const isExpanded = expandedMeetupId === m.id;
+              const friendId = others.length === 1 ? others[0].userId : null;
               return (
-                <div key={m.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/30 px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex -space-x-2">
-                      {others.slice(0, 3).map((p) => (
-                        p.photoUrl ? (
-                          <img key={p.userId} src={p.photoUrl} alt="" className="h-8 w-8 rounded-full ring-2 ring-white" />
-                        ) : (
-                          <div key={p.userId} className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xs font-semibold text-white ring-2 ring-white">
-                            {p.displayName?.[0] ?? '?'}
-                          </div>
-                        )
-                      ))}
+                <div key={m.id} className="rounded-xl border border-gray-100 bg-gray-50/30 overflow-hidden">
+                  <div
+                    className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                    onClick={() => setExpandedMeetupId(isExpanded ? null : m.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex -space-x-2">
+                        {others.slice(0, 3).map((p) => (
+                          p.photoUrl ? (
+                            <img key={p.userId} src={p.photoUrl} alt="" className="h-8 w-8 rounded-full ring-2 ring-white" />
+                          ) : (
+                            <div key={p.userId} className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xs font-semibold text-white ring-2 ring-white">
+                              {p.displayName?.[0] ?? '?'}
+                            </div>
+                          )
+                        ))}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{m.title}</p>
+                        <p className="text-[11px] text-gray-400">
+                          {others.map((p) => p.displayName).join(', ')} · {formatMeetupTime(m.start_time)}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{m.title}</p>
-                      <p className="text-[11px] text-gray-400">
-                        {others.map((p) => p.displayName).join(', ')} · {formatMeetupTime(m.start_time)}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium ${
+                        m.myRsvp === 'accepted'
+                          ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : m.myRsvp === 'pending'
+                            ? 'border border-amber-200 bg-amber-50 text-amber-700'
+                            : 'border border-gray-200 bg-gray-50 text-gray-500'
+                      }`}>
+                        {m.myRsvp === 'accepted' ? '✅ Confirmed' : m.myRsvp === 'pending' ? '⏳ Pending' : m.myRsvp}
+                      </span>
+                      <svg className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
                     </div>
                   </div>
-                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium ${
-                    m.myRsvp === 'accepted'
-                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                      : m.myRsvp === 'pending'
-                        ? 'border border-amber-200 bg-amber-50 text-amber-700'
-                        : 'border border-gray-200 bg-gray-50 text-gray-500'
-                  }`}>
-                    {m.myRsvp === 'accepted' ? '✅ Confirmed' : m.myRsvp === 'pending' ? '⏳ Pending' : m.myRsvp}
-                  </span>
+                  {isExpanded && (
+                    <div className="border-t border-gray-100 px-4 py-3 flex items-center gap-2 bg-white">
+                      {friendId && (
+                        <Link
+                          to={`/friends?findTimes=${friendId}`}
+                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-600 hover:bg-gray-50 hover:border-slotted-300 transition-all"
+                        >
+                          🔄 Find new time
+                        </Link>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleCancelMeetup(m.id); }}
+                        disabled={cancellingMeetupId === m.id}
+                        className="rounded-lg border border-red-200 px-3 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
+                      >
+                        {cancellingMeetupId === m.id ? 'Cancelling…' : '✕ Cancel'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

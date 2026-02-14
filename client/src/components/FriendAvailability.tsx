@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
-import AddToCalendarModal from './AddToCalendarModal';
+
 
 interface ScoredSlot {
   start: string;
@@ -31,12 +31,6 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
   const [error, setError] = useState<string | null>(null);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [booked, setBooked] = useState<string | null>(null);
-  const [calendarModal, setCalendarModal] = useState<{
-    meetupId: string;
-    title: string;
-    startTime: string;
-    endTime: string;
-  } | null>(null);
 
   const fetchOverlaps = useCallback(async () => {
     setLoading(true);
@@ -78,13 +72,6 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
       }
       setBooked(slot.start);
       onBook?.(slot);
-      // Show "Add to Calendar" modal
-      setCalendarModal({
-        meetupId: data.id,
-        title: data.title || `Hangout with ${friendName}`,
-        startTime: slot.start,
-        endTime: slot.end,
-      });
       setTimeout(() => setBooked(null), 5000);
     } catch {
       // silent fail
@@ -208,7 +195,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
                         : 'gradient-btn text-white'
                     }`}
                   >
-                    {bookingSlot === slot.start ? '...' : booked === slot.start ? 'Booked ✓' : 'Book it'}
+                    {bookingSlot === slot.start ? '...' : booked === slot.start ? 'Sent ✓' : 'Send request'}
                   </button>
                 </div>
               </div>
@@ -233,16 +220,6 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
         </button>
       </div>
 
-      {/* Add to Calendar modal */}
-      {calendarModal && (
-        <AddToCalendarModal
-          meetupId={calendarModal.meetupId}
-          meetupTitle={calendarModal.title}
-          startTime={calendarModal.startTime}
-          endTime={calendarModal.endTime}
-          onClose={() => setCalendarModal(null)}
-        />
-      )}
     </div>
   );
 }

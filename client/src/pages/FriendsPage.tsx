@@ -17,8 +17,19 @@ interface FriendRecord {
     photoUrl?: string;
     socialBattery?: string;
     calendarConnected?: boolean;
+    eventInterests?: string[];
   };
 }
+
+const INTEREST_LABELS: Record<string, { emoji: string; label: string }> = {
+  theater: { emoji: '🎭', label: 'Theater' },
+  concerts: { emoji: '🎵', label: 'Concerts' },
+  sports: { emoji: '⚽', label: 'Sports' },
+  comedy: { emoji: '😂', label: 'Comedy' },
+  festivals: { emoji: '🎪', label: 'Festivals' },
+  dance: { emoji: '💃', label: 'Dance' },
+  opera: { emoji: '🎻', label: 'Classical' },
+};
 
 interface SavedGroup {
   id: string;
@@ -111,9 +122,25 @@ export default function FriendsPage() {
   const [newGroupName, setNewGroupName] = useState('');
   const [createGroupSelectedIds, setCreateGroupSelectedIds] = useState<Set<string>>(new Set());
   const [creatingGroup, setCreatingGroup] = useState(false);
+  const [myEventInterests, setMyEventInterests] = useState<string[]>([]);
 
   const inviteUrl = `https://slotted-ai.web.app?ref=${user?.uid ?? ''}`;
   const message = `Let's schedule time to hang :) This app syncs our calendars and finds the best time to meet up. ${inviteUrl}`;
+
+  // Load current user's event interests
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/users/me', { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const me = await res.json();
+          if (me.event_interests) setMyEventInterests(me.event_interests);
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [user]);
 
   const fetchFriends = useCallback(async () => {
     if (!user) return;
@@ -364,6 +391,22 @@ export default function FriendsPage() {
               <span className="text-[10px]">{f.friend.calendarConnected ? 'Cal synced' : 'No cal'}</span>
             </span>
           </p>
+          {/* Shared event interests */}
+          {(() => {
+            const shared = (f.friend.eventInterests || []).filter(i => myEventInterests.includes(i));
+            return shared.length > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {shared.map(i => {
+                  const info = INTEREST_LABELS[i];
+                  return info ? (
+                    <span key={i} className="inline-flex items-center gap-0.5 rounded-full bg-slotted-50 border border-slotted-100 px-1.5 py-0.5 text-[10px] font-medium text-slotted-600">
+                      {info.emoji} {info.label}
+                    </span>
+                  ) : null;
+                })}
+              </div>
+            ) : null;
+          })()}
         </div>
       </div>
       <button

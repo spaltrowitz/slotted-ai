@@ -662,6 +662,7 @@ app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
           neighborhood: friend.neighborhood,
           timezone: friend.timezone,
           calendarConnected: !!(friend.google_refresh_token || friend.apple_calendar_connected),
+          eventInterests: friend.event_interests || [],
         },
       };
     });
@@ -1368,6 +1369,107 @@ function getPlanningHorizon(planningStyle: string | null | undefined) {
 // AI Suggestion Scoring
 // ---------------------------------------------------------------------------
 
+/**
+ * Map a preferred_times entry (e.g. "weekday-evening") to an hour range.
+ */
+function timeSlotToHourRange(slot: string): { start: number; end: number } | null {
+  const timeOfDay = slot.split("-").slice(1).join("-"); // handle "weekday-evening", "weekend-afternoon"
+  switch (timeOfDay) {
+    case "morning":   return { start: 8, end: 12 };
+    case "afternoon": return { start: 12, end: 17 };
+    case "evening":   return { start: 17, end: 21 };
+    case "night":     return { start: 21, end: 23 };
+    default:          return null;
+  }
+}
+
+/**
+ * Clamp overlap windows to the intersection of all participants' preferred time ranges.
+ * For each user that has preferred_times set, overlaps are restricted to times within
+ * those windows (unioned across their preference entries for the matching day type).
+ * Users without preferred_times impose no restriction.
+ * This uses each user's timezone for correct day-of-week and hour computation.
+ */
+function clampOverlapsToPreferences(
+  overlaps: { start: string; end: string }[],
+  userProfiles: Array<{ preferred_times?: string[] | null; timezone?: string | null }>,
+): { start: string; end: string }[] {
+  // Collect per-user allowed hour ranges keyed by "weekday" | "weekend"
+  const userWindows = userProfiles
+    .filter((u) => u.preferred_times && u.preferred_times.length > 0)
+    .map((u) => {
+      const weekdayRanges: { start: number; end: number }[] = [];
+      const weekendRanges: { start: number; end: number }[] = [];
+      for (const pref of u.preferred_times!) {
+        const isWeekend = pref.startsWith("weekend");
+        const range = timeSlotToHourRange(pref);
+        if (range) {
+          (isWeekend ? weekendRanges : weekdayRanges).push(range);
+        }
+      }
+      return { tz: u.timezone || "America/New_York", weekdayRanges, weekendRanges };
+    });
+
+  if (userWindows.length === 0) return overlaps; // no restrictions
+
+  let result = overlaps;
+
+  for (const uw of userWindows) {
+    const newResult: { start: string; end: string }[] = [];
+
+    for (const slot of result) {
+      const startDt = new Date(slot.start);
+      const endDt = new Date(slot.end);
+
+      // Determine day-of-week in user's timezone
+      const dayInTz = parseInt(
+        new Intl.DateTimeFormat("en-US", { timeZone: uw.tz, weekday: "narrow" })
+          .formatToParts(startDt)
+          .find(() => true)?.value || "0",
+        10,
+      );
+      // Better: use numeric weekday
+      const weekdayNum = new Date(
+        startDt.toLocaleString("en-US", { timeZone: uw.tz }),
+      ).getDay();
+      const isWeekend = weekdayNum === 0 || weekdayNum === 6;
+      const ranges = isWeekend ? uw.weekendRanges : uw.weekdayRanges;
+
+      if (ranges.length === 0) {
+        // No preference for this day type — allow all hours
+        newResult.push(slot);
+        continue;
+      }
+
+      // Get the date string in user's timezone for constructing clamped UTC times
+      const dateStr = startDt.toLocaleDateString("en-CA", { timeZone: uw.tz });
+
+      for (const range of ranges) {
+        const rangeStartUtc = zonedToUtc(dateStr, `${String(range.start).padStart(2, "0")}:00`, uw.tz);
+        const rangeEndUtc = zonedToUtc(dateStr, `${String(range.end).padStart(2, "0")}:00`, uw.tz);
+
+        // Clamp the overlap to this preference window
+        const clampedStart = startDt > rangeStartUtc ? startDt : rangeStartUtc;
+        const clampedEnd = endDt < rangeEndUtc ? endDt : rangeEndUtc;
+
+        if (clampedStart < clampedEnd) {
+          const durMin = (clampedEnd.getTime() - clampedStart.getTime()) / 60000;
+          if (durMin >= 30) {
+            newResult.push({
+              start: clampedStart.toISOString(),
+              end: clampedEnd.toISOString(),
+            });
+          }
+        }
+      }
+    }
+
+    result = newResult;
+  }
+
+  return result;
+}
+
 interface ScoredSlot {
   start: string;
   end: string;
@@ -1666,7 +1768,7 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
     const friendBuffered = applyTravelBuffer(friendSlots.data || [], friendBuffer);
 
     // Compute overlaps (using buffered slots)
-    const overlaps: { start: string; end: string }[] = [];
+    const rawOverlaps: { start: string; end: string }[] = [];
     for (const a of myBuffered) {
       for (const b of friendBuffered) {
         const start = a.start_time > b.start_time ? a.start_time : b.start_time;
@@ -1675,11 +1777,17 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
           // Only include overlaps >= 30 minutes
           const durMin = (new Date(end).getTime() - new Date(start).getTime()) / 60000;
           if (durMin >= 30) {
-            overlaps.push({ start, end });
+            rawOverlaps.push({ start, end });
           }
         }
       }
     }
+
+    // Clamp overlaps to each user's preferred time windows
+    const overlaps = clampOverlapsToPreferences(rawOverlaps, [
+      { preferred_times: me.preferred_times, timezone: me.timezone },
+      { preferred_times: friendUser?.preferred_times, timezone: friendUser?.timezone },
+    ]);
 
     // AI-score the overlaps
     const suggestions = await scoreOverlaps(me.id, friendId, overlaps, 8);
@@ -1797,6 +1905,13 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
       }
       currentOverlaps = newOverlaps;
     }
+
+    // Clamp overlaps to each participant's preferred time windows
+    const allParticipantProfiles = [me, ...friendUsers].map((u) => ({
+      preferred_times: u?.preferred_times,
+      timezone: u?.timezone,
+    }));
+    currentOverlaps = clampOverlapsToPreferences(currentOverlaps, allParticipantProfiles);
 
     // AI-score the group overlaps
     const suggestions = await scoreGroupOverlaps(me.id, friendIds, currentOverlaps, 8);
@@ -2317,6 +2432,7 @@ app.get("/meetups/:meetupId/writable-calendars", requireAuth, async (req: AuthRe
         .select("calendar_id, calendar_name, calendar_color, access_role, source")
         .eq("user_id", me.id)
         .eq("source", "google")
+        .eq("is_selected", true)
         .in("access_role", ["owner", "writer"])
         .order("calendar_name");
 
@@ -2337,6 +2453,7 @@ app.get("/meetups/:meetupId/writable-calendars", requireAuth, async (req: AuthRe
         .select("calendar_id, calendar_name, calendar_color, source")
         .eq("user_id", me.id)
         .eq("source", "apple")
+        .eq("is_selected", true)
         .order("calendar_name");
 
       (acals || []).forEach((c: any) => {
