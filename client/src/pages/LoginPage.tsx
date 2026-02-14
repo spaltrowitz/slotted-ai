@@ -49,7 +49,7 @@ export default function LoginPage() {
           <span className="gradient-text">Just hang out.</span>
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-gray-500">
-          Sync calendars with friends. AI finds the perfect time. Automatically added to both calendars.
+          Sync calendars. AI finds the best time. Done.
         </p>
 
         {/* CTA */}
@@ -101,10 +101,10 @@ export default function LoginPage() {
       {/* Local vs Long-Distance — two modes */}
       <section className="relative z-10 mx-auto max-w-4xl px-6 pb-10">
         <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">
-          Works for all your friendships
+          For every kind of friendship
         </h2>
         <p className="text-center text-sm text-gray-500 mb-8 max-w-lg mx-auto">
-          Whether your friends are across town or across the country, Slotted helps you stay connected.
+          Across town or across the country — Slotted keeps you connected.
         </p>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
