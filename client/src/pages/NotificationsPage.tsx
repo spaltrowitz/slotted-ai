@@ -308,9 +308,6 @@ export default function NotificationsPage() {
                     </div>
                   )}
                 </div>
-                {!notification.read && (
-                  <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-slotted-500" />
-                )}
               </div>
             );
           })}
