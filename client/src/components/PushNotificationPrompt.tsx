@@ -9,12 +9,12 @@ export default function PushNotificationPrompt() {
 
   if (permission === 'granted') {
     return (
-      <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
+      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🔔</span>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-amber-900">Push notifications enabled</p>
-            <p className="text-xs text-amber-600">⚠️ Note: Notifications require additional Firebase configuration to work. Currently in setup.</p>
+            <p className="text-sm font-semibold text-emerald-900">Push notifications enabled</p>
+            <p className="text-xs text-emerald-600">You'll get notified when friends want to hang, accept your invites, or when Slotted finds a great time to meet up.</p>
           </div>
         </div>
       </div>

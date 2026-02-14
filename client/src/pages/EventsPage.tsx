@@ -63,6 +63,7 @@ export default function EventsPage() {
   // Search state
   const [query, setQuery] = useState('');
   const [city, setCity] = useState('');
+  const [defaultCity, setDefaultCity] = useState('');
   const [eventType, setEventType] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -83,16 +84,27 @@ export default function EventsPage() {
   // Mode: 'search' = just browse events, 'match' = cross-reference with friend availability
   const [mode, setMode] = useState<'search' | 'match'>('search');
 
-  // Load friends list
+  // Load friends list + default city from user settings
   useEffect(() => {
     if (!user) return;
     (async () => {
       try {
-        const { data } = await api.get('/friends');
-        const accepted = (data.friends || [])
+        const [friendsRes, meRes] = await Promise.all([
+          api.get('/friends'),
+          api.get('/users/me'),
+        ]);
+        const accepted = (friendsRes.data.friends || [])
           .filter((f: any) => f.status === 'accepted')
           .map((f: any) => f.friend);
         setFriends(accepted);
+        const me = meRes.data;
+        if (me.event_city) {
+          setDefaultCity(me.event_city);
+          if (!city) setCity(me.event_city);
+        } else if (me.neighborhood) {
+          setDefaultCity(me.neighborhood);
+          if (!city) setCity(me.neighborhood);
+        }
       } catch { /* ignore */ }
     })();
   }, [user]);
@@ -193,7 +205,7 @@ export default function EventsPage() {
             type="text"
             value={city}
             onChange={(e) => setCity(e.target.value)}
-            placeholder="City (e.g. New York)"
+            placeholder={defaultCity || 'City (e.g. New York)'}
             className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 shadow-sm focus:border-slotted-400 focus:outline-none w-40"
           />
           <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">

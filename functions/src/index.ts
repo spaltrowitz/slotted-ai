@@ -1687,22 +1687,23 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
     // Persist top suggestions to suggestion_events
     for (const s of suggestions.slice(0, 5)) {
       const startDt = new Date(s.start);
-      await getSupabase()
-        .from("suggestion_events")
-        .upsert(
-          {
-            user_id: me.id,
-            friend_id: friendId,
-            suggested_start: s.start,
-            suggested_end: s.end,
-            day_of_week: startDt.getDay(),
-            hour_of_day: startDt.getHours(),
-            social_battery: me.social_battery || "open",
-            score: s.score / 100,
-          },
-          { onConflict: "user_id,friend_id,suggested_start" },
-        )
-        .catch(() => { /* ignore duplicate insert errors */ });
+      try {
+        await getSupabase()
+          .from("suggestion_events")
+          .upsert(
+            {
+              user_id: me.id,
+              friend_id: friendId,
+              suggested_start: s.start,
+              suggested_end: s.end,
+              day_of_week: startDt.getDay(),
+              hour_of_day: startDt.getHours(),
+              social_battery: me.social_battery || "open",
+              score: s.score / 100,
+            },
+            { onConflict: "user_id,friend_id,suggested_start" },
+          );
+      } catch { /* ignore duplicate insert errors */ }
     }
 
     res.json({
@@ -2442,11 +2443,16 @@ app.post("/meetups/:meetupId/add-to-calendar", requireAuth, async (req: AuthRequ
       });
 
       // Store the Google event ID on the meetup_participant row for reference
-      await getSupabase()
-        .from("meetup_participants")
-        .update({ google_event_id: gcalEvent.data.id })
-        .eq("meetup_id", meetupId)
-        .eq("user_id", me.id);
+      // (google_event_id column may need migration — see migrations/add_google_event_id.sql)
+      try {
+        await getSupabase()
+          .from("meetup_participants")
+          .update({ google_event_id: gcalEvent.data.id })
+          .eq("meetup_id", meetupId)
+          .eq("user_id", me.id);
+      } catch {
+        // Column may not exist yet — safe to ignore
+      }
 
       res.json({
         success: true,

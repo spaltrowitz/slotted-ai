@@ -26,6 +26,65 @@ interface SavedGroup {
   members: { id: string; displayName: string; photoUrl?: string }[];
 }
 
+/** Collapsible "How it works" explainer */
+function HowItWorks() {
+  const [open, setOpen] = useState(false);
+
+  const steps = [
+    { emoji: '1️⃣', title: 'Invite a friend', desc: 'Enter their email or share your invite link. They\'ll get a friend request when they sign up.' },
+    { emoji: '2️⃣', title: 'Connect calendars', desc: 'Both you and your friend connect a Google or Apple calendar in Settings so Slotted can find free times.' },
+    { emoji: '3️⃣', title: 'Find times', desc: 'Tap "Find times" on a friend — Slotted compares both calendars and suggests the best slots to meet.' },
+    { emoji: '4️⃣', title: 'Book it', desc: 'Pick a time and hit "Book it." Your friend gets a notification in their inbox to accept or decline.' },
+    { emoji: '5️⃣', title: 'Add to calendar', desc: 'After booking (or accepting), you\'ll both be prompted to save the event to a specific Google or Apple calendar.' },
+  ];
+
+  return (
+    <div className="mb-6">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between rounded-2xl border border-slotted-100 bg-gradient-to-r from-slotted-50/40 to-purple-50/30 px-5 py-3 text-left transition-all hover:shadow-sm"
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="text-base">💡</span>
+          <span className="text-sm font-semibold text-gray-800">How Slotted works</span>
+        </div>
+        <svg
+          className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="mt-2 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-4 animate-in slide-in-from-top-2 fade-in">
+          {steps.map((s, i) => (
+            <div key={i} className="flex gap-3">
+              <span className="text-lg flex-shrink-0 mt-0.5">{s.emoji}</span>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{s.title}</p>
+                <p className="text-xs text-gray-500 leading-relaxed">{s.desc}</p>
+              </div>
+            </div>
+          ))}
+          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 mt-2">
+            <p className="text-[11px] text-amber-700 leading-relaxed">
+              <span className="font-semibold">Tip:</span> Ask your friends to connect their calendar too — Slotted works best when both sides are synced!
+            </p>
+          </div>
+          <div className="rounded-xl bg-slotted-50 border border-slotted-200 px-4 py-2.5">
+            <p className="text-[11px] text-slotted-700 leading-relaxed">
+              <span className="font-semibold">📲 Install the app:</span> Add Slotted to your home screen for the best experience. Go to{' '}
+              <a href="/settings" className="underline font-medium hover:text-slotted-800">Settings</a>{' '}
+              to see install instructions for your device.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FriendsPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -322,12 +381,15 @@ export default function FriendsPage() {
 
   return (
     <AppShell>
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">Friends</h1>
         <p className="mt-1 text-sm text-gray-500">
           Your people. See who's around and feeling social 🫶
         </p>
       </div>
+
+      {/* How it works — collapsible */}
+      <HowItWorks />
 
       {/* FIND TIMES panel (1:1) */}
       {selectedFriendId && (

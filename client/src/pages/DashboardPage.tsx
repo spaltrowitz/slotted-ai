@@ -434,6 +434,20 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Calendar connected but no events — nudge to select calendars */}
+      {calendarConnected && calSynced && !calEventsLoading && calEvents.length === 0 && !calendarJustConnected && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <span className="text-lg">📅</span>
+          <p className="text-sm text-amber-800">
+            Your calendar is connected but no events are showing up.{' '}
+            <Link to="/settings" className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-700">
+              Go to Settings
+            </Link>{' '}
+            to make sure you've selected the specific calendars you want to sync.
+          </p>
+        </div>
+      )}
+
       {/* ─── LOADING SKELETON ─── */}
       {dashboardLoading && (
         <div className="mb-6 space-y-4 animate-pulse">

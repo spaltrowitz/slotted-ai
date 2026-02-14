@@ -40,6 +40,10 @@ export default function SettingsPage() {
   const [customCallEnd, setCustomCallEnd] = useState('13:00');
   const [customCallLabel, setCustomCallLabel] = useState('');
 
+  // Event interest preferences
+  const [eventInterests, setEventInterests] = useState<string[]>([]);
+  const [eventCity, setEventCity] = useState('');
+
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -66,6 +70,8 @@ export default function SettingsPage() {
             setOfficeDays(me.office_days.map((d: number) => dayMap[d]).filter(Boolean));
           }
           if (me.office_schedule_varies !== undefined) setOfficeVaries(me.office_schedule_varies);
+          if (me.event_interests) setEventInterests(me.event_interests);
+          if (me.event_city) setEventCity(me.event_city);
         }
       } catch {
         // silently fail
@@ -102,6 +108,8 @@ export default function SettingsPage() {
           officeDays: officeDaysInts,
           officeScheduleVaries: officeVaries,
           callWindows,
+          eventInterests,
+          eventCity,
         }),
       });
       if (!response.ok) {
@@ -907,59 +915,146 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* ═══════════════════════════════════════════════ */}
+        {/* STEP 5: EVENT INTERESTS                        */}
+        {/* ═══════════════════════════════════════════════ */}
+        <section>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">5</span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-800">Event Interests</h2>
+              <p className="text-[11px] text-gray-400">Tell us what types of events you enjoy — we'll help you find things to do with friends</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 pl-10">
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+              {/* Event types */}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs">🎭</span>
+                  <label className="text-[11px] font-semibold text-gray-700">
+                    What are you into?
+                  </label>
+                </div>
+                <p className="mt-0.5 text-[10px] text-gray-400">Select all that interest you</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[
+                    { value: 'theater', label: 'Theater & Broadway', emoji: '🎭' },
+                    { value: 'concerts', label: 'Concerts & Live Music', emoji: '🎵' },
+                    { value: 'sports', label: 'Sports Games', emoji: '⚽' },
+                    { value: 'comedy', label: 'Comedy Shows', emoji: '😂' },
+                    { value: 'festivals', label: 'Festivals', emoji: '🎪' },
+                    { value: 'dance', label: 'Dance & Ballet', emoji: '💃' },
+                    { value: 'opera', label: 'Opera & Classical', emoji: '🎻' },
+                  ].map((interest) => {
+                    const selected = eventInterests.includes(interest.value);
+                    return (
+                      <button
+                        key={interest.value}
+                        type="button"
+                        onClick={() => {
+                          setEventInterests((prev) =>
+                            prev.includes(interest.value)
+                              ? prev.filter((v) => v !== interest.value)
+                              : [...prev, interest.value]
+                          );
+                        }}
+                        className={`rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
+                          selected
+                            ? 'border-slotted-400 bg-slotted-50 text-slotted-700 shadow-sm'
+                            : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-slotted-50/30'
+                        }`}
+                      >
+                        {interest.emoji} {interest.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Default city */}
+              <div className="mt-5 border-t border-gray-100 pt-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs">📍</span>
+                  <label className="text-[11px] font-semibold text-gray-700">
+                    Default city for event search
+                  </label>
+                </div>
+                <p className="mt-0.5 text-[10px] text-gray-400">We'll pre-fill this when you search for events</p>
+                <input
+                  type="text"
+                  value={eventCity}
+                  onChange={(e) => setEventCity(e.target.value)}
+                  placeholder="e.g. New York, Los Angeles, Chicago"
+                  className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100 transition-all"
+                />
+              </div>
+
+              {/* Info note */}
+              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3">
+                <p className="text-[11px] text-blue-700">
+                  💡 These preferences power the <strong>Events</strong> tab — we search SeatGeek & Ticketmaster for shows, concerts, and more,
+                  then match them with your friends' availability so you can find the perfect time to go together.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Feedback */}
         <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-50 to-fuchsia-50 text-base">
-            💬
+          <div className="flex items-start gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-50 to-fuchsia-50 text-base">
+              💬
+            </div>
+            <div className="flex-1">
+              <h2 className="text-sm font-semibold text-gray-900">Share Feedback</h2>
+              <p className="mt-0.5 text-[11px] text-gray-400">
+                Found a bug? Have an idea? Every message goes straight to the developer.
+              </p>
+            </div>
           </div>
-          <div className="flex-1">
-            <h2 className="text-sm font-semibold text-gray-900">Share Feedback</h2>
-            <p className="mt-0.5 text-[11px] text-gray-400">
-              Found a bug? Have an idea? Every message goes straight to the developer.
+          <textarea
+            ref={feedbackRef}
+            value={feedbackText}
+            onChange={(e) => setFeedbackText(e.target.value)}
+            placeholder="What's on your mind?"
+            rows={2}
+            className="mt-3 w-full resize-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition-all focus:border-slotted-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slotted-100"
+          />
+          <div className="mt-2 flex items-center justify-between">
+            <p className="text-[10px] text-gray-400">
+              Sent from {user?.email}
             </p>
+            <button
+              disabled={!feedbackText.trim() || feedbackSending}
+              onClick={async () => {
+                setFeedbackSending(true);
+                try {
+                  const token = await user?.getIdToken();
+                  await fetch('/api/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ message: feedbackText.trim() }),
+                  });
+                  setFeedbackSent(true);
+                  setFeedbackText('');
+                  setTimeout(() => setFeedbackSent(false), 3000);
+                } catch {
+                  // silently fail for now
+                } finally {
+                  setFeedbackSending(false);
+                }
+              }}
+              className={`rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-sm ${
+                feedbackSent ? 'bg-emerald-500' : 'gradient-btn'
+              }`}
+            >
+              {feedbackSending ? 'Sending\u2026' : feedbackSent ? 'Sent! Thank you \u2713' : 'Send Feedback'}
+            </button>
           </div>
         </div>
-        <textarea
-          ref={feedbackRef}
-          value={feedbackText}
-          onChange={(e) => setFeedbackText(e.target.value)}
-          placeholder="What's on your mind?"
-          rows={2}
-          className="mt-3 w-full resize-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition-all focus:border-slotted-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slotted-100"
-        />
-        <div className="mt-2 flex items-center justify-between">
-          <p className="text-[10px] text-gray-400">
-            Sent from {user?.email}
-          </p>
-          <button
-            disabled={!feedbackText.trim() || feedbackSending}
-            onClick={async () => {
-              setFeedbackSending(true);
-              try {
-                const token = await user?.getIdToken();
-                await fetch('/api/feedback', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                  body: JSON.stringify({ message: feedbackText.trim() }),
-                });
-                setFeedbackSent(true);
-                setFeedbackText('');
-                setTimeout(() => setFeedbackSent(false), 3000);
-              } catch {
-                // silently fail for now
-              } finally {
-                setFeedbackSending(false);
-              }
-            }}
-            className={`rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-sm ${
-              feedbackSent ? 'bg-emerald-500' : 'gradient-btn'
-            }`}
-          >
-            {feedbackSending ? 'Sending\u2026' : feedbackSent ? 'Sent! Thank you \u2713' : 'Send Feedback'}
-          </button>
-        </div>
-      </div>
       </div>
     </AppShell>
   );
