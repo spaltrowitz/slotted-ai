@@ -99,8 +99,68 @@ export default function LoginPage() {
         </div>
       </div>
 
+      {/* Local vs Long-Distance — two modes */}
+      <section className="relative z-10 mx-auto max-w-4xl px-6 pb-10">
+        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">
+          Works for all your friendships
+        </h2>
+        <p className="text-center text-sm text-gray-500 mb-8 max-w-lg mx-auto">
+          Whether your friends are across town or across the country, Slotted helps you stay connected.
+        </p>
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          {/* Local Friends */}
+          <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50/80 to-emerald-50/60 p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white shadow-sm text-2xl">🏙️</div>
+              <div>
+                <h3 className="font-display text-base font-bold text-gray-900">Local Friends</h3>
+                <p className="text-xs text-teal-600 font-medium">In-person hangouts made easy</p>
+              </div>
+            </div>
+            <ul className="space-y-2.5">
+              {[
+                { emoji: '📍', text: 'Set your neighborhood — get meetup spots near you' },
+                { emoji: '🕐', text: 'Pick preferred hangout times (weekday lunches, weekend brunches, etc.)' },
+                { emoji: '🚶', text: 'Smart travel buffers so you\'re never rushing' },
+                { emoji: '✨', text: 'AI finds the best overlapping free time between you' },
+              ].map((item, i) => (
+                <li key={i} className="flex items-start gap-2.5">
+                  <span className="text-base mt-0.5 shrink-0">{item.emoji}</span>
+                  <span className="text-xs text-gray-600 leading-relaxed">{item.text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Long-Distance Friends */}
+          <div className="rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/80 to-fuchsia-50/60 p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white shadow-sm text-2xl">🌎</div>
+              <div>
+                <h3 className="font-display text-base font-bold text-gray-900">Long-Distance Friends</h3>
+                <p className="text-xs text-violet-600 font-medium">Stay close even when far apart</p>
+              </div>
+            </div>
+            <ul className="space-y-2.5">
+              {[
+                { emoji: '📱', text: 'Set call & FaceTime windows separately from in-person times' },
+                { emoji: '🌐', text: 'Automatic timezone-aware scheduling across time zones' },
+                { emoji: '⏱️', text: 'Choose your ideal call length — quick catch-up or deep conversation' },
+                { emoji: '🔔', text: 'Gentle nudges when it\'s been too long since you last connected' },
+              ].map((item, i) => (
+                <li key={i} className="flex items-start gap-2.5">
+                  <span className="text-base mt-0.5 shrink-0">{item.emoji}</span>
+                  <span className="text-xs text-gray-600 leading-relaxed">{item.text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
       {/* How it works — compact 3-column */}
-      <section className="relative z-10 mx-auto max-w-4xl px-6 pb-8">
+      <section className="relative z-10 mx-auto max-w-4xl px-6 pb-10">
         <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-6">
           How it works
         </h2>
@@ -145,6 +205,18 @@ export default function LoginPage() {
               <p className="mt-1.5 text-xs leading-relaxed text-gray-500">{item.desc}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Social battery callout */}
+      <section className="relative z-10 mx-auto max-w-4xl px-6 pb-10">
+        <div className="rounded-2xl border border-amber-100 bg-gradient-to-r from-amber-50/80 via-orange-50/50 to-yellow-50/60 p-6 shadow-sm text-center">
+          <span className="text-3xl">🔋</span>
+          <h3 className="font-display text-base font-bold text-gray-900 mt-2">Your social energy, respected</h3>
+          <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto leading-relaxed">
+            Set your weekly social battery — mark days as open, ask-me, or recharging.
+            Slotted only suggests plans when you actually have the energy for them.
+          </p>
         </div>
       </section>
 
