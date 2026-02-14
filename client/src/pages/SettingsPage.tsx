@@ -149,10 +149,11 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
+      {/* ── Header ── */}
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">Settings</h1>
-          <p className="mt-1 text-sm text-gray-500">Your account and preferences</p>
+          <p className="mt-1 text-sm text-gray-500">Set up your preferences step by step</p>
         </div>
         <button
           onClick={handleSave}
@@ -160,777 +161,816 @@ export default function SettingsPage() {
             saved ? 'bg-emerald-500' : 'gradient-btn'
           }`}
         >
-          {saved ? 'Saved! ✓' : 'Save Changes'}
+          {saved ? 'Saved! \u2713' : 'Save Changes'}
         </button>
       </div>
 
-      {/* 2-column layout */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        {/* Left column */}
-        <div className="space-y-5">
+      <div className="space-y-10">
 
-          {/* ─── Compact Profile & Calendar ─── */}
-          <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-            {/* Profile row */}
-            <div className="flex items-center gap-3">
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" />
-              ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-bold text-white">
-                  {user?.displayName?.[0] ?? '?'}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900">{user?.displayName}</p>
-                <p className="text-xs text-gray-400 truncate">{user?.email}</p>
-              </div>
+        {/* ═══════════════════════════════════════════════ */}
+        {/* STEP 1: ACCOUNT & CALENDARS                    */}
+        {/* ═══════════════════════════════════════════════ */}
+        <section>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">1</span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-800">Account & Calendars</h2>
+              <p className="text-[11px] text-gray-400">Connect your calendars so Slotted knows when you're free</p>
             </div>
+          </div>
 
-            {/* Calendar status — compact inline */}
-            <div className="mt-3 border-t border-gray-100 pt-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-gray-100 shadow-sm">
-                    {googleIcon}
-                  </div>
-                  <span className="text-xs font-medium text-gray-700">Google Calendar</span>
-                  {googleCalendarConnected ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                      <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
-                      Connected
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500">
-                      Not connected
-                    </span>
-                  )}
-                </div>
-                {googleCalendarConnected ? (
-                  <button
-                    onClick={() => setShowCalendarDetails(!showCalendarDetails)}
-                    className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700"
-                  >
-                    {showCalendarDetails ? 'Hide' : 'Manage'}
-                  </button>
+          <div className="space-y-4 pl-10">
+            {/* Profile & Calendar card */}
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+              {/* Profile row */}
+              <div className="flex items-center gap-3">
+                {user?.photoURL ? (
+                  <img src={user.photoURL} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" />
                 ) : (
-                  <button
-                    onClick={connectCalendar}
-                    className="rounded-lg gradient-btn px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md"
-                  >
-                    Connect
-                  </button>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-bold text-white">
+                    {user?.displayName?.[0] ?? '?'}
+                  </div>
                 )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{user?.displayName}</p>
+                  <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+                </div>
               </div>
 
-              {/* Expandable calendar details */}
-              {showCalendarDetails && googleCalendarConnected && (
-                <div className="mt-3 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
-                  <CalendarPicker source="google" />
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      onClick={async () => { disconnectCalendar(); await signOut(); signInWithGoogle(); }}
-                      className="flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-50"
-                    >
-                      Switch calendar
-                    </button>
-                    <button
-                      onClick={disconnectCalendar}
-                      className="flex-1 rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50"
-                    >
-                      Disconnect
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {!googleCalendarConnected && (
-                <p className="mt-1.5 text-[11px] text-gray-400">
-                  We only read busy/free times — never event names or details
-                </p>
-              )}
-
-              {/* Apple Calendar — compact */}
-              <div className="mt-2 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-gray-100 shadow-sm text-sm">
-                    🍎
-                  </div>
-                  <span className="text-xs font-medium text-gray-700">Apple Calendar</span>
-                  {appleCalendarConnected ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                      <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
-                      Connected
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500">
-                      Not connected
-                    </span>
-                  )}
-                </div>
-                {appleCalendarConnected ? (
-                  <button
-                    onClick={() => setShowAppleCalendarDetails(!showAppleCalendarDetails)}
-                    className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700"
-                  >
-                    {showAppleCalendarDetails ? 'Hide' : 'Manage'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setShowAppleConnect(!showAppleConnect)}
-                    className="rounded-lg gradient-btn px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md"
-                  >
-                    Connect
-                  </button>
-                )}
-              </div>
-
-              {/* Expandable Apple calendar details */}
-              {showAppleCalendarDetails && appleCalendarConnected && (
-                <div className="mt-2 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
-                  <CalendarPicker source="apple" />
-                  <div className="pt-1">
-                    <button
-                      onClick={disconnectAppleCalendar}
-                      className="w-full rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50"
-                    >
-                      Disconnect Apple Calendar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Apple connect form — improved UX */}
-              {showAppleConnect && !appleCalendarConnected && (
-                <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50/50 p-3 space-y-2">
-                  <p className="text-[11px] text-gray-600">
-                    Enter your Apple ID and an <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">app-specific password</a> to connect.
-                  </p>
-                  <button
-                    onClick={() => setShowAppleWhy(!showAppleWhy)}
-                    className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <svg className={`h-3 w-3 transition-transform ${showAppleWhy ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                    Why do I need this?
-                  </button>
-                  {showAppleWhy && (
-                    <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-2 text-[10px] text-gray-500 space-y-1">
-                      <p>Apple doesn't offer a calendar API like Google does, so all third-party apps (Calendly, Reclaim, etc.) use the same approach:</p>
-                      <ol className="list-decimal list-inside space-y-0.5">
-                        <li>Go to <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">appleid.apple.com</a> → Sign-In and Security</li>
-                        <li>Generate an App-Specific Password (name it "Slotted")</li>
-                        <li>Paste it below — we only read busy/free times, never event details</li>
-                      </ol>
-                      <p className="text-gray-400">You can revoke this anytime from your Apple ID settings.</p>
+              {/* Calendar status */}
+              <div className="mt-3 border-t border-gray-100 pt-3">
+                {/* Google Calendar */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-gray-100 shadow-sm">
+                      {googleIcon}
                     </div>
-                  )}
-                  <input
-                    type="email"
-                    value={appleEmail}
-                    onChange={(e) => { setAppleEmail(e.target.value); setAppleError(null); }}
-                    placeholder="Apple ID email (e.g. you@icloud.com)"
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
-                  />
-                  <p className="text-[10px] text-gray-400">Not sure? Check Settings → Apple ID on your iPhone, or go to appleid.apple.com</p>
-                  <input
-                    type="password"
-                    value={applePassword}
-                    onChange={(e) => { setApplePassword(e.target.value); setAppleError(null); }}
-                    placeholder="App-specific password"
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
-                  />
-                  {appleError && (
-                    <p className="text-[11px] text-red-600">{appleError}</p>
-                  )}
-                  {appleSuccess && (
-                    <p className="text-[11px] text-emerald-700">✓ Connected!</p>
-                  )}
-                  <button
-                    onClick={async () => {
-                      if (!appleEmail || !applePassword) {
-                        setAppleError('Please enter both email and app-specific password.');
-                        return;
-                      }
-                      setAppleConnecting(true);
-                      setAppleError(null);
-                      setAppleSuccess(false);
-                      const result = await connectAppleCalendar(appleEmail, applePassword);
-                      setAppleConnecting(false);
-                      if (result.success) {
-                        setAppleSuccess(true);
-                        setAppleEmail('');
-                        setApplePassword('');
-                        setShowAppleConnect(false);
-                      } else {
-                        setAppleError(result.error || 'Connection failed.');
-                      }
-                    }}
-                    disabled={appleConnecting || !appleEmail || !applePassword}
-                    className="w-full rounded-lg bg-gray-900 px-3 py-2 text-[11px] font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {appleConnecting ? 'Connecting…' : 'Connect'}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ─── Push Notifications ─── */}
-          <PushNotificationPrompt />
-
-          {/* ═══ IN-PERSON MEETUPS ═══ */}
-          <div className="mb-3 mt-6">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">📍</span>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">In-Person Meetups</h3>
-            </div>
-            <div className="mt-1 h-px bg-gradient-to-r from-gray-200 to-transparent"></div>
-          </div>
-
-          {/* ─── Neighborhoods ─── */}
-          <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-            <h2 className="text-sm font-semibold text-gray-900">📍 Neighborhoods</h2>
-            <p className="mt-0.5 text-[11px] text-gray-400">Helps suggest meetups near you</p>
-
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Home */}
-              <div>
-                <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">Home</label>
-                <input
-                  type="text"
-                  value={neighborhood}
-                  onChange={(e) => setNeighborhood(e.target.value)}
-                  placeholder="e.g. West Village, NYC"
-                  className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 shadow-sm focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
-                />
-              </div>
-              {/* Work */}
-              <div>
-                <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">Work</label>
-                <input
-                  type="text"
-                  value={workNeighborhood}
-                  onChange={(e) => setWorkNeighborhood(e.target.value)}
-                  placeholder="e.g. Midtown, NYC"
-                  className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 shadow-sm focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
-                />
-              </div>
-            </div>
-
-            {/* Office days */}
-            <div className="mt-3 border-t border-gray-100 pt-3">
-              <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">Office days</label>
-              <p className="mt-0.5 text-[10px] text-gray-400">Which days are you typically in the office?</p>
-              <div className="mt-2 flex items-center gap-2">
-                <div className="flex gap-1">
-                  {['M', 'Tu', 'W', 'Th', 'F'].map((day) => {
-                    const fullDay = ({ M: 'Mon', Tu: 'Tue', W: 'Wed', Th: 'Thu', F: 'Fri' } as Record<string, string>)[day]!;
-                    const isSelected = officeDays.includes(fullDay);
-                    return (
-                      <button
-                        key={day}
-                        onClick={() => { if (!officeVaries) toggleOfficeDay(fullDay); }}
-                        disabled={officeVaries}
-                        className={`h-8 w-8 rounded-lg border text-[11px] font-bold transition-all ${
-                          officeVaries
-                            ? 'border-gray-100 text-gray-300 cursor-not-allowed'
-                            : isSelected
-                              ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
-                              : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        {day}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  onClick={() => { setOfficeVaries(!officeVaries); if (!officeVaries) setOfficeDays([]); }}
-                  className={`ml-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all ${
-                    officeVaries
-                      ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
-                      : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-gray-50'
-                  }`}
-                >
-                  Varies week to week
-                </button>
-              </div>
-            </div>
-
-          </div>
-
-          {/* ─── Social Battery (recharge) ─── */}
-          <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">🔋</span>
-              <h2 className="text-sm font-semibold text-gray-900">Social Battery</h2>
-            </div>
-            <p className="mt-1 text-xs text-gray-400">
-              How often do you want to hang out with <span className="font-semibold text-gray-600">anyone</span> — all friends combined, not per person?
-            </p>
-            <div className="mt-3 grid grid-cols-1 gap-2">
-              {[
-                { value: 'daily', emoji: '🥳', label: 'Every day', desc: "I'm happy to see any friend on any day — no limit" },
-                { value: '2-3-week', emoji: '😊', label: '2–3 plans per week', desc: 'I like being social but need a couple days between any plans' },
-                { value: 'weekly', emoji: '🧘', label: 'About 1 plan per week', desc: 'One hangout (with anyone) per week is my sweet spot' },
-                { value: 'biweekly', emoji: '🏡', label: '1–2 plans per month', desc: 'I prefer lots of downtime between any social plans' },
-              ].map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setSocialRecharge(opt.value)}
-                  className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-left transition-all ${
-                    socialRecharge === opt.value
-                      ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 shadow-sm'
-                      : 'border-gray-200 hover:border-slotted-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <span className="text-lg">{opt.emoji}</span>
-                  <div className="min-w-0">
-                    <p className={`text-xs font-semibold ${socialRecharge === opt.value ? 'text-slotted-700' : 'text-gray-800'}`}>{opt.label}</p>
-                    <p className="text-[10px] text-gray-400">{opt.desc}</p>
+                    <span className="text-xs font-medium text-gray-700">Google Calendar</span>
+                    {googleCalendarConnected ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                        <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
+                        Connected
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500">
+                        Not connected
+                      </span>
+                    )}
                   </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Recharging days checkboxes */}
-            <div className="mt-4">
-              <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                Always-recharge days
-              </label>
-              <p className="mt-0.5 text-[10px] text-gray-400">Select days you never want plans with anyone — Slotted won't suggest hangouts on these days</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {[
-                  { day: 0, label: 'Sun' },
-                  { day: 1, label: 'Mon' },
-                  { day: 2, label: 'Tue' },
-                  { day: 3, label: 'Wed' },
-                  { day: 4, label: 'Thu' },
-                  { day: 5, label: 'Fri' },
-                  { day: 6, label: 'Sat' },
-                ].map(({ day, label }) => {
-                  const selected = rechargingDays.includes(day);
-                  return (
+                  {googleCalendarConnected ? (
                     <button
-                      key={day}
-                      onClick={() => setRechargingDays((prev) =>
-                        prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
-                      )}
-                      className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
-                        selected
-                          ? 'border-red-300 bg-red-50 text-red-700'
-                          : 'border-gray-200 text-gray-500 hover:border-red-200 hover:bg-red-50/50'
-                      }`}
+                      onClick={() => setShowCalendarDetails(!showCalendarDetails)}
+                      className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700"
                     >
-                      {selected && <span>🔴</span>}
-                      {label}
+                      {showCalendarDetails ? 'Hide' : 'Manage'}
                     </button>
-                  );
-                })}
+                  ) : (
+                    <button
+                      onClick={connectCalendar}
+                      className="rounded-lg gradient-btn px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md"
+                    >
+                      Connect
+                    </button>
+                  )}
+                </div>
+
+                {/* Expandable Google calendar details */}
+                {showCalendarDetails && googleCalendarConnected && (
+                  <div className="mt-3 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
+                    <CalendarPicker source="google" />
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={async () => { disconnectCalendar(); await signOut(); signInWithGoogle(); }}
+                        className="flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-50"
+                      >
+                        Switch calendar
+                      </button>
+                      <button
+                        onClick={disconnectCalendar}
+                        className="flex-1 rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!googleCalendarConnected && (
+                  <p className="mt-1.5 text-[11px] text-gray-400">
+                    We only read busy/free times — never event names or details
+                  </p>
+                )}
+
+                {/* Apple Calendar */}
+                <div className="mt-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-gray-100 shadow-sm text-sm">
+                      🍎
+                    </div>
+                    <span className="text-xs font-medium text-gray-700">Apple Calendar</span>
+                    {appleCalendarConnected ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                        <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
+                        Connected
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500">
+                        Not connected
+                      </span>
+                    )}
+                  </div>
+                  {appleCalendarConnected ? (
+                    <button
+                      onClick={() => setShowAppleCalendarDetails(!showAppleCalendarDetails)}
+                      className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700"
+                    >
+                      {showAppleCalendarDetails ? 'Hide' : 'Manage'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowAppleConnect(!showAppleConnect)}
+                      className="rounded-lg gradient-btn px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md"
+                    >
+                      Connect
+                    </button>
+                  )}
+                </div>
+
+                {/* Expandable Apple calendar details */}
+                {showAppleCalendarDetails && appleCalendarConnected && (
+                  <div className="mt-2 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
+                    <CalendarPicker source="apple" />
+                    <div className="pt-1">
+                      <button
+                        onClick={disconnectAppleCalendar}
+                        className="w-full rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50"
+                      >
+                        Disconnect Apple Calendar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Apple connect form */}
+                {showAppleConnect && !appleCalendarConnected && (
+                  <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50/50 p-3 space-y-2">
+                    <p className="text-[11px] text-gray-600">
+                      Enter your Apple ID and an <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">app-specific password</a> to connect.
+                    </p>
+                    <button
+                      onClick={() => setShowAppleWhy(!showAppleWhy)}
+                      className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <svg className={`h-3 w-3 transition-transform ${showAppleWhy ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                      Why do I need this?
+                    </button>
+                    {showAppleWhy && (
+                      <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-2 text-[10px] text-gray-500 space-y-1">
+                        <p>Apple doesn't offer a calendar API like Google does, so all third-party apps (Calendly, Reclaim, etc.) use the same approach:</p>
+                        <ol className="list-decimal list-inside space-y-0.5">
+                          <li>Go to <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">appleid.apple.com</a> → Sign-In and Security</li>
+                          <li>Generate an App-Specific Password (name it "Slotted")</li>
+                          <li>Paste it below — we only read busy/free times, never event details</li>
+                        </ol>
+                        <p className="text-gray-400">You can revoke this anytime from your Apple ID settings.</p>
+                      </div>
+                    )}
+                    <input
+                      type="email"
+                      value={appleEmail}
+                      onChange={(e) => { setAppleEmail(e.target.value); setAppleError(null); }}
+                      placeholder="Apple ID email (e.g. you@icloud.com)"
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
+                    />
+                    <p className="text-[10px] text-gray-400">Not sure? Check Settings → Apple ID on your iPhone, or go to appleid.apple.com</p>
+                    <input
+                      type="password"
+                      value={applePassword}
+                      onChange={(e) => { setApplePassword(e.target.value); setAppleError(null); }}
+                      placeholder="App-specific password"
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
+                    />
+                    {appleError && (
+                      <p className="text-[11px] text-red-600">{appleError}</p>
+                    )}
+                    {appleSuccess && (
+                      <p className="text-[11px] text-emerald-700">✓ Connected!</p>
+                    )}
+                    <button
+                      onClick={async () => {
+                        if (!appleEmail || !applePassword) {
+                          setAppleError('Please enter both email and app-specific password.');
+                          return;
+                        }
+                        setAppleConnecting(true);
+                        setAppleError(null);
+                        setAppleSuccess(false);
+                        const result = await connectAppleCalendar(appleEmail, applePassword);
+                        setAppleConnecting(false);
+                        if (result.success) {
+                          setAppleSuccess(true);
+                          setAppleEmail('');
+                          setApplePassword('');
+                          setShowAppleConnect(false);
+                        } else {
+                          setAppleError(result.error || 'Connection failed.');
+                        }
+                      }}
+                      disabled={appleConnecting || !appleEmail || !applePassword}
+                      className="w-full rounded-lg bg-gray-900 px-3 py-2 text-[11px] font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {appleConnecting ? 'Connecting\u2026' : 'Connect'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
-              <p className="text-[11px] text-gray-500">
-                {rechargingDays.length > 0
-                  ? `💡 Slotted will never suggest plans on ${rechargingDays.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}.`
-                  : socialRecharge === 'daily'
-                    ? '💡 Slotted will look for every good opportunity to help you connect with friends.'
-                    : socialRecharge === '2-3-week'
-                      ? '💡 Slotted will suggest plans with enough breathing room between hangouts.'
-                      : socialRecharge === 'weekly'
-                        ? '💡 Slotted will space out suggestions and protect your downtime.'
-                        : '💡 Slotted will be very selective, only suggesting the best opportunities.'}
-              </p>
+            {/* Push Notifications */}
+            <PushNotificationPrompt />
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════ */}
+        {/* STEP 2: SOCIAL BATTERY                         */}
+        {/* ═══════════════════════════════════════════════ */}
+        <section>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">2</span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-800">Social Battery</h2>
+              <p className="text-[11px] text-gray-400">How much social time works for you across all friends?</p>
             </div>
           </div>
-        </div>
 
-        {/* Right column */}
-        <div className="space-y-5">
-
-          {/* ─── Scheduling Preferences (consolidated) ─── */}
-          <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-            <h2 className="text-sm font-semibold text-gray-900">Scheduling Preferences</h2>
-            <p className="mt-0.5 text-[11px] text-gray-400">Controls how Slotted's AI suggests plans for you</p>
-
-            {/* Planning style */}
-            <div className="mt-4">
-              <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                Planning style
-              </label>
-              <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className="space-y-4 pl-10">
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+              <p className="text-xs text-gray-500 mb-3">
+                How often do you want to hang out with <span className="font-semibold text-gray-700">anyone</span> — all friends combined, not per person?
+              </p>
+              <div className="grid grid-cols-1 gap-2">
                 {[
-                  { value: 'spontaneous', emoji: '⚡', label: 'Spontaneous' },
-                  { value: 'flexible', emoji: '🔄', label: 'Flexible' },
-                  { value: 'planner', emoji: '📋', label: 'Planner' },
+                  { value: 'daily', emoji: '🥳', label: 'Every day', desc: "I'm happy to see any friend on any day — no limit" },
+                  { value: '2-3-week', emoji: '😊', label: '2–3 plans per week', desc: 'I like being social but need a couple days between any plans' },
+                  { value: 'weekly', emoji: '🧘', label: 'About 1 plan per week', desc: 'One hangout (with anyone) per week is my sweet spot' },
+                  { value: 'biweekly', emoji: '🏡', label: '1–2 plans per month', desc: 'I prefer lots of downtime between any social plans' },
                 ].map((opt) => (
                   <button
                     key={opt.value}
-                    onClick={() => setPlanningStyle(opt.value)}
-                    className={`rounded-xl border px-3 py-2.5 text-center transition-all ${
-                      planningStyle === opt.value
+                    onClick={() => setSocialRecharge(opt.value)}
+                    className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-left transition-all ${
+                      socialRecharge === opt.value
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 shadow-sm'
-                        : 'border-gray-200 text-gray-600 hover:border-slotted-200 hover:bg-gray-50'
+                        : 'border-gray-200 hover:border-slotted-200 hover:bg-gray-50'
                     }`}
                   >
-                    <span className="text-base">{opt.emoji}</span>
-                    <p className={`mt-0.5 text-[11px] font-semibold ${planningStyle === opt.value ? 'text-slotted-700' : 'text-gray-800'}`}>{opt.label}</p>
-                  </button>
-                ))}
-              </div>
-              <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2">
-                <p className="text-[10px] text-gray-500">
-                  {planningStyle === 'spontaneous'
-                    ? '⚡ AI will suggest same-day and next-day plans, prioritize friends who are free right now, and send quick "are you free tonight?" nudges.'
-                    : planningStyle === 'planner'
-                      ? '📋 AI will suggest plans 1–4 weeks in advance, help you lock in recurring hangouts, and send gentle reminders to confirm early.'
-                      : '🔄 AI adapts to each friendship — when matching with another planner, it\'ll book further out. With spontaneous friends, it\'ll surface last-minute opportunities.'}
-                </p>
-              </div>
-            </div>
-
-            {/* Preferred hangout times */}
-            <div className="mt-4">
-              <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                Preferred hangout times
-              </label>
-              <div className="mt-2 grid grid-cols-2 gap-4">
-                {/* Weekdays column */}
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Weekdays</p>
-                  {[
-                    { value: 'weekday-morning', emoji: '🌅', label: 'Morning' },
-                    { value: 'weekday-afternoon', emoji: '☀️', label: 'Afternoon' },
-                    { value: 'weekday-evening', emoji: '🌆', label: 'Evening' },
-                  ].map((opt) => {
-                    const selected = preferredTimes.includes(opt.value);
-                    return (
-                      <button
-                        key={opt.value}
-                        onClick={() => toggleTime(opt.value)}
-                        className={`w-full rounded-lg border px-3 py-2 text-left text-[11px] transition-all ${
-                          selected
-                            ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm font-semibold'
-                            : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        {opt.emoji} {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* Weekends column */}
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Weekends</p>
-                  {[
-                    { value: 'weekend-morning', emoji: '🥐', label: 'Morning' },
-                    { value: 'weekend-afternoon', emoji: '☀️', label: 'Afternoon' },
-                    { value: 'weekend-evening', emoji: '🌙', label: 'Evening' },
-                  ].map((opt) => {
-                    const selected = preferredTimes.includes(opt.value);
-                    return (
-                      <button
-                        key={opt.value}
-                        onClick={() => toggleTime(opt.value)}
-                        className={`w-full rounded-lg border px-3 py-2 text-left text-[11px] transition-all ${
-                          selected
-                            ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm font-semibold'
-                            : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        {opt.emoji} {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Meetup buffer — slider */}
-            <div className="mt-4">
-              <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                Meetup buffer
-              </label>
-              <p className="mt-0.5 text-[10px] text-gray-400">Padding before/after each meetup</p>
-              <div className="mt-2 flex items-center gap-3">
-                <input
-                  type="range"
-                  min={0}
-                  max={60}
-                  step={15}
-                  value={travelBuffer}
-                  onChange={(e) => setTravelBuffer(Number(e.target.value))}
-                  className="flex-1 accent-teal-500 h-1.5 cursor-pointer"
-                />
-                <span className="min-w-[3rem] rounded-lg border border-slotted-200 bg-slotted-50 px-2 py-1 text-center text-[11px] font-bold text-slotted-700">
-                  {travelBuffer} min
-                </span>
-              </div>
-            </div>
-
-            {/* Trip buffer — two toggles */}
-            <div className="mt-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs">✈️</span>
-                <label className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                  Trip buffer
-                </label>
-              </div>
-              <p className="mt-0.5 text-[10px] text-gray-400">Block a recovery day around your trips</p>
-              <div className="mt-2 space-y-2">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={tripBufferBefore}
-                    onClick={() => setTripBufferBefore(!tripBufferBefore)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                      tripBufferBefore ? 'bg-slotted-500' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                      tripBufferBefore ? 'translate-x-[18px]' : 'translate-x-[3px]'
-                    }`} />
-                  </button>
-                  <span className="text-xs text-gray-600">Day before trip</span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={tripBufferAfter}
-                    onClick={() => setTripBufferAfter(!tripBufferAfter)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                      tripBufferAfter ? 'bg-slotted-500' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                      tripBufferAfter ? 'translate-x-[18px]' : 'translate-x-[3px]'
-                    }`} />
-                  </button>
-                  <span className="text-xs text-gray-600">Day after trip</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Privacy settings — share hangouts */}
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs">👥</span>
-                    <label className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                      Share hangout activity
-                    </label>
-                  </div>
-                  <p className="mt-0.5 text-[10px] text-gray-400">Let friends see when you complete hangouts</p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={shareHangouts}
-                  onClick={() => setShareHangouts(!shareHangouts)}
-                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                    shareHangouts ? 'bg-slotted-500' : 'bg-gray-200'
-                  }`}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                    shareHangouts ? 'translate-x-[18px]' : 'translate-x-[3px]'
-                  }`} />
-                </button>
-              </div>
-              <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
-                <p className="text-[11px] text-gray-500">
-                  {shareHangouts
-                    ? '✅ Friends will see "You caught up with [Name]" in their activity feed'
-                    : '🔒 Your hangouts are completely private — only you can see them'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* ═══ VIRTUAL CATCHUPS ═══ */}
-          <div className="-mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">📞</span>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">Virtual Catchups</h3>
-            </div>
-            <div className="mt-1 h-px bg-gradient-to-r from-gray-200 to-transparent"></div>
-          </div>
-
-          {/* ─── Call Windows ─── */}
-          <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">📞</span>
-              <h2 className="text-sm font-semibold text-gray-900">Call Windows</h2>
-            </div>
-            <p className="mt-0.5 text-[11px] text-gray-400">
-              Recurring times you're available for phone or video calls — great for long-distance friends
-            </p>
-
-            {callWindows.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {callWindows.map((w, idx) => {
-                  const dayLabel = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w.day] || '?';
-                  return (
-                    <div key={idx} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/30 px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-semibold text-gray-700">{dayLabel}</span>
-                        <span className="text-[11px] text-gray-500">{w.start} – {w.end}</span>
-                        {w.label && <span className="text-[10px] text-gray-400">({w.label})</span>}
-                      </div>
-                      <button
-                        onClick={() => setCallWindows((prev) => prev.filter((_, i) => i !== idx))}
-                        className="text-gray-400 hover:text-red-500 transition-colors"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
+                    <span className="text-lg">{opt.emoji}</span>
+                    <div className="min-w-0">
+                      <p className={`text-xs font-semibold ${socialRecharge === opt.value ? 'text-slotted-700' : 'text-gray-800'}`}>{opt.label}</p>
+                      <p className="text-[10px] text-gray-400">{opt.desc}</p>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Quick-add presets */}
-            <div className="mt-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mb-2">Quick add</p>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { label: '🥪 Weekday lunch', days: [1,2,3,4,5], start: '12:00', end: '13:00', tag: 'Lunch break' },
-                  { label: '🚗 Morning commute', days: [1,2,3,4,5], start: '07:30', end: '09:00', tag: 'Commute' },
-                  { label: '🚙 Evening commute', days: [1,2,3,4,5], start: '17:00', end: '18:30', tag: 'Commute' },
-                  { label: '🌆 Weekday evening', days: [1,2,3,4,5], start: '19:00', end: '21:00', tag: 'Evening' },
-                  { label: '☀️ Weekend morning', days: [0,6], start: '09:00', end: '11:00', tag: 'Morning' },
-                  { label: '🌙 Weekend evening', days: [0,6], start: '18:00', end: '21:00', tag: 'Evening' },
-                ].map((preset) => (
-                  <button
-                    key={preset.label}
-                    onClick={() => {
-                      const newWindows = preset.days.map((day) => ({
-                        day,
-                        start: preset.start,
-                        end: preset.end,
-                        label: preset.tag,
-                      }));
-                      // Avoid duplicates
-                      setCallWindows((prev) => {
-                        const existing = new Set(prev.map((w) => `${w.day}-${w.start}-${w.end}`));
-                        const unique = newWindows.filter((w) => !existing.has(`${w.day}-${w.start}-${w.end}`));
-                        return [...prev, ...unique];
-                      });
-                    }}
-                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-600 transition-all hover:border-slotted-200 hover:bg-slotted-50"
-                  >
-                    {preset.label}
                   </button>
                 ))}
               </div>
-            </div>
 
-            {/* Custom add with day checkboxes */}
-            <details className="mt-3">
-              <summary className="text-[11px] font-medium text-gray-400 hover:text-slotted-600 cursor-pointer transition-colors">
-                + Add custom window
-              </summary>
-              <div className="mt-3 space-y-3">
-                {/* Day selection */}
-                <div>
-                  <label className="block text-[10px] text-gray-400 mb-1.5">Select days</label>
-                  <div className="flex gap-1.5">
-                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, i) => (
+              {/* Recharging days */}
+              <div className="mt-4 border-t border-gray-100 pt-4">
+                <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
+                  Always-recharge days
+                </label>
+                <p className="mt-0.5 text-[10px] text-gray-400">Select days you never want plans with anyone — Slotted won't suggest hangouts on these days</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {[
+                    { day: 0, label: 'Sun' },
+                    { day: 1, label: 'Mon' },
+                    { day: 2, label: 'Tue' },
+                    { day: 3, label: 'Wed' },
+                    { day: 4, label: 'Thu' },
+                    { day: 5, label: 'Fri' },
+                    { day: 6, label: 'Sat' },
+                  ].map(({ day, label }) => {
+                    const selected = rechargingDays.includes(day);
+                    return (
                       <button
-                        key={d}
-                        type="button"
-                        onClick={() => {
-                          setCustomCallDays((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(i)) next.delete(i);
-                            else next.add(i);
-                            return next;
-                          });
-                        }}
-                        className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-medium transition-all ${
-                          customCallDays.has(i)
-                            ? 'border-slotted-400 bg-slotted-50 text-slotted-700'
-                            : 'border-gray-200 text-gray-500 hover:border-slotted-200'
+                        key={day}
+                        onClick={() => setRechargingDays((prev) =>
+                          prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+                        )}
+                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
+                          selected
+                            ? 'border-red-300 bg-red-50 text-red-700'
+                            : 'border-gray-200 text-gray-500 hover:border-red-200 hover:bg-red-50/50'
                         }`}
                       >
-                        {d}
+                        {selected && <span>🔴</span>}
+                        {label}
                       </button>
-                    ))}
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
+                <p className="text-[11px] text-gray-500">
+                  {rechargingDays.length > 0
+                    ? `💡 Slotted will never suggest plans on ${rechargingDays.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}.`
+                    : socialRecharge === 'daily'
+                      ? '💡 Slotted will look for every good opportunity to help you connect with friends.'
+                      : socialRecharge === '2-3-week'
+                        ? '💡 Slotted will suggest plans with enough breathing room between hangouts.'
+                        : socialRecharge === 'weekly'
+                          ? '💡 Slotted will space out suggestions and protect your downtime.'
+                          : '💡 Slotted will be very selective, only suggesting the best opportunities.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════ */}
+        {/* STEP 3: HOW YOU CONNECT (THE CENTERPIECE)      */}
+        {/* ═══════════════════════════════════════════════ */}
+        <section>
+          <div className="flex items-center gap-3 mb-2">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">3</span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-800">How You Connect</h2>
+              <p className="text-[11px] text-gray-400">Set up your preferences for each type of hangout</p>
+            </div>
+          </div>
+
+          <div className="pl-10 grid grid-cols-1 lg:grid-cols-2 gap-5 mt-4">
+
+            {/* ─── IN-PERSON HANGOUTS CARD (teal) ─── */}
+            <div className="rounded-2xl border-2 border-teal-200 bg-gradient-to-b from-teal-50/60 to-white p-5 shadow-sm">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-100 text-xl shadow-sm">📍</div>
+                <div>
+                  <h3 className="text-sm font-bold text-teal-900">In-Person Hangouts</h3>
+                  <p className="text-[10px] text-teal-600/80">For friends who live nearby</p>
+                </div>
+              </div>
+
+              {/* Neighborhoods */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Where are you based?</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-medium uppercase tracking-wider text-gray-400">Home</label>
+                      <input
+                        type="text"
+                        value={neighborhood}
+                        onChange={(e) => setNeighborhood(e.target.value)}
+                        placeholder="e.g. West Village, NYC"
+                        className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium uppercase tracking-wider text-gray-400">Work</label>
+                      <input
+                        type="text"
+                        value={workNeighborhood}
+                        onChange={(e) => setWorkNeighborhood(e.target.value)}
+                        placeholder="e.g. Midtown, NYC"
+                        className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-100"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* Time and label */}
-                <div className="flex items-end gap-2">
-                  <div>
-                    <label className="block text-[10px] text-gray-400 mb-0.5">Start</label>
-                    <input
-                      type="time"
-                      value={customCallStart}
-                      onChange={(e) => setCustomCallStart(e.target.value)}
-                      className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none"
-                    />
+                {/* Office days */}
+                <div className="border-t border-teal-100 pt-3">
+                  <label className="block text-[11px] font-semibold text-gray-700">Office days</label>
+                  <p className="text-[10px] text-gray-400 mb-2">Which days are you typically in the office?</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex gap-1">
+                      {['M', 'Tu', 'W', 'Th', 'F'].map((day) => {
+                        const fullDay = ({ M: 'Mon', Tu: 'Tue', W: 'Wed', Th: 'Thu', F: 'Fri' } as Record<string, string>)[day]!;
+                        const isSelected = officeDays.includes(fullDay);
+                        return (
+                          <button
+                            key={day}
+                            onClick={() => { if (!officeVaries) toggleOfficeDay(fullDay); }}
+                            disabled={officeVaries}
+                            className={`h-8 w-8 rounded-lg border text-[11px] font-bold transition-all ${
+                              officeVaries
+                                ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                                : isSelected
+                                  ? 'border-teal-400 bg-teal-50 text-teal-700 shadow-sm'
+                                  : 'border-gray-200 text-gray-500 hover:border-teal-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      onClick={() => { setOfficeVaries(!officeVaries); if (!officeVaries) setOfficeDays([]); }}
+                      className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all ${
+                        officeVaries
+                          ? 'border-teal-400 bg-teal-50 text-teal-700 shadow-sm'
+                          : 'border-gray-200 text-gray-500 hover:border-teal-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      Varies
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-[10px] text-gray-400 mb-0.5">End</label>
-                    <input
-                      type="time"
-                      value={customCallEnd}
-                      onChange={(e) => setCustomCallEnd(e.target.value)}
-                      className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none"
-                    />
+                </div>
+
+                {/* Preferred times for in-person */}
+                <div className="border-t border-teal-100 pt-3">
+                  <label className="block text-[11px] font-semibold text-gray-700">When are you free to hang out?</label>
+                  <p className="text-[10px] text-gray-400 mb-2">Select all that apply</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Weekdays */}
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Weekdays</p>
+                      {[
+                        { value: 'weekday-morning', emoji: '🌅', label: 'Morning' },
+                        { value: 'weekday-afternoon', emoji: '☀️', label: 'Afternoon' },
+                        { value: 'weekday-evening', emoji: '🌆', label: 'Evening' },
+                      ].map((opt) => {
+                        const selected = preferredTimes.includes(opt.value);
+                        return (
+                          <button
+                            key={opt.value}
+                            onClick={() => toggleTime(opt.value)}
+                            className={`w-full rounded-lg border px-3 py-2 text-left text-[11px] transition-all ${
+                              selected
+                                ? 'border-teal-400 bg-teal-50 text-teal-700 shadow-sm font-semibold'
+                                : 'border-gray-200 text-gray-500 hover:border-teal-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            {opt.emoji} {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Weekends */}
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Weekends</p>
+                      {[
+                        { value: 'weekend-morning', emoji: '🥐', label: 'Morning' },
+                        { value: 'weekend-afternoon', emoji: '☀️', label: 'Afternoon' },
+                        { value: 'weekend-evening', emoji: '🌙', label: 'Evening' },
+                      ].map((opt) => {
+                        const selected = preferredTimes.includes(opt.value);
+                        return (
+                          <button
+                            key={opt.value}
+                            onClick={() => toggleTime(opt.value)}
+                            className={`w-full rounded-lg border px-3 py-2 text-left text-[11px] transition-all ${
+                              selected
+                                ? 'border-teal-400 bg-teal-50 text-teal-700 shadow-sm font-semibold'
+                                : 'border-gray-200 text-gray-500 hover:border-teal-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            {opt.emoji} {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-[10px] text-gray-400 mb-0.5">Label (optional)</label>
+                </div>
+
+                {/* Travel buffer */}
+                <div className="border-t border-teal-100 pt-3">
+                  <label className="block text-[11px] font-semibold text-gray-700">Travel buffer</label>
+                  <p className="text-[10px] text-gray-400 mb-2">Padding before/after each meetup for getting there</p>
+                  <div className="flex items-center gap-3">
                     <input
-                      type="text"
-                      value={customCallLabel}
-                      onChange={(e) => setCustomCallLabel(e.target.value)}
-                      placeholder="e.g. Lunch"
-                      className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-slotted-400 focus:outline-none"
+                      type="range"
+                      min={0}
+                      max={60}
+                      step={15}
+                      value={travelBuffer}
+                      onChange={(e) => setTravelBuffer(Number(e.target.value))}
+                      className="flex-1 accent-teal-500 h-1.5 cursor-pointer"
                     />
+                    <span className="min-w-[3rem] rounded-lg border border-teal-200 bg-teal-50 px-2 py-1 text-center text-[11px] font-bold text-teal-700">
+                      {travelBuffer} min
+                    </span>
                   </div>
-                  <button
-                    onClick={() => {
-                      if (customCallDays.size > 0 && customCallStart && customCallEnd) {
-                        const newWindows = Array.from(customCallDays).map((day) => ({
+                </div>
+              </div>
+            </div>
+
+            {/* ─── CALLS & FACETIME CARD (violet) ─── */}
+            <div className="rounded-2xl border-2 border-violet-200 bg-gradient-to-b from-violet-50/60 to-white p-5 shadow-sm">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-xl shadow-sm">📞</div>
+                <div>
+                  <h3 className="text-sm font-bold text-violet-900">Calls & FaceTime</h3>
+                  <p className="text-[10px] text-violet-600/80">For long-distance friends</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500 mb-3">
+                Set recurring windows when you're available for phone or video calls. These help Slotted match you with long-distance friends.
+              </p>
+
+              {/* Existing windows */}
+              {callWindows.length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {callWindows.map((w, idx) => {
+                    const dayLabel = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w.day] || '?';
+                    return (
+                      <div key={idx} className="flex items-center justify-between rounded-xl border border-violet-100 bg-violet-50/30 px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-semibold text-gray-700">{dayLabel}</span>
+                          <span className="text-[11px] text-gray-500">{w.start} – {w.end}</span>
+                          {w.label && <span className="text-[10px] text-gray-400">({w.label})</span>}
+                        </div>
+                        <button
+                          onClick={() => setCallWindows((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-gray-400 hover:text-red-500 transition-colors"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {callWindows.length === 0 && (
+                <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/20 px-4 py-5 text-center mb-3">
+                  <p className="text-xs text-violet-400">No call windows yet</p>
+                  <p className="text-[10px] text-gray-400 mt-1">Add preset times below or create a custom window</p>
+                </div>
+              )}
+
+              {/* Quick-add presets */}
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mb-2">Quick add</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: '🥪 Weekday lunch', days: [1,2,3,4,5], start: '12:00', end: '13:00', tag: 'Lunch break' },
+                    { label: '🚗 Morning commute', days: [1,2,3,4,5], start: '07:30', end: '09:00', tag: 'Commute' },
+                    { label: '🚙 Evening commute', days: [1,2,3,4,5], start: '17:00', end: '18:30', tag: 'Commute' },
+                    { label: '🌆 Weekday evening', days: [1,2,3,4,5], start: '19:00', end: '21:00', tag: 'Evening' },
+                    { label: '☀️ Weekend morning', days: [0,6], start: '09:00', end: '11:00', tag: 'Morning' },
+                    { label: '🌙 Weekend evening', days: [0,6], start: '18:00', end: '21:00', tag: 'Evening' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() => {
+                        const newWindows = preset.days.map((day) => ({
                           day,
-                          start: customCallStart,
-                          end: customCallEnd,
-                          label: customCallLabel,
+                          start: preset.start,
+                          end: preset.end,
+                          label: preset.tag,
                         }));
-                        // Avoid duplicates
                         setCallWindows((prev) => {
                           const existing = new Set(prev.map((w) => `${w.day}-${w.start}-${w.end}`));
                           const unique = newWindows.filter((w) => !existing.has(`${w.day}-${w.start}-${w.end}`));
                           return [...prev, ...unique];
                         });
-                        // Reset
-                        setCustomCallDays(new Set());
-                        setCustomCallStart('12:00');
-                        setCustomCallEnd('13:00');
-                        setCustomCallLabel('');
-                      }
-                    }}
-                    disabled={customCallDays.size === 0}
-                    className="rounded-lg gradient-btn px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Add
-                  </button>
+                      }}
+                      className="rounded-lg border border-violet-200 px-3 py-1.5 text-[11px] font-medium text-gray-600 transition-all hover:border-violet-400 hover:bg-violet-50"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </details>
+
+              {/* Custom add */}
+              <details className="mt-3">
+                <summary className="text-[11px] font-medium text-violet-500 hover:text-violet-700 cursor-pointer transition-colors">
+                  + Add custom window
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="block text-[10px] text-gray-400 mb-1.5">Select days</label>
+                    <div className="flex gap-1.5">
+                      {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, i) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => {
+                            setCustomCallDays((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(i)) next.delete(i);
+                              else next.add(i);
+                              return next;
+                            });
+                          }}
+                          className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-medium transition-all ${
+                            customCallDays.has(i)
+                              ? 'border-violet-400 bg-violet-50 text-violet-700'
+                              : 'border-gray-200 text-gray-500 hover:border-violet-200'
+                          }`}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <div>
+                      <label className="block text-[10px] text-gray-400 mb-0.5">Start</label>
+                      <input
+                        type="time"
+                        value={customCallStart}
+                        onChange={(e) => setCustomCallStart(e.target.value)}
+                        className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-violet-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-400 mb-0.5">End</label>
+                      <input
+                        type="time"
+                        value={customCallEnd}
+                        onChange={(e) => setCustomCallEnd(e.target.value)}
+                        className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-violet-400 focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-gray-400 mb-0.5">Label (optional)</label>
+                      <input
+                        type="text"
+                        value={customCallLabel}
+                        onChange={(e) => setCustomCallLabel(e.target.value)}
+                        placeholder="e.g. Lunch"
+                        className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-violet-400 focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (customCallDays.size > 0 && customCallStart && customCallEnd) {
+                          const newWindows = Array.from(customCallDays).map((day) => ({
+                            day,
+                            start: customCallStart,
+                            end: customCallEnd,
+                            label: customCallLabel,
+                          }));
+                          setCallWindows((prev) => {
+                            const existing = new Set(prev.map((w) => `${w.day}-${w.start}-${w.end}`));
+                            const unique = newWindows.filter((w) => !existing.has(`${w.day}-${w.start}-${w.end}`));
+                            return [...prev, ...unique];
+                          });
+                          setCustomCallDays(new Set());
+                          setCustomCallStart('12:00');
+                          setCustomCallEnd('13:00');
+                          setCustomCallLabel('');
+                        }
+                      }}
+                      disabled={customCallDays.size === 0}
+                      className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </details>
+            </div>
           </div>
-        </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════ */}
+        {/* STEP 4: MORE PREFERENCES                       */}
+        {/* ═══════════════════════════════════════════════ */}
+        <section>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">4</span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-800">More Preferences</h2>
+              <p className="text-[11px] text-gray-400">Fine-tune how Slotted's AI suggests plans</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 pl-10">
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+              {/* Planning style */}
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700">
+                  Planning style
+                </label>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'spontaneous', emoji: '⚡', label: 'Spontaneous' },
+                    { value: 'flexible', emoji: '🔄', label: 'Flexible' },
+                    { value: 'planner', emoji: '📋', label: 'Planner' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setPlanningStyle(opt.value)}
+                      className={`rounded-xl border px-3 py-2.5 text-center transition-all ${
+                        planningStyle === opt.value
+                          ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 shadow-sm'
+                          : 'border-gray-200 text-gray-600 hover:border-slotted-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="text-base">{opt.emoji}</span>
+                      <p className={`mt-0.5 text-[11px] font-semibold ${planningStyle === opt.value ? 'text-slotted-700' : 'text-gray-800'}`}>{opt.label}</p>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2">
+                  <p className="text-[10px] text-gray-500">
+                    {planningStyle === 'spontaneous'
+                      ? '⚡ AI will suggest same-day and next-day plans, prioritize friends who are free right now, and send quick "are you free tonight?" nudges.'
+                      : planningStyle === 'planner'
+                        ? '📋 AI will suggest plans 1–4 weeks in advance, help you lock in recurring hangouts, and send gentle reminders to confirm early.'
+                        : '🔄 AI adapts to each friendship — when matching with another planner, it\'ll book further out. With spontaneous friends, it\'ll surface last-minute opportunities.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Trip buffer */}
+              <div className="mt-5 border-t border-gray-100 pt-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs">✈️</span>
+                  <label className="text-[11px] font-semibold text-gray-700">
+                    Trip buffer
+                  </label>
+                </div>
+                <p className="mt-0.5 text-[10px] text-gray-400">Block a recovery day around your trips</p>
+                <div className="mt-2 space-y-2">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={tripBufferBefore}
+                      onClick={() => setTripBufferBefore(!tripBufferBefore)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                        tripBufferBefore ? 'bg-slotted-500' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                        tripBufferBefore ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                      }`} />
+                    </button>
+                    <span className="text-xs text-gray-600">Day before trip</span>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={tripBufferAfter}
+                      onClick={() => setTripBufferAfter(!tripBufferAfter)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                        tripBufferAfter ? 'bg-slotted-500' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                        tripBufferAfter ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                      }`} />
+                    </button>
+                    <span className="text-xs text-gray-600">Day after trip</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Share hangout activity */}
+              <div className="mt-5 border-t border-gray-100 pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs">👥</span>
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        Share hangout activity
+                      </label>
+                    </div>
+                    <p className="mt-0.5 text-[10px] text-gray-400">Let friends see when you complete hangouts</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={shareHangouts}
+                    onClick={() => setShareHangouts(!shareHangouts)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                      shareHangouts ? 'bg-slotted-500' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                      shareHangouts ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                    }`} />
+                  </button>
+                </div>
+                <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
+                  <p className="text-[11px] text-gray-500">
+                    {shareHangouts
+                      ? '✅ Friends will see "You caught up with [Name]" in their activity feed'
+                      : '🔒 Your hangouts are completely private — only you can see them'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
 
       {/* Feedback */}
-      <div className="mt-5 rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+      <div className="mt-10 rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
         <div className="flex items-start gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-50 to-fuchsia-50 text-base">
             💬
@@ -978,7 +1018,7 @@ export default function SettingsPage() {
               feedbackSent ? 'bg-emerald-500' : 'gradient-btn'
             }`}
           >
-            {feedbackSending ? 'Sending…' : feedbackSent ? 'Sent! Thank you ✓' : 'Send Feedback'}
+            {feedbackSending ? 'Sending\u2026' : feedbackSent ? 'Sent! Thank you \u2713' : 'Send Feedback'}
           </button>
         </div>
       </div>
