@@ -115,11 +115,29 @@ export default function NotificationsPage() {
     calendar_match: { emoji: '✨', bg: 'bg-amber-50', border: 'border-amber-100' },
   };
 
+  const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'requests' | 'reminders'>('all');
+
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const requestTypes = ['friend_request', 'meetup_request'];
+  const reminderTypes = ['meetup_reminder', 'calendar_match'];
+
+  const filteredNotifications = notifications.filter((n) => {
+    if (activeTab === 'unread') return !n.read;
+    if (activeTab === 'requests') return requestTypes.includes(n.type);
+    if (activeTab === 'reminders') return reminderTypes.includes(n.type);
+    return true;
+  });
+
+  const tabs = [
+    { key: 'all' as const, label: 'All', count: notifications.length },
+    { key: 'unread' as const, label: 'Unread', count: unreadCount },
+    { key: 'requests' as const, label: 'Requests', count: notifications.filter((n) => requestTypes.includes(n.type)).length },
+    { key: 'reminders' as const, label: 'Reminders', count: notifications.filter((n) => reminderTypes.includes(n.type)).length },
+  ];
 
   return (
     <AppShell>
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">Inbox</h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -136,6 +154,32 @@ export default function NotificationsPage() {
         )}
       </div>
 
+      {/* Tabs */}
+      <div className="mb-5 flex gap-1.5 rounded-xl bg-gray-100/80 p-1">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
+              activeTab === tab.key
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {tab.label}
+            {tab.count > 0 && (
+              <span className={`ml-1.5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                activeTab === tab.key
+                  ? tab.key === 'unread' ? 'bg-slotted-100 text-slotted-700' : 'bg-gray-100 text-gray-600'
+                  : 'bg-gray-200/60 text-gray-500'
+              }`}>
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
           <div className="flex flex-col items-center justify-center px-6 py-20">
@@ -143,21 +187,25 @@ export default function NotificationsPage() {
             <p className="mt-3 text-sm text-gray-400">Loading notifications…</p>
           </div>
         </div>
-      ) : notifications.length === 0 ? (
+      ) : filteredNotifications.length === 0 ? (
         <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
           <div className="flex flex-col items-center justify-center px-6 py-20">
-            <div className="animate-float text-5xl mb-2">🔔</div>
+            <div className="animate-float text-5xl mb-2">{activeTab === 'all' ? '🔔' : activeTab === 'unread' ? '✅' : activeTab === 'requests' ? '👋' : '⏰'}</div>
             <h3 className="mt-3 font-display text-lg font-bold text-gray-900">
-              No notifications yet
+              {activeTab === 'all' ? 'No notifications yet' : activeTab === 'unread' ? 'All caught up!' : `No ${activeTab}`}
             </h3>
             <p className="mt-2 max-w-sm text-center text-sm text-gray-400 leading-relaxed">
-              Notifications will appear here when a friend accepts your invite, suggests a meetup, or when Slotted finds a great time to hang out.
+              {activeTab === 'all'
+                ? 'Notifications will appear here when a friend accepts your invite, suggests a meetup, or when Slotted finds a great time to hang out.'
+                : activeTab === 'unread'
+                  ? "You've read all your notifications. Nice!"
+                  : `No ${activeTab} to show right now.`}
             </p>
           </div>
         </div>
       ) : (
         <div className="space-y-3">
-          {notifications.map((notification) => {
+          {filteredNotifications.map((notification) => {
             const config = typeConfig[notification.type] || typeConfig.calendar_match;
             return (
               <div

@@ -2,7 +2,6 @@
   "compilerOptions": {
     "module": "NodeNext",
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
     "moduleResolution": "nodenext",
     "noImplicitReturns": true,
     "noUnusedLocals": true,

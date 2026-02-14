@@ -49,8 +49,7 @@ export default function LoginPage() {
           <span className="gradient-text">Just hang out.</span>
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-gray-500">
-          Slotted syncs your Google Calendar with your friends, finds the best time to meet using AI,
-          and puts it on both calendars — no more back-and-forth.
+          Sync calendars with friends. AI finds the perfect time. Automatically added to both calendars.
         </p>
 
         {/* CTA */}
@@ -120,10 +119,9 @@ export default function LoginPage() {
             </div>
             <ul className="space-y-2.5">
               {[
-                { emoji: '📍', text: 'Set your neighborhood — get meetup spots near you' },
-                { emoji: '🕐', text: 'Pick preferred hangout times (weekday lunches, weekend brunches, etc.)' },
-                { emoji: '🚶', text: 'Smart travel buffers so you\'re never rushing' },
-                { emoji: '✨', text: 'AI finds the best overlapping free time between you' },
+                { emoji: '📍', text: 'Set your neighborhood for nearby suggestions' },
+                { emoji: '🕐', text: 'Mark preferred hangout times' },
+                { emoji: '✨', text: 'AI finds mutual free time' },
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2.5">
                   <span className="text-base mt-0.5 shrink-0">{item.emoji}</span>
@@ -144,10 +142,9 @@ export default function LoginPage() {
             </div>
             <ul className="space-y-2.5">
               {[
-                { emoji: '📱', text: 'Set call & FaceTime windows separately from in-person times' },
-                { emoji: '🌐', text: 'Automatic timezone-aware scheduling across time zones' },
-                { emoji: '⏱️', text: 'Choose your ideal call length — quick catch-up or deep conversation' },
-                { emoji: '🔔', text: 'Gentle nudges when it\'s been too long since you last connected' },
+                { emoji: '📱', text: 'Set call windows separately' },
+                { emoji: '🌐', text: 'Timezone-aware scheduling' },
+                { emoji: '🔔', text: 'Stay-in-touch reminders' },
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2.5">
                   <span className="text-base mt-0.5 shrink-0">{item.emoji}</span>
@@ -169,24 +166,24 @@ export default function LoginPage() {
             {
               step: '1',
               emoji: '📅',
-              title: 'Connect your calendar',
-              desc: 'Sign in with Google — we only see free/busy times, never event details.',
+              title: 'Connect calendar',
+              desc: 'Sign in with Google. We only see free/busy, never event details.',
               color: 'from-blue-50 to-cyan-50',
               border: 'border-blue-100',
             },
             {
               step: '2',
               emoji: '👋',
-              title: 'Invite your friends',
-              desc: 'Share a link. When they join, calendars sync and Slotted finds mutual free time.',
+              title: 'Invite friends',
+              desc: 'Share a link. When they join, we find mutual free time.',
               color: 'from-violet-50 to-fuchsia-50',
               border: 'border-violet-100',
             },
             {
               step: '3',
               emoji: '✨',
-              title: 'Get smart suggestions',
-              desc: 'AI picks the best times. Accept a slot and it goes on both calendars.',
+              title: 'Get suggestions',
+              desc: `AI picks the best times. Accept and it's on both calendars.`,
               color: 'from-amber-50 to-orange-50',
               border: 'border-amber-100',
             },
@@ -214,8 +211,7 @@ export default function LoginPage() {
           <span className="text-3xl">🔋</span>
           <h3 className="font-display text-base font-bold text-gray-900 mt-2">Your social energy, respected</h3>
           <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto leading-relaxed">
-            Set your weekly social battery — mark days as open, ask-me, or recharging.
-            Slotted only suggests plans when you actually have the energy for them.
+            Set your social battery. We only suggest plans when you have energy for them.
           </p>
         </div>
       </section>
