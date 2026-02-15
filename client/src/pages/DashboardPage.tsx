@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import AppShell from '../components/AppShell';
+import AddToCalendarModal from '../components/AddToCalendarModal';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 
@@ -126,6 +127,12 @@ export default function DashboardPage() {
   const [busyBlockSaving, setBusyBlockSaving] = useState(false);
   const [busyBlockJustSaved, setBusyBlockJustSaved] = useState(false);
 
+  // Drag-to-select busy blocks state
+  const [dragStart, setDragStart] = useState<{ dateStr: string; hour: number } | null>(null);
+  const [, setDragEnd] = useState<{ dateStr: string; hour: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [pendingBlocks, setPendingBlocks] = useState<Set<string>>(new Set()); // "dateStr|hour" keys
+
   // Dashboard data
   const [friendsToSee, setFriendsToSee] = useState<FriendToSee[]>([]);
 
@@ -141,6 +148,8 @@ export default function DashboardPage() {
   const [reasonSaving, setReasonSaving] = useState(false);
   const [cancellingMeetupId, setCancellingMeetupId] = useState<string | null>(null);
   const [expandedMeetupId, setExpandedMeetupId] = useState<string | null>(null);
+  const [acceptingMeetupId, setAcceptingMeetupId] = useState<string | null>(null);
+  const [calendarModal, setCalendarModal] = useState<{ meetupId: string; title: string; startTime: string; endTime: string } | null>(null);
 
   // Calendar sync
 
@@ -233,41 +242,127 @@ export default function DashboardPage() {
     return () => { active = false; };
   }, [userUid, calendarConnected, calView, monthOffset]);
 
-  /* ─── manual busy block handlers ─── */
+  /* ─── manual busy block handlers (with drag-to-select) ─── */
   const isManualBlock = (ev: CalEvent) => ev.id?.startsWith('manual_') ?? false;
 
-  const handleAddBusyBlock = async (dateStr: string, hour: number) => {
+  /** Compute the set of "dateStr|hour" cells between dragStart and dragEnd */
+  const getDragCells = useCallback((start: { dateStr: string; hour: number } | null, end: { dateStr: string; hour: number } | null): Set<string> => {
+    if (!start || !end) return new Set();
+    // If same column (date), select hour range
+    if (start.dateStr === end.dateStr) {
+      const minH = Math.min(start.hour, end.hour);
+      const maxH = Math.max(start.hour, end.hour);
+      const cells = new Set<string>();
+      for (let h = minH; h <= maxH; h++) cells.add(`${start.dateStr}|${h}`);
+      return cells;
+    }
+    // Cross-column: just select start cell to end cell individually
+    return new Set([`${start.dateStr}|${start.hour}`, `${end.dateStr}|${end.hour}`]);
+  }, []);
+
+  /** Handle pointer down on hour cell — start drag */
+  const handleBusyPointerDown = useCallback((dateStr: string, hour: number) => {
     if (busyBlockSaving) return;
+    setDragStart({ dateStr, hour });
+    setDragEnd({ dateStr, hour });
+    setIsDragging(true);
+    setPendingBlocks(new Set([`${dateStr}|${hour}`]));
+  }, [busyBlockSaving]);
+
+  /** Handle pointer entering a cell during drag */
+  const handleBusyPointerEnter = useCallback((dateStr: string, hour: number) => {
+    if (!isDragging) return;
+    setDragEnd({ dateStr, hour });
+    setPendingBlocks(getDragCells(dragStart, { dateStr, hour }));
+  }, [isDragging, dragStart, getDragCells]);
+
+  /** Handle pointer up — save all selected blocks */
+  const handleBusyPointerUp = useCallback(async () => {
+    if (!isDragging || pendingBlocks.size === 0) {
+      setIsDragging(false);
+      setDragStart(null);
+      setDragEnd(null);
+      setPendingBlocks(new Set());
+      return;
+    }
+    setIsDragging(false);
+
+    const blocksToSave = Array.from(pendingBlocks).map((key) => {
+      const [dateStr, hourStr] = key.split('|');
+      const h = parseInt(hourStr, 10);
+      const startTime = new Date(`${dateStr}T${String(h).padStart(2, '0')}:00:00`);
+      const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+      return { start_time: startTime.toISOString(), end_time: endTime.toISOString(), label: 'Busy' };
+    });
+
+    // Optimistic: add temporary events to calendar immediately
+    const tempEvents: CalEvent[] = blocksToSave.map((b, i) => ({
+      id: `manual_temp_${i}_${Date.now()}`,
+      title: 'Busy',
+      start: b.start_time,
+      end: b.end_time,
+      allDay: false,
+      location: null,
+      source: 'google' as const,
+      calendarName: 'Slotted',
+      color: '#f59e0b',
+      status: 'confirmed',
+      myRsvp: 'accepted',
+      participants: [],
+    }));
+    setCalEvents((prev) => [...prev, ...tempEvents]);
+
+    setPendingBlocks(new Set());
+    setDragStart(null);
+    setDragEnd(null);
     setBusyBlockSaving(true);
+
     try {
-      const startTime = new Date(`${dateStr}T${String(hour).padStart(2, '0')}:00:00`);
-      const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour block
-      await api.post('/busy-blocks', {
-        start_time: startTime.toISOString(),
-        end_time: endTime.toISOString(),
-        label: 'Busy',
-      });
-      // Refresh calendar events to show the new block
-      const fetchDays = calView === 'month' ? 45 : 14;
-      const { data } = await api.get(`/calendar/events?days=${fetchDays}`);
-      setCalEvents(data.events || []);
+      if (blocksToSave.length === 1) {
+        // Single block — use regular endpoint
+        await api.post('/busy-blocks', blocksToSave[0]);
+      } else {
+        // Multiple blocks — use batch endpoint
+        await api.post('/busy-blocks/batch', { blocks: blocksToSave });
+      }
       setBusyBlockJustSaved(true);
       setTimeout(() => setBusyBlockJustSaved(false), 1500);
+      // Background refresh to get real IDs from server
+      const fetchDays = calView === 'month' ? 45 : 14;
+      api.get(`/calendar/events?days=${fetchDays}`).then(({ data }) => {
+        setCalEvents(data.events || []);
+      }).catch(() => {});
     } catch (err) {
-      console.error('Failed to add busy block:', err);
+      console.error('Failed to save busy blocks:', err);
+      // Remove optimistic events on failure
+      setCalEvents((prev) => prev.filter((ev) => !ev.id.startsWith('manual_temp_')));
     } finally {
       setBusyBlockSaving(false);
     }
-  };
+  }, [isDragging, pendingBlocks, calView]);
+
+  // Global pointer-up listener to catch drag end even outside grid
+  useEffect(() => {
+    if (!isDragging) return;
+    const onUp = () => handleBusyPointerUp();
+    window.addEventListener('pointerup', onUp);
+    return () => window.removeEventListener('pointerup', onUp);
+  }, [isDragging, handleBusyPointerUp]);
 
   const handleRemoveBusyBlock = async (eventId: string) => {
     // eventId is like "manual_<uuid>"
     const blockId = eventId.replace('manual_', '');
+    // Optimistic removal
+    setCalEvents((prev) => prev.filter((ev) => ev.id !== eventId));
     try {
       await api.delete(`/busy-blocks/${blockId}`);
-      setCalEvents((prev) => prev.filter((ev) => ev.id !== eventId));
     } catch (err) {
       console.error('Failed to remove busy block:', err);
+      // Re-fetch on error
+      const fetchDays = calView === 'month' ? 45 : 14;
+      api.get(`/calendar/events?days=${fetchDays}`).then(({ data }) => {
+        setCalEvents(data.events || []);
+      }).catch(() => {});
     }
   };
 
@@ -277,10 +372,52 @@ export default function DashboardPage() {
     const start = new Date(m.start_time);
     return start >= now && !['cancelled', 'didnt_happen', 'declined'].includes(m.status) && m.myRsvp !== 'declined';
   });
+  // Confirmed = meetup status is confirmed OR all participants accepted
+  const confirmedHangouts = upcoming.filter((m) =>
+    m.status === 'confirmed' || m.participants.every((p) => p.rsvp === 'accepted')
+  );
+  // Pending = not yet confirmed (someone hasn't accepted)
+  const pendingHangouts = upcoming.filter((m) =>
+    m.status !== 'confirmed' && !m.participants.every((p) => p.rsvp === 'accepted')
+  );
   const pastConfirmed = meetups.filter((m) => {
     const end = new Date(m.end_time);
     return end < now && (m.status === 'confirmed' || (m.status === 'proposed' && m.myRsvp === 'accepted'));
   });
+
+  const handleAcceptMeetup = async (meetupId: string) => {
+    setAcceptingMeetupId(meetupId);
+    try {
+      const { data } = await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'accepted' });
+      // Update local state
+      setMeetups((prev) => prev.map((m) => {
+        if (m.id !== meetupId) return m;
+        const updatedParticipants = m.participants.map((p) =>
+          p.userId === (user?.uid?.replace(/^firebase_/, '') || '') ? { ...p, rsvp: 'accepted' } : p
+        );
+        const allAccepted = updatedParticipants.every((p) => p.rsvp === 'accepted');
+        return {
+          ...m,
+          myRsvp: 'accepted',
+          status: data.meetupConfirmed || allAccepted ? 'confirmed' : m.status,
+          participants: updatedParticipants,
+        };
+      }));
+      // If meetup is now confirmed, show add to calendar
+      if (data.meetupConfirmed) {
+        const meetup = meetups.find((m) => m.id === meetupId);
+        if (meetup) {
+          setCalendarModal({
+            meetupId,
+            title: meetup.title,
+            startTime: meetup.start_time,
+            endTime: meetup.end_time,
+          });
+        }
+      }
+    } catch { /* silent */ }
+    finally { setAcceptingMeetupId(null); }
+  };
 
   const handleCancelMeetup = async (meetupId: string) => {
     if (!window.confirm('Cancel this hangout? The other person will be notified.')) return;
@@ -541,23 +678,139 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ─── UPCOMING HANGOUTS (moved to top — most actionable) ─── */}
-      {upcoming.length > 0 && (
-        <div className="mb-6 rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+      {/* ─── PENDING HANGOUTS (needs action) ─── */}
+      {pendingHangouts.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-amber-200/60 bg-gradient-to-r from-amber-50/50 to-orange-50/30 p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-base">🗓️</span>
-            <h2 className="font-display text-sm font-semibold text-gray-900">Upcoming</h2>
-            <span className="ml-auto rounded-full bg-slotted-100 px-2 py-0.5 text-[10px] font-semibold text-slotted-700">{upcoming.length}</span>
+            <span className="text-base">⏳</span>
+            <h2 className="font-display text-sm font-semibold text-gray-900">Pending</h2>
+            <span className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">{pendingHangouts.length}</span>
           </div>
           <div className="space-y-2">
-            {upcoming.slice(0, 4).map((m) => {
+            {pendingHangouts.slice(0, 6).map((m) => {
+              const others = otherParticipants(m);
+              const isExpanded = expandedMeetupId === m.id;
+              const friendId = others.length === 1 ? others[0].userId : null;
+              const iNeedToRespond = m.myRsvp === 'pending';
+              const waitingOn = m.participants.filter((p) => p.rsvp === 'pending' && p.userId !== (user?.uid?.replace(/^firebase_/, '') || ''));
+              return (
+                <div key={m.id} className="rounded-xl border border-amber-100 bg-white overflow-hidden">
+                  <div
+                    className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-amber-50/30 transition-colors"
+                    onClick={() => setExpandedMeetupId(isExpanded ? null : m.id)}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="flex -space-x-2 shrink-0">
+                        {others.slice(0, 3).map((p) => (
+                          p.photoUrl ? (
+                            <img key={p.userId} src={p.photoUrl} alt="" className="h-8 w-8 rounded-full ring-2 ring-white" />
+                          ) : (
+                            <div key={p.userId} className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-xs font-semibold text-white ring-2 ring-white">
+                              {p.displayName?.[0] ?? '?'}
+                            </div>
+                          )
+                        ))}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{m.title}</p>
+                        <p className="text-[11px] text-gray-400 truncate">
+                          {others.map((p) => p.displayName).join(', ')} · {formatMeetupTime(m.start_time)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {iNeedToRespond ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-800">
+                          📩 Respond
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700">
+                          ⏳ Waiting on {waitingOn.map((p) => p.displayName.split(' ')[0]).join(', ') || 'others'}
+                        </span>
+                      )}
+                      <svg className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                  {isExpanded && (
+                    <div className="border-t border-amber-100 px-4 py-3 bg-white space-y-3">
+                      {/* Participant RSVP status */}
+                      <div className="space-y-1">
+                        {m.participants.map((p) => (
+                          <div key={p.userId} className="flex items-center gap-2 text-[11px]">
+                            <span>{p.rsvp === 'accepted' ? '✅' : p.rsvp === 'declined' ? '❌' : '⏳'}</span>
+                            <span className="text-gray-600">{p.displayName}</span>
+                            <span className="text-gray-400">
+                              {p.rsvp === 'accepted' ? 'accepted' : p.rsvp === 'declined' ? 'declined' : 'waiting'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2">
+                        {iNeedToRespond && (
+                          <>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleAcceptMeetup(m.id); }}
+                              disabled={acceptingMeetupId === m.id}
+                              className="rounded-lg bg-emerald-500 px-4 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm disabled:opacity-50"
+                            >
+                              {acceptingMeetupId === m.id ? 'Accepting…' : '✅ Accept'}
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleCancelMeetup(m.id); }}
+                              disabled={cancellingMeetupId === m.id}
+                              className="rounded-lg border border-red-200 px-3 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
+                            >
+                              {cancellingMeetupId === m.id ? 'Declining…' : '✕ Decline'}
+                            </button>
+                          </>
+                        )}
+                        {!iNeedToRespond && friendId && (
+                          <Link
+                            to={`/friends?findTimes=${friendId}`}
+                            className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-600 hover:bg-gray-50 hover:border-slotted-300 transition-all"
+                          >
+                            🔄 Find new time
+                          </Link>
+                        )}
+                        {!iNeedToRespond && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleCancelMeetup(m.id); }}
+                            disabled={cancellingMeetupId === m.id}
+                            className="rounded-lg border border-red-200 px-3 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
+                          >
+                            {cancellingMeetupId === m.id ? 'Cancelling…' : '✕ Cancel'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ─── CONFIRMED HANGOUTS ─── */}
+      {confirmedHangouts.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/30 to-green-50/20 p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">✅</span>
+            <h2 className="font-display text-sm font-semibold text-gray-900">Confirmed</h2>
+            <span className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">{confirmedHangouts.length}</span>
+          </div>
+          <div className="space-y-2">
+            {confirmedHangouts.slice(0, 4).map((m) => {
               const others = otherParticipants(m);
               const isExpanded = expandedMeetupId === m.id;
               const friendId = others.length === 1 ? others[0].userId : null;
               return (
-                <div key={m.id} className="rounded-xl border border-gray-100 bg-gray-50/30 overflow-hidden">
+                <div key={m.id} className="rounded-xl border border-emerald-100 bg-white overflow-hidden">
                   <div
-                    className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                    className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-emerald-50/30 transition-colors"
                     onClick={() => setExpandedMeetupId(isExpanded ? null : m.id)}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -580,14 +833,8 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium ${
-                        m.myRsvp === 'accepted'
-                          ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                          : m.myRsvp === 'pending'
-                            ? 'border border-amber-200 bg-amber-50 text-amber-700'
-                            : 'border border-gray-200 bg-gray-50 text-gray-500'
-                      }`}>
-                        {m.myRsvp === 'accepted' ? '✅ Confirmed' : m.myRsvp === 'pending' ? '⏳ Pending' : m.myRsvp}
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
+                        ✅ Confirmed
                       </span>
                       <svg className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -595,7 +842,13 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   {isExpanded && (
-                    <div className="border-t border-gray-100 px-4 py-3 flex items-center gap-2 bg-white">
+                    <div className="border-t border-emerald-100 px-4 py-3 flex items-center gap-2 bg-white">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setCalendarModal({ meetupId: m.id, title: m.title, startTime: m.start_time, endTime: m.end_time }); }}
+                        className="rounded-lg bg-slotted-500 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-slotted-600 shadow-sm"
+                      >
+                        📅 Add to Calendar
+                      </button>
                       {friendId && (
                         <Link
                           to={`/friends?findTimes=${friendId}`}
@@ -618,6 +871,17 @@ export default function DashboardPage() {
             })}
           </div>
         </div>
+      )}
+
+      {/* ─── Add to Calendar Modal ─── */}
+      {calendarModal && (
+        <AddToCalendarModal
+          meetupId={calendarModal.meetupId}
+          meetupTitle={calendarModal.title}
+          startTime={calendarModal.startTime}
+          endTime={calendarModal.endTime}
+          onClose={() => setCalendarModal(null)}
+        />
       )}
 
       {/* ─── CALENDAR ─── */}
@@ -668,7 +932,8 @@ export default function DashboardPage() {
           {markBusyMode && (
             <div className="border-b border-amber-100 bg-amber-50/50 px-5 py-2">
               <p className="text-[11px] text-amber-700">
-                <span className="font-semibold">Tap any hour</span> to mark it as busy. Tap a <span className="font-semibold text-amber-800">yellow block</span> to remove it. Your friends will see these times as unavailable.
+                <span className="font-semibold">Click or drag</span> to mark hours as busy. Tap a <span className="font-semibold text-amber-800">yellow block</span> to remove it. Your friends will see these times as unavailable.
+                {busyBlockSaving && <span className="ml-2 text-amber-500 animate-pulse">Saving…</span>}
               </p>
             </div>
           )}
@@ -744,8 +1009,8 @@ export default function DashboardPage() {
                 })}
               </div>
               {/* Time grid */}
-              <div className="overflow-y-auto max-h-[520px]" style={{ scrollbarWidth: 'thin' }}>
-                <div className="grid relative" style={{ gridTemplateColumns: '48px repeat(7, 1fr)', height: `${TOTAL_HOURS * HOUR_HEIGHT}px` }}>
+              <div className="overflow-y-auto max-h-[520px]" style={{ scrollbarWidth: 'thin', ...(markBusyMode && isDragging ? { overflowY: 'hidden' } : {}) }}>
+                <div className="grid relative" style={{ gridTemplateColumns: '48px repeat(7, 1fr)', height: `${TOTAL_HOURS * HOUR_HEIGHT}px`, ...(markBusyMode ? { touchAction: 'none' } : {}) }}>
                   {/* Hour labels + grid lines */}
                   <div className="relative border-r border-gray-100">
                     {hours.map((h) => (
@@ -766,15 +1031,29 @@ export default function DashboardPage() {
                     const dayTimedEvents = timedEventsForDate(dateStr);
                     return (
                       <div key={dateStr} className={`relative border-r border-gray-50 last:border-r-0 ${isToday ? 'bg-slotted-50/20' : ''}`}>
-                        {/* Hour gridlines (tappable in mark-busy mode) */}
-                        {hours.map((h) => (
-                          <div
-                            key={h}
-                            className={`absolute w-full border-t border-gray-100 ${markBusyMode ? 'cursor-pointer hover:bg-amber-100/40 transition-colors z-[5]' : ''}`}
-                            style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
-                            onClick={markBusyMode ? () => handleAddBusyBlock(dateStr, h) : undefined}
-                          />
-                        ))}
+                        {/* Hour gridlines (draggable in mark-busy mode) */}
+                        {hours.map((h) => {
+                          const cellKey = `${dateStr}|${h}`;
+                          const isPending = pendingBlocks.has(cellKey);
+                          return (
+                            <div
+                              key={h}
+                              className={`absolute w-full border-t border-gray-100 ${
+                                markBusyMode
+                                  ? `cursor-pointer transition-colors z-[5] select-none ${
+                                      isPending
+                                        ? 'bg-amber-300/60'
+                                        : 'hover:bg-amber-100/40'
+                                    }`
+                                  : ''
+                              }`}
+                              style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
+                              onPointerDown={markBusyMode ? (e) => { e.preventDefault(); handleBusyPointerDown(dateStr, h); } : undefined}
+                              onPointerEnter={markBusyMode ? () => handleBusyPointerEnter(dateStr, h) : undefined}
+                              onPointerUp={markBusyMode ? () => handleBusyPointerUp() : undefined}
+                            />
+                          );
+                        })}
                         {/* Current time indicator */}
                         {isToday && (() => {
                           const now = new Date();

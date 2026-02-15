@@ -103,6 +103,21 @@
 - **Effort:** 2 weeks
 - **RICE Score:** (500 users × 8 impact × 80% confidence) / 2 = **1600**
 
+#### 7b. Couple Mode (Linked Scheduling Units)
+
+- **Description:** Allow two users to link as a couple, pre-merging their combined availability into a single scheduling unit. When someone invites "The Smiths," the app automatically intersects both calendars and treats them as one participant.
+- **User Value:** Matches how couples actually schedule ("Can you and Mike do Saturday?"). Massively simplifies group coordination for dinner-with-couples scenarios — 3 couples = 3 units, not 6 individual calendars. Enables pre-cached availability that eliminates cold-start sync delays at query time.
+- **Requirements:**
+  - Couple linking flow: mutual opt-in (both partners confirm)
+  - Combined availability computed on each calendar webhook (pre-cached, not at query time)
+  - Friend list shows couple as a single selectable unit (with option to select individually)
+  - Group overlap uses pre-merged couple slots instead of syncing both people live
+  - Privacy: each partner can temporarily "unlink" for solo scheduling without breaking the pair
+  - Edge cases: one partner disconnects calendar, one is recharging, couple breaks up (unlink)
+- **Performance benefit:** Pre-computed couple availability eliminates live calendar syncs at query time. A 3-couple dinner goes from 6 API calls + 6-way intersection to 0 API calls + 3-way intersection of cached slots (<1 second vs. 5-10 seconds).
+- **Effort:** 3 weeks (linking flow, cached availability pipeline, UI for couple units)
+- **RICE Score:** (400 users × 8 impact × 70% confidence) / 3 = **747**
+
 ---
 
 ### P2 (Nice-to-Have for V2)

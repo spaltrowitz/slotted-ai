@@ -430,12 +430,23 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
 
     // Send a welcome notification only for brand-new users (not on every login)
     if (data && !existing) {
-      await createNotification({
-        userId: data.id,
-        type: "calendar_match",
-        title: "Welcome to Slotted! 👋",
-        body: "Get started in 3 quick steps: 1️⃣ Go to Settings to connect your calendar and set your preferences. 2️⃣ Head to the Friends tab to invite friends. 3️⃣ Check the Events tab to discover local shows, concerts & more!",
-      });
+      // Guard against duplicate welcome notifications (race condition on rapid calls)
+      const { data: existingWelcome } = await getSupabase()
+        .from("notifications")
+        .select("id")
+        .eq("user_id", data.id)
+        .like("title", "%Welcome to Slotted%")
+        .limit(1);
+
+      if (!existingWelcome || existingWelcome.length === 0) {
+        await getSupabase().from("notifications").insert({
+          user_id: data.id,
+          type: "calendar_match",
+          title: "Welcome to Slotted! 👋",
+          body: "Get started in 3 quick steps: 1️⃣ Go to Settings to connect your calendar and set your preferences. 2️⃣ Head to the Friends tab to invite friends. 3️⃣ Check the Events tab to discover local shows, concerts & more!",
+          read: true,
+        });
+      }
     }
 
     res.json(data);
@@ -1086,6 +1097,43 @@ app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: R
     }
 
     res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /friends/:friendshipId — Remove a friend (with confirmation on frontend)
+app.delete("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: Response) => {
+  const { friendshipId } = req.params;
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    // Verify the friendship exists and belongs to this user
+    const { data: friendship, error: fetchErr } = await getSupabase()
+      .from("friendships")
+      .select("id, user_a_id, user_b_id")
+      .eq("id", friendshipId)
+      .or(`user_a_id.eq.${me.id},user_b_id.eq.${me.id}`)
+      .single();
+
+    if (fetchErr || !friendship) {
+      res.status(404).json({ error: "Friendship not found" });
+      return;
+    }
+
+    // Delete the friendship
+    const { error: delErr } = await getSupabase()
+      .from("friendships")
+      .delete()
+      .eq("id", friendshipId);
+
+    if (delErr) {
+      res.status(500).json({ error: delErr.message });
+      return;
+    }
+
+    res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -2360,6 +2408,25 @@ app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
 
     if (mErr) { res.status(500).json({ error: mErr.message }); return; }
 
+    // Auto-friend all group members with each other (accepted status since creator vouches)
+    if (allIds.length > 1) {
+      for (let i = 0; i < allIds.length; i++) {
+        for (let j = i + 1; j < allIds.length; j++) {
+          const [userA, userB] = allIds[i] < allIds[j] ? [allIds[i], allIds[j]] : [allIds[j], allIds[i]];
+          try {
+            await sb.from("friendships")
+              .upsert(
+                { user_a_id: userA, user_b_id: userB, invited_by: me.id, status: "accepted" },
+                { onConflict: "user_a_id,user_b_id", ignoreDuplicates: false },
+              );
+          } catch (friendErr) {
+            console.error(`Failed to auto-friend ${userA} <-> ${userB}:`, friendErr);
+          }
+        }
+      }
+      console.log(`👥 Auto-friended ${allIds.length} group members with each other`);
+    }
+
     // Handle invited emails — create pending invites with group_id
     const pendingResults: string[] = [];
     if (hasInvitedEmails) {
@@ -2440,6 +2507,22 @@ app.put("/groups/:id", requireAuth, async (req: AuthRequest, res: Response) => {
       const allIds = [me.id, ...memberIds.filter((id: string) => id !== me.id)];
       const rows = allIds.map((uid: string) => ({ group_id: groupId, user_id: uid }));
       await sb.from("friend_group_members").insert(rows);
+
+      // Auto-friend all group members with each other
+      if (allIds.length > 1) {
+        for (let i = 0; i < allIds.length; i++) {
+          for (let j = i + 1; j < allIds.length; j++) {
+            const [userA, userB] = allIds[i] < allIds[j] ? [allIds[i], allIds[j]] : [allIds[j], allIds[i]];
+            try {
+              await sb.from("friendships")
+                .upsert(
+                  { user_a_id: userA, user_b_id: userB, invited_by: me.id, status: "accepted" },
+                  { onConflict: "user_a_id,user_b_id", ignoreDuplicates: false },
+                );
+            } catch { /* ignore */ }
+          }
+        }
+      }
     }
 
     res.json({ success: true });
@@ -2691,13 +2774,19 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
       return;
     }
 
-    // Notify the meetup creator about the RSVP
+    // Fetch meetup info + all participant RSVPs
     const { data: meetup } = await getSupabase()
       .from("meetups")
-      .select("title, created_by")
+      .select("title, created_by, status")
       .eq("id", meetupId)
       .single();
 
+    const { data: allParticipants } = await getSupabase()
+      .from("meetup_participants")
+      .select("user_id, rsvp")
+      .eq("meetup_id", meetupId);
+
+    // Notify the meetup creator about the RSVP
     if (meetup && meetup.created_by !== me.id) {
       const rsvpEmoji = rsvp === "accepted" ? "✅" : rsvp === "declined" ? "❌" : "🤔";
       await createNotification({
@@ -2710,8 +2799,48 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
       });
     }
 
-    // Return RSVP data with quota warning if applicable
-    const response: any = { ...data };
+    // Auto-confirm: if ALL participants have now accepted, update meetup status to "confirmed"
+    let meetupConfirmed = false;
+    if (rsvp === "accepted" && meetup && meetup.status === "proposed" && allParticipants) {
+      const allAccepted = allParticipants.every((p: any) => p.rsvp === "accepted");
+      if (allAccepted) {
+        await getSupabase()
+          .from("meetups")
+          .update({ status: "confirmed" })
+          .eq("id", meetupId);
+        meetupConfirmed = true;
+
+        // Notify ALL participants that the hangout is confirmed
+        for (const p of allParticipants) {
+          await createNotification({
+            userId: p.user_id,
+            type: "meetup_confirmed",
+            title: "🎉 Hangout confirmed!",
+            body: `Everyone accepted — ${meetup.title || "Hangout"} is locked in! Add it to your calendar.`,
+            relatedId: meetupId,
+          });
+        }
+      }
+    }
+
+    // If someone declined, notify other participants
+    if (rsvp === "declined" && meetup && allParticipants) {
+      for (const p of allParticipants) {
+        if (p.user_id !== me.id) {
+          await createNotification({
+            userId: p.user_id,
+            type: "meetup_request",
+            title: `❌ ${me.display_name || "Someone"} can't make it`,
+            body: meetup.title || "Hangout",
+            relatedUserId: me.id,
+            relatedId: meetupId,
+          });
+        }
+      }
+    }
+
+    // Return RSVP data with quota warning and confirmation status
+    const response: any = { ...data, meetupConfirmed };
     if (quotaWarning) response.quotaWarning = quotaWarning;
     res.json(response);
   } catch (err: any) {
@@ -6318,10 +6447,56 @@ app.post("/busy-blocks", requireAuth, async (req: AuthRequest, res: Response) =>
 
     if (error) { res.status(500).json({ error: error.message }); return; }
 
-    // Re-sync availability so the new block is reflected immediately
-    await syncUserCalendar(req.uid!);
+    // Re-sync availability in the background (don't block the response)
+    syncUserCalendar(req.uid!).catch((e) => console.error("Background sync after busy block add:", e));
 
     res.json({ block });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /busy-blocks/batch — create multiple manual busy blocks at once (for drag-to-select) */
+app.post("/busy-blocks/batch", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { blocks } = req.body;
+    if (!Array.isArray(blocks) || blocks.length === 0) {
+      res.status(400).json({ error: "blocks must be a non-empty array" });
+      return;
+    }
+    if (blocks.length > 50) {
+      res.status(400).json({ error: "Maximum 50 blocks per batch" });
+      return;
+    }
+
+    const rows = blocks
+      .filter((b: any) => b.start_time && b.end_time && new Date(b.end_time) > new Date(b.start_time))
+      .map((b: any) => ({
+        user_id: me.id,
+        start_time: b.start_time,
+        end_time: b.end_time,
+        label: b.label || "Busy",
+      }));
+
+    if (rows.length === 0) {
+      res.status(400).json({ error: "No valid blocks provided" });
+      return;
+    }
+
+    const { data: inserted, error } = await getSupabase()
+      .from("manual_busy_blocks")
+      .insert(rows)
+      .select();
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+
+    // Re-sync in the background
+    syncUserCalendar(req.uid!).catch((e) => console.error("Background sync after batch busy block:", e));
+
+    res.json({ blocks: inserted || [] });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -6342,8 +6517,8 @@ app.delete("/busy-blocks/:blockId", requireAuth, async (req: AuthRequest, res: R
 
     if (error) { res.status(500).json({ error: error.message }); return; }
 
-    // Re-sync availability so removing the block updates free slots
-    await syncUserCalendar(req.uid!);
+    // Re-sync availability in the background
+    syncUserCalendar(req.uid!).catch((e) => console.error("Background sync after busy block delete:", e));
 
     res.json({ deleted: true });
   } catch (err: any) {

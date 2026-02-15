@@ -127,6 +127,10 @@ export default function FriendsPage() {
   const [inviteEmailInput, setInviteEmailInput] = useState('');
   const [myEventInterests, setMyEventInterests] = useState<string[]>([]);
 
+  // Remove friend state
+  const [removingFriend, setRemovingFriend] = useState<FriendRecord | null>(null);
+  const [removeLoading, setRemoveLoading] = useState(false);
+
   const inviteUrl = `https://slotted-ai.web.app?ref=${user?.uid ?? ''}`;
   const message = `Let's schedule time to hang :) This app syncs our calendars and finds the best time to meet up. ${inviteUrl}`;
 
@@ -224,6 +228,25 @@ export default function FriendsPage() {
       fetchFriends();
     } catch (err) {
       console.error('Failed to update friendship:', err);
+    }
+  };
+
+  const handleRemoveFriend = async () => {
+    if (!user || !removingFriend) return;
+    setRemoveLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/friends/${removingFriend.friendshipId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to remove friend');
+      setRemovingFriend(null);
+      fetchFriends();
+    } catch (err) {
+      console.error('Failed to remove friend:', err);
+    } finally {
+      setRemoveLoading(false);
     }
   };
 
@@ -423,16 +446,27 @@ export default function FriendsPage() {
           })()}
         </div>
       </div>
-      <button
-        onClick={() => handleFindTimes(f.friend.id, f.friend.displayName)}
-        className={`shrink-0 rounded-xl px-3 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
-          selectedFriendId === f.friend.id
-            ? 'bg-slotted-500 text-white'
-            : 'gradient-btn text-white'
-        }`}
-      >
-        {selectedFriendId === f.friend.id ? '✨ Viewing' : '✨ Find times'}
-      </button>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button
+          onClick={() => handleFindTimes(f.friend.id, f.friend.displayName)}
+          className={`rounded-xl px-3 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
+            selectedFriendId === f.friend.id
+              ? 'bg-slotted-500 text-white'
+              : 'gradient-btn text-white'
+          }`}
+        >
+          {selectedFriendId === f.friend.id ? '✨ Viewing' : '✨ Find times'}
+        </button>
+        <button
+          onClick={() => setRemovingFriend(f)}
+          className="rounded-lg p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+          title="Remove friend"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM4 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 10.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 
@@ -780,6 +814,41 @@ export default function FriendsPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* Remove friend confirmation modal */}
+      {removingFriend && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => !removeLoading && setRemovingFriend(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
+                <svg className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM4 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 10.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Remove friend?</h3>
+              <p className="mt-2 text-sm text-gray-500">
+                Are you sure you want to remove <span className="font-medium text-gray-700">{removingFriend.friend.displayName}</span>? You won't be able to see each other's availability anymore.
+              </p>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setRemovingFriend(null)}
+                disabled={removeLoading}
+                className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRemoveFriend}
+                disabled={removeLoading}
+                className="flex-1 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {removeLoading ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AppShell>
   );

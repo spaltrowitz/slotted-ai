@@ -265,7 +265,6 @@ export default function EventsPage() {
   const [matches, setMatches] = useState<MatchedEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [sourceCounts, setSourceCounts] = useState<Record<string, number> | null>(null);
   const [matchMessage, setMatchMessage] = useState('');
 
   // Discover
@@ -289,7 +288,7 @@ export default function EventsPage() {
   const [mode, setMode] = useState<'search' | 'match'>('search');
 
   // Tab
-  const [tab, setTab] = useState<'discover' | 'search' | 'calendar'>('discover');
+  const [tab, setTab] = useState<'discover' | 'search' | 'saved' | 'calendar'>('discover');
 
   // Share modal
   const [shareEvent, setShareEvent] = useState<EventResult | null>(null);
@@ -306,6 +305,8 @@ export default function EventsPage() {
   // Saved/bookmarked event IDs
   const [savedEventIds, setSavedEventIds] = useState<Set<string>>(new Set());
   const [savingEventId, setSavingEventId] = useState<string | null>(null);
+  const [savedEventsList, setSavedEventsList] = useState<EventResult[]>([]);
+  const [savedEventsLoaded, setSavedEventsLoaded] = useState(false);
 
   // Price filter
   const [priceFilter, setPriceFilter] = useState<'any' | 'free' | 'under50' | 'under100' | 'under200'>('any');
@@ -431,7 +432,6 @@ export default function EventsPage() {
     setEvents([]);
     setMatches([]);
     setMatchMessage('');
-    setSourceCounts(null);
     setShowSuggestions(false);
     try {
       if (mode === 'match' && selectedFriends.size > 0) {
@@ -454,7 +454,6 @@ export default function EventsPage() {
         if (dateTo) params.dateTo = dateTo;
         const { data } = await api.get('/events/search', { params });
         setEvents(data.events || []);
-        setSourceCounts(data.sources || null);
       }
     } catch (err: any) { console.error('Event search failed:', err); }
     finally { setLoading(false); }
@@ -514,6 +513,34 @@ export default function EventsPage() {
   useEffect(() => {
     if (tab === 'discover' && !discoverLoaded && city) loadDiscover(discoverCategory);
   }, [tab, city]);
+
+  // ─── Load saved events when switching to saved tab ───
+  const loadSavedEvents = useCallback(async () => {
+    try {
+      const { data } = await api.get('/events/saved');
+      const events = (data.events || data || []).map((e: any) => ({
+        id: e.external_id || e.id,
+        source: e.source,
+        title: e.title,
+        type: e.event_type || 'event',
+        venue: e.venue || '',
+        city: e.city || '',
+        datetime: e.datetime_utc || '',
+        datetimeLocal: e.datetime_local || e.datetime_utc || '',
+        url: e.url,
+        imageUrl: e.image_url || '',
+        priceMin: e.price_min ? parseFloat(e.price_min) : undefined,
+        priceMax: e.price_max ? parseFloat(e.price_max) : undefined,
+        performers: e.performers || [],
+      }));
+      setSavedEventsList(events);
+      setSavedEventsLoaded(true);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'saved' && !savedEventsLoaded) loadSavedEvents();
+  }, [tab, savedEventsLoaded]);
 
   // ─── Calendar helpers ───
   const calViewDate = useMemo(() => {
@@ -575,9 +602,11 @@ export default function EventsPage() {
     try {
       if (savedEventIds.has(ev.id)) {
         setSavedEventIds((prev) => { const next = new Set(prev); next.delete(ev.id); return next; });
+        setSavedEventsList((prev) => prev.filter((e) => e.id !== ev.id));
       } else {
         await api.post('/events/save', { event: ev });
         setSavedEventIds((prev) => new Set(prev).add(ev.id));
+        setSavedEventsList((prev) => [ev, ...prev]);
       }
     } catch (err) { console.error('Save failed:', err); }
     finally { setSavingEventId(null); }
@@ -651,13 +680,16 @@ export default function EventsPage() {
     });
     const primaryUrl = allUrls[0]?.url || ev.url;
     return (
-      <a
+      <div
         key={ev.id}
-        href={primaryUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-3 px-4 sm:px-5 py-3.5 transition-colors hover:bg-gray-50/50 cursor-pointer">
-        {ev.imageUrl ? (
+        className="flex items-center gap-3 px-4 sm:px-5 py-3.5 transition-colors hover:bg-gray-50/50 cursor-pointer"
+        onClick={(e) => {
+          // Only navigate if the click wasn't on a button or link
+          const target = e.target as HTMLElement;
+          if (target.closest('button') || target.closest('a')) return;
+          window.open(primaryUrl, '_blank');
+        }}
+      >        {ev.imageUrl ? (
           <img src={ev.imageUrl} alt="" className="hidden sm:block h-14 w-14 rounded-xl object-cover shrink-0 shadow-sm" />
         ) : (
           <div className="hidden sm:flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 text-xl">
@@ -726,7 +758,7 @@ export default function EventsPage() {
             ))}
           </div>
         </div>
-      </a>
+      </div>
     );
   };
 
@@ -854,7 +886,7 @@ export default function EventsPage() {
 
       {/* ─── Tab Switcher ─── */}
       <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1 mb-5">
-        {(['discover', 'search', 'calendar'] as const).map((t) => (
+        {(['discover', 'search', 'saved', 'calendar'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -862,7 +894,7 @@ export default function EventsPage() {
               tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
-            {t === 'discover' ? '🗺️ Discover' : t === 'search' ? '🔍 Search' : '📅 Calendar'}
+            {t === 'discover' ? '🗺️ Discover' : t === 'search' ? '🔍 Search' : t === 'saved' ? `❤️ Saved${savedEventIds.size > 0 ? ` (${savedEventIds.size})` : ''}` : '📅 Calendar'}
           </button>
         ))}
       </div>
@@ -1135,13 +1167,6 @@ export default function EventsPage() {
                   </h2>
                   <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">{filteredEvents.length}{priceFilter !== 'any' ? ` of ${events.length}` : ''}</span>
                 </div>
-                {sourceCounts && (
-                  <div className="hidden sm:flex items-center gap-2 text-[10px] text-gray-400 flex-wrap">
-                    {Object.entries(sourceCounts).filter(([, c]) => c > 0).map(([s, c], i, arr) => (
-                      <span key={s}>{sourceLabel(s)}: {c}{i < arr.length - 1 ? ' ·' : ''}</span>
-                    ))}
-                  </div>
-                )}
               </div>
               <div className="divide-y divide-gray-100">{filteredEvents.map(renderEventCard)}</div>
             </div>
@@ -1385,6 +1410,45 @@ export default function EventsPage() {
               <p className="mt-2 text-sm text-gray-400">
                 Enter your city above or set it in <strong>Settings</strong> to browse local events.
               </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ====== SAVED TAB ====== */}
+      {tab === 'saved' && (
+        <div className="space-y-5">
+          {savedEventsList.length > 0 ? (
+            <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-5 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">❤️</span>
+                  <h2 className="font-display text-sm font-semibold text-gray-900">Your Saved Events</h2>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">{savedEventsList.length}</span>
+                </div>
+              </div>
+              <div className="divide-y divide-gray-100">{savedEventsList.map(renderEventCard)}</div>
+            </div>
+          ) : !savedEventsLoaded ? (
+            <div className="flex flex-col items-center justify-center py-16">
+              <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slotted-400 border-t-transparent" />
+              <p className="mt-3 text-sm text-gray-400">Loading saved events…</p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/50 p-10">
+              <div className="flex flex-col items-center text-center">
+                <span className="text-4xl">❤️</span>
+                <h3 className="mt-3 font-display text-base font-bold text-gray-700">No saved events yet</h3>
+                <p className="mt-2 max-w-md text-sm text-gray-400 leading-relaxed">
+                  Tap the heart icon on any event to save it here. Your saved events stay in one place so you can come back and buy tickets later.
+                </p>
+                <button
+                  onClick={() => setTab('discover')}
+                  className="mt-4 rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+                >
+                  🗺️ Discover Events
+                </button>
+              </div>
             </div>
           )}
         </div>

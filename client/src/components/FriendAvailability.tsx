@@ -50,6 +50,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
   const [error, setError] = useState<string | null>(null);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [booked, setBooked] = useState<string | null>(null);
+  const [bookedLabel, setBookedLabel] = useState<{ day: string; time: string; title: string } | null>(null);
   const [hangoutMode, setHangoutMode] = useState<HangoutMode>('in_person');
   const [videoPlatform, setVideoPlatform] = useState<VideoPlatform>('');
   const [calendarModal, setCalendarModal] = useState<{
@@ -107,15 +108,12 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
         }
       }
       setBooked(slot.start);
-      onBook?.(slot);
-      // Show "Add to Calendar" modal
-      setCalendarModal({
-        meetupId: data.id,
+      setBookedLabel({
+        day: suggestions.find(s => s.start === slot.start)?.dayLabel || '',
+        time: suggestions.find(s => s.start === slot.start)?.timeLabel || '',
         title: bookingTitle,
-        startTime: slot.start,
-        endTime: slot.end,
       });
-      setTimeout(() => setBooked(null), 5000);
+      onBook?.(slot);
     } catch {
       // silent fail
     } finally {
@@ -211,7 +209,56 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
 
       {/* Content */}
       <div className="px-5 py-4">
-        {loading ? (
+        {booked && bookedLabel ? (
+          /* ──── REQUEST SENT — full panel "what happens next" ──── */
+          <div className="flex flex-col items-center text-center py-6 animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 mb-4">
+              <span className="text-3xl">📩</span>
+            </div>
+            <h3 className="font-display text-lg font-bold text-gray-900">Request Sent!</h3>
+            <p className="mt-1 text-sm text-gray-500">{bookedLabel.title}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{bookedLabel.day} · {bookedLabel.time}</p>
+
+            <div className="mt-5 w-full max-w-xs space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400">What happens next</h4>
+              <div className="space-y-2.5 text-left">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs">1</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{friendName} gets notified</p>
+                    <p className="text-[11px] text-gray-400">They'll see the invite in their Slotted notifications</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs">2</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">They accept or decline</p>
+                    <p className="text-[11px] text-gray-400">They'll see accept/decline buttons on their Dashboard</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs">3</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Once confirmed, add to calendar</p>
+                    <p className="text-[11px] text-gray-400">When they say yes, you'll both be prompted to add it to your calendars</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2 rounded-xl border border-slotted-200 bg-slotted-50/50 px-4 py-2.5">
+              <span className="text-sm">👀</span>
+              <p className="text-xs text-slotted-700">Track this on your <a href="/" className="font-semibold underline underline-offset-2">Dashboard</a> under <strong>Pending</strong></p>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="mt-4 rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all"
+            >
+              Done
+            </button>
+          </div>
+        ) : loading ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="h-8 w-8 animate-spin rounded-full border-3 border-slotted-400 border-t-transparent" />
             <p className="mt-3 text-xs text-gray-400">Syncing calendars &amp; finding the best times…</p>
@@ -280,7 +327,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
                         : 'gradient-btn text-white'
                     }`}
                   >
-                    {bookingSlot === slot.start ? '...' : booked === slot.start ? 'Sent ✓' : 'Book'}
+                    {bookingSlot === slot.start ? '...' : booked === slot.start ? 'Sent! ✓' : 'Book'}
                   </button>
                 </div>
               </div>

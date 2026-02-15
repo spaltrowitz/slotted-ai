@@ -33,6 +33,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
   const [error, setError] = useState<string | null>(null);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [booked, setBooked] = useState<string | null>(null);
+  const [bookedLabel, setBookedLabel] = useState<{ day: string; time: string; title: string } | null>(null);
   const [bookError, setBookError] = useState<string | null>(null);
   const [calendarModal, setCalendarModal] = useState<{
     meetupId: string;
@@ -85,16 +86,14 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
         }
       }
       setBookingSlot(null);
+      const bookedSlot = suggestions.find(s => s.start === slot.start);
+      setBookedLabel({
+        day: bookedSlot?.dayLabel || '',
+        time: bookedSlot?.timeLabel || '',
+        title,
+      });
       setBooked(slot.start);
       onBook?.(slot);
-      // Show Add to Calendar modal
-      setCalendarModal({
-        meetupId: data.id,
-        title,
-        startTime: slot.start,
-        endTime: slot.end,
-      });
-      setTimeout(() => setBooked(null), 5000);
     } catch (err: any) {
       setBookingSlot(null);
       setBookError(err.response?.data?.error || 'Failed to book — please try again');
@@ -163,7 +162,56 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
 
       {/* Content */}
       <div className="px-5 py-4">
-        {loading ? (
+        {booked && bookedLabel ? (
+          /* ──── REQUEST SENT — full panel "what happens next" ──── */
+          <div className="flex flex-col items-center text-center py-6 animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 mb-4">
+              <span className="text-3xl">📩</span>
+            </div>
+            <h3 className="font-display text-lg font-bold text-gray-900">Request Sent!</h3>
+            <p className="mt-1 text-sm text-gray-500">{bookedLabel.title}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{bookedLabel.day} · {bookedLabel.time}</p>
+
+            <div className="mt-5 w-full max-w-xs space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400">What happens next</h4>
+              <div className="space-y-2.5 text-left">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs">1</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{friendNames.join(' & ')} get notified</p>
+                    <p className="text-[11px] text-gray-400">They'll see the invite in their Slotted notifications</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs">2</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Everyone accepts or declines</p>
+                    <p className="text-[11px] text-gray-400">Each person will see accept/decline on their Dashboard</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs">3</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Once confirmed, add to calendar</p>
+                    <p className="text-[11px] text-gray-400">When everyone says yes, you'll all be prompted to add it to your calendars</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2 rounded-xl border border-slotted-200 bg-slotted-50/50 px-4 py-2.5">
+              <span className="text-sm">👀</span>
+              <p className="text-xs text-slotted-700">Track this on your <a href="/" className="font-semibold underline underline-offset-2">Dashboard</a> under <strong>Pending</strong></p>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="mt-4 rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all"
+            >
+              Done
+            </button>
+          </div>
+        ) : loading ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="h-8 w-8 animate-spin rounded-full border-3 border-purple-400 border-t-transparent" />
             <p className="mt-3 text-xs text-gray-400">Syncing {friendNames.length + 1} calendars &amp; finding overlaps…</p>
@@ -231,7 +279,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
                         : 'bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white'
                     }`}
                   >
-                    {bookingSlot === slot.start ? '...' : booked === slot.start ? 'Booked ✓' : 'Book it'}
+                    {bookingSlot === slot.start ? '...' : booked === slot.start ? 'Sent! ✓' : 'Book it'}
                   </button>
                 </div>
               </div>
