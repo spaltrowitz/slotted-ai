@@ -3247,6 +3247,7 @@ console.log(`Event APIs configured — SeatGeek: ${!!SEATGEEK_CLIENT_ID}, Ticket
 interface ExternalEvent {
   id: string;
   source: "seatgeek" | "ticketmaster" | "eventbrite" | "meetup" | "nyc_open_data";
+  sources?: string[];          // all sources this event was found on
   title: string;
   type: string;
   venue: string;
@@ -3254,10 +3255,120 @@ interface ExternalEvent {
   datetime: string;
   datetimeLocal: string;
   url: string;
+  urls?: { source: string; url: string }[];  // ticket links from all sources
   imageUrl?: string;
   priceMin?: number;
   priceMax?: number;
   performers?: string[];
+}
+
+/**
+ * Normalize a title for fuzzy matching:
+ * - lowercase, strip "the", punctuation, extra whitespace
+ * - collapse common suffixes like "- new york" or "(broadway)"
+ */
+function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/\(.*?\)/g, "")           // strip parenthetical info
+    .replace(/[-–—:].*$/g, "")         // strip everything after dash/colon (venue/city suffixes)
+    .replace(/\b(the|a|an|at|in|on)\b/g, "")
+    .replace(/[^a-z0-9\s]/g, "")       // remove punctuation
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Check if two normalized titles are "the same event".
+ * Uses exact match after normalization, OR checks if one contains the other
+ * (handles "Hamilton" vs "Hamilton: An American Musical").
+ */
+function titlesMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  // If one is a substring of the other (at least 6 chars to avoid false positives)
+  if (a.length >= 6 && b.includes(a)) return true;
+  if (b.length >= 6 && a.includes(b)) return true;
+  return false;
+}
+
+/**
+ * Deduplicate events from multiple sources.
+ * Groups by similar title + same date, merges ticket links, keeps best metadata.
+ */
+function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
+  const groups: ExternalEvent[][] = [];
+
+  for (const ev of events) {
+    const normTitle = normalizeTitle(ev.title);
+    const evDate = ev.datetime?.slice(0, 10) || "";
+
+    // Try to find an existing group this event belongs to
+    let matched = false;
+    for (const group of groups) {
+      const rep = group[0];
+      const repNorm = normalizeTitle(rep.title);
+      const repDate = rep.datetime?.slice(0, 10) || "";
+
+      // Same date (or within 1 day for timezone edge cases) + similar title
+      const dateDiff = Math.abs(new Date(evDate).getTime() - new Date(repDate).getTime());
+      const sameDate = dateDiff <= 86400000; // within 24h
+
+      if (sameDate && titlesMatch(normTitle, repNorm)) {
+        group.push(ev);
+        matched = true;
+        break;
+      }
+    }
+
+    if (!matched) {
+      groups.push([ev]);
+    }
+  }
+
+  // Merge each group into a single event with combined metadata
+  return groups.map((group) => {
+    // Pick the "best" listing as the primary (prefer one with image, then lowest price)
+    const sorted = [...group].sort((a, b) => {
+      // Prefer entries with images
+      if (a.imageUrl && !b.imageUrl) return -1;
+      if (!a.imageUrl && b.imageUrl) return 1;
+      // Then prefer lower price
+      if ((a.priceMin || Infinity) !== (b.priceMin || Infinity)) {
+        return (a.priceMin || Infinity) - (b.priceMin || Infinity);
+      }
+      // Prefer SeatGeek (usually has better data for live events)
+      if (a.source === "seatgeek" && b.source !== "seatgeek") return -1;
+      if (a.source !== "seatgeek" && b.source === "seatgeek") return 1;
+      return 0;
+    });
+
+    const primary = sorted[0];
+
+    // Collect all source URLs
+    const urls = group.map((ev) => ({ source: ev.source, url: ev.url }));
+    const sources = [...new Set(group.map((ev) => ev.source))];
+
+    // Merge prices — take the lowest min and highest max across sources
+    const allMins = group.map((e) => e.priceMin).filter((p): p is number => p !== undefined && p > 0);
+    const allMaxes = group.map((e) => e.priceMax).filter((p): p is number => p !== undefined && p > 0);
+
+    // Merge performers — union of all
+    const allPerformers = [...new Set(group.flatMap((e) => e.performers || []))];
+
+    // Use best image
+    const bestImage = group.find((e) => e.imageUrl)?.imageUrl;
+
+    return {
+      ...primary,
+      sources,
+      urls,
+      imageUrl: bestImage || primary.imageUrl,
+      priceMin: allMins.length > 0 ? Math.min(...allMins) : undefined,
+      priceMax: allMaxes.length > 0 ? Math.max(...allMaxes) : undefined,
+      performers: allPerformers.length > 0 ? allPerformers : primary.performers,
+    };
+  });
 }
 
 /** Search SeatGeek for events */
@@ -3874,14 +3985,8 @@ app.get("/events/discover", requireAuth, async (req: AuthRequest, res: Response)
     const allEvents = [...sgEvents, ...tmEvents, ...ebEvents, ...muEvents, ...nycEvents];
     allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
-    // Deduplicate by title+date
-    const seen = new Set<string>();
-    const unique = allEvents.filter((ev) => {
-      const key = `${ev.title.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 30)}-${ev.datetime.slice(0, 10)}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    // Deduplicate across sources (e.g. Hamilton on both SeatGeek & Ticketmaster)
+    const unique = deduplicateEvents(allEvents);
 
     // Paginate
     const start = (page - 1) * perPage;
@@ -3925,12 +4030,13 @@ app.get("/events/search", requireAuth, async (req: AuthRequest, res: Response) =
       searchNYCOpenData({ q, city, type, dateFrom, dateTo }),
     ]);
 
-    // Merge and deduplicate (by title + date similarity)
+    // Merge and deduplicate across sources
     const allEvents = [...sgEvents, ...tmEvents, ...ebEvents, ...muEvents, ...nycEvents];
     allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+    const dedupedEvents = deduplicateEvents(allEvents);
 
     res.json({
-      events: allEvents,
+      events: dedupedEvents,
       sources: {
         seatgeek: sgEvents.length,
         ticketmaster: tmEvents.length,
@@ -3971,6 +4077,7 @@ app.post("/events/match", requireAuth, async (req: AuthRequest, res: Response) =
     ]);
     const allEvents = [...sgEvents, ...tmEvents, ...ebEvents, ...muEvents, ...nycEvents];
     allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+    const dedupedEvents = deduplicateEvents(allEvents);
 
     // 2. Sync calendars for all participants
     const friendUsers = await Promise.all(friendIds.map((fid: string) => getDbUserById(fid)));
@@ -4004,7 +4111,7 @@ app.post("/events/match", requireAuth, async (req: AuthRequest, res: Response) =
     // 4. For each event, check if its time falls within everyone's free slots
     const matches: (ExternalEvent & { availabilityScore: number; note: string })[] = [];
 
-    for (const ev of allEvents) {
+    for (const ev of dedupedEvents) {
       if (!ev.datetime) continue;
       const eventStart = new Date(ev.datetime);
       const eventEnd = new Date(eventStart.getTime() + 3 * 3600000); // Assume ~3hr event
@@ -4057,7 +4164,7 @@ app.post("/events/match", requireAuth, async (req: AuthRequest, res: Response) =
       : "No showtimes match everyone's availability. Try expanding the date range.";
 
     res.json({
-      events: allEvents,
+      events: dedupedEvents,
       matches,
       message,
       sources: {

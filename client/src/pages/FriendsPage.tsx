@@ -42,9 +42,9 @@ function HowItWorks() {
   const [open, setOpen] = useState(false);
 
   const steps = [
-    { emoji: '1️⃣', title: 'Invite a friend', desc: 'Enter their email or share your invite link. They\'ll get a friend request when they sign up.' },
+    { emoji: '1️⃣', title: 'Invite a friend', desc: 'Share your invite link via text, email, or copy link. They\'ll get a friend request when they sign up.' },
     { emoji: '2️⃣', title: 'Connect calendars', desc: 'Both you and your friend connect a Google or Apple calendar in Settings so Slotted can find free times.' },
-    { emoji: '3️⃣', title: 'Find times', desc: 'Tap "Find times" on a friend — Slotted compares both calendars and suggests the best slots to meet.' },
+    { emoji: '3️⃣', title: 'Find times', desc: 'Tap "Find times" on a friend — then choose In Person, Phone Call, or Video Call. Slotted finds the best slots for each type (calls can be shorter and skip travel time).' },
     { emoji: '4️⃣', title: 'Book it', desc: 'Pick a time and hit "Book it." Your friend gets a notification in their inbox to accept or decline.' },
     { emoji: '5️⃣', title: 'Add to calendar', desc: 'After booking (or accepting), you\'ll both be prompted to save the event to a specific Google or Apple calendar.' },
   ];
@@ -101,10 +101,6 @@ export default function FriendsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [friends, setFriends] = useState<FriendRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteStatus, setInviteStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
-  const [inviting, setInviting] = useState(false);
-  const [showShareMenu, setShowShareMenu] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Find times state
@@ -206,37 +202,6 @@ export default function FriendsPage() {
     setSearchParams({});
   };
 
-  const handleInvite = async () => {
-    if (!inviteEmail.trim() || !user) return;
-    setInviting(true);
-    setInviteStatus(null);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch('/api/friends/invite', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: inviteEmail.trim().toLowerCase() }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setInviteStatus({ type: 'success', message: `Invite sent to ${inviteEmail}!` });
-        setInviteEmail('');
-        fetchFriends();
-      } else if (res.status === 404) {
-        setInviteStatus({ type: 'info', message: `${inviteEmail} isn't on Slotted yet — share the invite link below!` });
-      } else {
-        setInviteStatus({ type: 'error', message: data.error || 'Something went wrong' });
-      }
-    } catch {
-      setInviteStatus({ type: 'error', message: 'Network error — please try again' });
-    } finally {
-      setInviting(false);
-    }
-  };
-
   const handleFriendAction = async (friendshipId: string, action: 'accept' | 'decline') => {
     if (!user) return;
     try {
@@ -257,7 +222,6 @@ export default function FriendsPage() {
 
   const handleText = () => {
     window.open(`sms:?&body=${encodeURIComponent(message)}`, '_blank');
-    setShowShareMenu(false);
   };
 
   const handleEmail = () => {
@@ -265,13 +229,12 @@ export default function FriendsPage() {
       `mailto:?subject=${encodeURIComponent("Let's hang — try Slotted!")}&body=${encodeURIComponent(message)}`,
       '_blank'
     );
-    setShowShareMenu(false);
   };
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message);
     setCopied(true);
-    setTimeout(() => { setCopied(false); setShowShareMenu(false); }, 1500);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   const handleGroupFindTimes = (group: SavedGroup) => {
@@ -456,60 +419,20 @@ export default function FriendsPage() {
         </div>
       )}
 
-      {/* Invite by email */}
-      <div className="mb-6">
-        <div className="flex gap-2">
-          <input
-            type="email"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
-            placeholder="Enter a friend's email..."
-            className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100 transition-all"
-          />
-          <button
-            onClick={handleInvite}
-            disabled={inviting || !inviteEmail.trim()}
-            className="rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
-          >
-            {inviting ? 'Sending...' : 'Invite'}
+      {/* Invite friends — share link */}
+      <div className="relative mb-8">
+        <p className="text-sm text-gray-500 mb-3">Invite friends to Slotted so you can find the best times to hang out.</p>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={handleText} className="flex items-center gap-2 rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
+            📱 Text
+          </button>
+          <button onClick={handleEmail} className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:border-gray-300">
+            📧 Email
+          </button>
+          <button onClick={handleCopy} className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:border-gray-300">
+            {copied ? '✅ Copied!' : '📋 Copy link'}
           </button>
         </div>
-        {inviteStatus && (
-          <div className={`mt-2 rounded-xl border px-4 py-2.5 text-xs ${
-            inviteStatus.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-            inviteStatus.type === 'info' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-            'border-red-200 bg-red-50 text-red-700'
-          }`}>
-            {inviteStatus.message}
-          </div>
-        )}
-      </div>
-
-      {/* Share invite link */}
-      <div className="relative mb-8">
-        <button
-          onClick={() => setShowShareMenu(!showShareMenu)}
-          className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:border-gray-300"
-        >
-          Share invite link 📨
-        </button>
-        {showShareMenu && (
-          <div className="absolute left-0 mt-2 w-52 rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg z-20">
-            <button onClick={handleText} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-              <span className="text-base">📱</span> Text message
-            </button>
-            <button onClick={handleEmail} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-              <span className="text-base">📧</span> Email
-            </button>
-            <button onClick={handleCopy} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-              <span className="text-base">{copied ? '✅' : '📋'}</span> {copied ? 'Copied!' : 'Copy link'}
-            </button>
-          </div>
-        )}
-        <p className="mt-2 text-xs text-gray-400">
-          For friends not yet on Slotted — send them a link to sign up
-        </p>
       </div>
 
       {/* Groups Section — always visible */}

@@ -3,12 +3,20 @@ import api from '../lib/api';
 import AddToCalendarModal from './AddToCalendarModal';
 
 type HangoutMode = 'in_person' | 'phone' | 'video';
+type VideoPlatform = 'facetime' | 'zoom' | 'google_meet' | 'teams' | '';
 
 const MODE_CONFIG: Record<HangoutMode, { emoji: string; label: string; shortLabel: string }> = {
   in_person: { emoji: '🤝', label: 'In person', shortLabel: 'Meet up' },
   phone: { emoji: '📞', label: 'Phone call', shortLabel: 'Call' },
   video: { emoji: '💻', label: 'Video call', shortLabel: 'Video' },
 };
+
+const VIDEO_PLATFORMS: { value: VideoPlatform; emoji: string; label: string }[] = [
+  { value: 'facetime', emoji: '📱', label: 'FaceTime' },
+  { value: 'zoom', emoji: '📹', label: 'Zoom' },
+  { value: 'google_meet', emoji: '🌐', label: 'Google Meet' },
+  { value: 'teams', emoji: '💼', label: 'Teams' },
+];
 
 
 interface ScoredSlot {
@@ -41,6 +49,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [booked, setBooked] = useState<string | null>(null);
   const [hangoutMode, setHangoutMode] = useState<HangoutMode>('in_person');
+  const [videoPlatform, setVideoPlatform] = useState<VideoPlatform>('');
   const [calendarModal, setCalendarModal] = useState<{
     meetupId: string;
     title: string;
@@ -70,9 +79,14 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
   const handleBook = async (slot: ScoredSlot) => {
     setBookingSlot(slot.start);
     const modeLabel = MODE_CONFIG[hangoutMode].shortLabel;
+    const platformLabel = hangoutMode === 'video' && videoPlatform
+      ? VIDEO_PLATFORMS.find(p => p.value === videoPlatform)?.label || ''
+      : '';
     const bookingTitle = hangoutMode === 'in_person'
       ? `Hangout with ${friendName}`
-      : `${modeLabel} with ${friendName}`;
+      : platformLabel
+        ? `${platformLabel} ${modeLabel} with ${friendName}`
+        : `${modeLabel} with ${friendName}`;
     try {
       const { data } = await api.post('/meetups', {
         title: bookingTitle,
@@ -163,6 +177,26 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
           );
         })}
       </div>
+
+      {/* Video platform picker — only show when video mode is selected */}
+      {hangoutMode === 'video' && (
+        <div className="flex items-center gap-1.5 px-4 sm:px-5 py-2 border-b border-gray-100 bg-gray-50/30">
+          <span className="text-[10px] text-gray-400 mr-1">Platform:</span>
+          {VIDEO_PLATFORMS.map((p) => (
+            <button
+              key={p.value}
+              onClick={() => setVideoPlatform(videoPlatform === p.value ? '' : p.value)}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
+                videoPlatform === p.value
+                  ? 'bg-slotted-50 text-slotted-700 border border-slotted-200 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-white border border-transparent'
+              }`}
+            >
+              {p.emoji} {p.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Sync status — only show if MY calendar isn't synced */}
       {syncStatus && !syncStatus.me.synced && (

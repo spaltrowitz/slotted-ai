@@ -115,44 +115,69 @@ const typeEmoji = (t: string) =>
 /** Extract major city name from a neighborhood string like "West Village, NYC" → "New York" */
 function extractMajorCity(input: string): string {
   if (!input) return '';
-  // Common abbreviation → full city name mapping
-  const cityAliases: Record<string, string> = {
-    'nyc': 'New York',
-    'ny': 'New York',
-    'new york city': 'New York',
-    'manhattan': 'New York',
-    'brooklyn': 'New York',
-    'queens': 'New York',
-    'bronx': 'New York',
-    'staten island': 'New York',
+  const lower = input.toLowerCase().trim();
+
+  // Known neighborhoods → city mapping (covers NYC neighborhoods + other major cities)
+  const neighborhoodToCity: Record<string, string> = {
+    // NYC neighborhoods
+    'hudson yards': 'New York', 'hells kitchen': 'New York', "hell's kitchen": 'New York',
+    'times square': 'New York', 'midtown': 'New York', 'midtown east': 'New York',
+    'midtown west': 'New York', 'upper east side': 'New York', 'upper west side': 'New York',
+    'lower east side': 'New York', 'west village': 'New York', 'east village': 'New York',
+    'greenwich village': 'New York', 'soho': 'New York', 'noho': 'New York',
+    'tribeca': 'New York', 'chelsea': 'New York', 'flatiron': 'New York',
+    'gramercy': 'New York', 'gramercy park': 'New York', 'murray hill': 'New York',
+    'kips bay': 'New York', 'union square': 'New York', 'nolita': 'New York',
+    'chinatown': 'New York', 'little italy': 'New York', 'financial district': 'New York',
+    'fidi': 'New York', 'battery park city': 'New York', 'harlem': 'New York',
+    'east harlem': 'New York', 'washington heights': 'New York', 'inwood': 'New York',
+    'morningside heights': 'New York', 'yorkville': 'New York', 'lenox hill': 'New York',
+    'carnegie hill': 'New York', 'stuyvesant town': 'New York', 'stuy town': 'New York',
+    'two bridges': 'New York', 'alphabet city': 'New York', 'meatpacking': 'New York',
+    'meatpacking district': 'New York', 'koreatown': 'New York', 'nomad': 'New York',
+    'dumbo': 'New York', 'williamsburg': 'New York', 'bushwick': 'New York',
+    'park slope': 'New York', 'cobble hill': 'New York', 'boerum hill': 'New York',
+    'carroll gardens': 'New York', 'red hook': 'New York', 'prospect heights': 'New York',
+    'crown heights': 'New York', 'bed-stuy': 'New York', 'bedford-stuyvesant': 'New York',
+    'fort greene': 'New York', 'clinton hill': 'New York', 'greenpoint': 'New York',
+    'downtown brooklyn': 'New York', 'brooklyn heights': 'New York',
+    'long island city': 'New York', 'astoria': 'New York', 'jackson heights': 'New York',
+    'flushing': 'New York', 'forest hills': 'New York', 'woodside': 'New York',
+    'south bronx': 'New York', 'riverdale': 'New York',
+    // NYC abbreviations
+    'nyc': 'New York', 'ny': 'New York', 'new york city': 'New York',
+    'manhattan': 'New York', 'brooklyn': 'New York', 'queens': 'New York',
+    'bronx': 'New York', 'the bronx': 'New York', 'staten island': 'New York',
+    // LA
+    'hollywood': 'Los Angeles', 'santa monica': 'Los Angeles', 'beverly hills': 'Los Angeles',
+    'west hollywood': 'Los Angeles', 'weho': 'Los Angeles', 'silver lake': 'Los Angeles',
+    'echo park': 'Los Angeles', 'venice': 'Los Angeles', 'dtla': 'Los Angeles',
     'la': 'Los Angeles',
-    'sf': 'San Francisco',
-    'san fran': 'San Francisco',
-    'chi': 'Chicago',
-    'philly': 'Philadelphia',
-    'dc': 'Washington',
-    'bos': 'Boston',
-    'atl': 'Atlanta',
-    'sea': 'Seattle',
-    'pdx': 'Portland',
-    'den': 'Denver',
-    'dfw': 'Dallas',
-    'hou': 'Houston',
-    'nola': 'New Orleans',
-    'mpls': 'Minneapolis',
-    'mia': 'Miami',
-    'dtw': 'Detroit',
+    // SF
+    'sf': 'San Francisco', 'san fran': 'San Francisco', 'the mission': 'San Francisco',
+    'soma': 'San Francisco', 'north beach': 'San Francisco', 'castro': 'San Francisco',
+    'haight': 'San Francisco', 'nob hill': 'San Francisco', 'pacific heights': 'San Francisco',
+    // Chicago
+    'chi': 'Chicago', 'wicker park': 'Chicago', 'logan square': 'Chicago',
+    'lincoln park': 'Chicago', 'lakeview': 'Chicago', 'the loop': 'Chicago',
+    'river north': 'Chicago', 'old town': 'Chicago', 'bucktown': 'Chicago',
+    // Other cities
+    'philly': 'Philadelphia', 'dc': 'Washington', 'bos': 'Boston',
+    'atl': 'Atlanta', 'sea': 'Seattle', 'pdx': 'Portland',
+    'den': 'Denver', 'dfw': 'Dallas', 'hou': 'Houston',
+    'nola': 'New Orleans', 'mpls': 'Minneapolis', 'mia': 'Miami', 'dtw': 'Detroit',
   };
-  // If it contains a comma ("West Village, NYC"), try the part after the comma
+
+  // Direct match on full input
+  if (neighborhoodToCity[lower]) return neighborhoodToCity[lower];
+
+  // If it contains a comma ("West Village, NYC"), check each part
   const parts = input.split(',').map(p => p.trim());
-  // Check each part against known aliases
   for (const part of [...parts].reverse()) {
-    const lower = part.toLowerCase();
-    if (cityAliases[lower]) return cityAliases[lower];
+    const partLower = part.toLowerCase();
+    if (neighborhoodToCity[partLower]) return neighborhoodToCity[partLower];
   }
-  // If the whole string matches an alias
-  const whole = input.toLowerCase().trim();
-  if (cityAliases[whole]) return cityAliases[whole];
+
   // If there's a comma, return the last part (likely the city)
   if (parts.length > 1) return parts[parts.length - 1];
   // Otherwise return as-is
