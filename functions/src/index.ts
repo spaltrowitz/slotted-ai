@@ -1527,8 +1527,9 @@ async function scoreOverlaps(
   friendId: string,
   overlaps: { start: string; end: string }[],
   limit = 5,
+  mode = "in_person",
 ): Promise<ScoredSlot[]> {
-  return scoreGroupOverlaps(userId, [friendId], overlaps, limit);
+  return scoreGroupOverlaps(userId, [friendId], overlaps, limit, mode);
 }
 
 /**
@@ -1539,6 +1540,7 @@ async function scoreGroupOverlaps(
   participantIds: string[],
   overlaps: { start: string; end: string }[],
   limit = 5,
+  mode = "in_person",
 ): Promise<ScoredSlot[]> {
   const sb = getSupabase();
 
@@ -1583,18 +1585,34 @@ async function scoreGroupOverlaps(
     const localParts = getLocalParts(startDt);
     const dayOfWeek = localParts.dayOfWeek;
     const hour = localParts.hour;
+    const isCallMode = mode === "phone" || mode === "video";
     let score = 50; // base score
     const reasons: string[] = [];
 
-    // 1. Duration bonus — longer slots are better (more flexibility)
-    if (durationMin >= 120) {
-      score += 15;
-      reasons.push("2+ hour window");
-    } else if (durationMin >= 60) {
-      score += 10;
-      reasons.push("1 hour window");
-    } else if (durationMin < 45) {
-      score -= 10;
+    // 1. Duration scoring — different for calls vs in-person
+    if (isCallMode) {
+      // For calls: 15-30 min is ideal, 30-60 is great, longer is fine but not as necessary
+      if (durationMin >= 30 && durationMin <= 60) {
+        score += 15;
+        reasons.push("Perfect call length");
+      } else if (durationMin >= 15 && durationMin < 30) {
+        score += 10;
+        reasons.push("Quick catch-up window");
+      } else if (durationMin > 60) {
+        score += 8;
+        reasons.push("Plenty of time");
+      }
+    } else {
+      // For in-person: longer is better
+      if (durationMin >= 120) {
+        score += 15;
+        reasons.push("2+ hour window");
+      } else if (durationMin >= 60) {
+        score += 10;
+        reasons.push("1 hour window");
+      } else if (durationMin < 45) {
+        score -= 10;
+      }
     }
 
     // 2. Time-of-day match with user preferred times
@@ -1605,6 +1623,34 @@ async function scoreGroupOverlaps(
     if (userProfile?.preferred_times?.includes(timeKey)) {
       score += 15;
       reasons.push("Your preferred time");
+    }
+
+    // 2b. Call-specific: boost lunch breaks, commute hours, and user's call windows
+    if (isCallMode) {
+      // Lunch break is great for calls
+      if (hour >= 12 && hour <= 13) {
+        score += 12;
+        reasons.push("Lunch break call");
+      }
+      // Early morning commute (8-9am) or evening commute (5-7pm)
+      if ((hour >= 8 && hour < 9) || (hour >= 17 && hour < 19)) {
+        score += 8;
+        reasons.push("Commute-friendly");
+      }
+      // Check user's saved call windows
+      if (userProfile?.call_windows && Array.isArray(userProfile.call_windows)) {
+        for (const cw of userProfile.call_windows) {
+          if (cw.day === dayOfWeek) {
+            const cwStart = parseInt(cw.start?.split(":")[0] || "0", 10);
+            const cwEnd = parseInt(cw.end?.split(":")[0] || "23", 10);
+            if (hour >= cwStart && hour < cwEnd) {
+              score += 15;
+              reasons.push(cw.label ? `Your "${cw.label}" window` : "Your call window");
+              break;
+            }
+          }
+        }
+      }
     }
 
     // 3. Social battery check — factor in all participants
@@ -1644,19 +1690,21 @@ async function scoreGroupOverlaps(
 
     // 4. Weekend bonus
     if (isWeekend) {
-      score += 5;
+      score += isCallMode ? 3 : 5;
       reasons.push("Weekend");
     }
 
-    // 5. Afternoon/evening sweet spot (most social hours)
-    if (hour >= 11 && hour <= 14) {
-      score += 8;
-      reasons.push("Lunch hours");
-    } else if (hour >= 17 && hour <= 20) {
-      score += 10;
-      reasons.push("Evening hours");
-    } else if (hour < 9) {
-      score -= 5;
+    // 5. Afternoon/evening sweet spot (in-person only — call mode handles this above)
+    if (!isCallMode) {
+      if (hour >= 11 && hour <= 14) {
+        score += 8;
+        reasons.push("Lunch hours");
+      } else if (hour >= 17 && hour <= 20) {
+        score += 10;
+        reasons.push("Evening hours");
+      } else if (hour < 9) {
+        score -= 5;
+      }
     }
 
     // 6. Learned preference match
@@ -1776,6 +1824,8 @@ app.get("/availability", requireAuth, async (req: AuthRequest, res: Response) =>
 /** GET /availability/overlap/:friendId — find mutual free slots with AI scoring */
 app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest, res: Response) => {
   const { friendId } = req.params;
+  const mode = (req.query.mode as string) || "in_person"; // "in_person" | "phone" | "video"
+  const isCallMode = mode === "phone" || mode === "video";
   try {
     const me = await getDbUser(req.uid!);
     if (!me) {
@@ -1820,22 +1870,22 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
       return;
     }
 
-    // Apply travel buffer to both users' free slots
-    const myBuffer = me.travel_buffer_min || 0;
-    const friendBuffer = friendUser?.travel_buffer_min || 0;
+    // Apply travel buffer — skip for phone/video calls
+    const myBuffer = isCallMode ? 0 : (me.travel_buffer_min || 0);
+    const friendBuffer = isCallMode ? 0 : (friendUser?.travel_buffer_min || 0);
     const myBuffered = applyTravelBuffer(mySlots.data || [], myBuffer);
     const friendBuffered = applyTravelBuffer(friendSlots.data || [], friendBuffer);
 
     // Compute overlaps (using buffered slots)
+    const minDurationMin = isCallMode ? 15 : 30;
     const rawOverlaps: { start: string; end: string }[] = [];
     for (const a of myBuffered) {
       for (const b of friendBuffered) {
         const start = a.start_time > b.start_time ? a.start_time : b.start_time;
         const end = a.end_time < b.end_time ? a.end_time : b.end_time;
         if (start < end) {
-          // Only include overlaps >= 30 minutes
           const durMin = (new Date(end).getTime() - new Date(start).getTime()) / 60000;
-          if (durMin >= 30) {
+          if (durMin >= minDurationMin) {
             rawOverlaps.push({ start, end });
           }
         }
@@ -1848,8 +1898,8 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
       { preferred_times: friendUser?.preferred_times, timezone: friendUser?.timezone },
     ]);
 
-    // AI-score the overlaps
-    const suggestions = await scoreOverlaps(me.id, friendId, overlaps, 8);
+    // AI-score the overlaps (pass mode for call-specific scoring)
+    const suggestions = await scoreOverlaps(me.id, friendId, overlaps, 8, mode);
 
     // Persist top suggestions to suggestion_events
     for (const s of suggestions.slice(0, 5)) {

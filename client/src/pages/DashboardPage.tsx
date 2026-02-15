@@ -208,7 +208,7 @@ export default function DashboardPage() {
   const now = useMemo(() => new Date(), []);
   const upcoming = meetups.filter((m) => {
     const start = new Date(m.start_time);
-    return start >= now && !['cancelled', 'didnt_happen', 'declined'].includes(m.status);
+    return start >= now && !['cancelled', 'didnt_happen', 'declined'].includes(m.status) && m.myRsvp !== 'declined';
   });
   const pastConfirmed = meetups.filter((m) => {
     const end = new Date(m.end_time);

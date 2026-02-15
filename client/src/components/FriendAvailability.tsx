@@ -40,6 +40,13 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
   const [error, setError] = useState<string | null>(null);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [booked, setBooked] = useState<string | null>(null);
+  const [hangoutMode, setHangoutMode] = useState<HangoutMode>('in_person');
+  const [calendarModal, setCalendarModal] = useState<{
+    meetupId: string;
+    title: string;
+    startTime: string;
+    endTime: string;
+  } | null>(null);
 
   const fetchOverlaps = useCallback(async () => {
     setLoading(true);
@@ -85,6 +92,13 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
       }
       setBooked(slot.start);
       onBook?.(slot);
+      // Show "Add to Calendar" modal
+      setCalendarModal({
+        meetupId: data.id,
+        title: bookingTitle,
+        startTime: slot.start,
+        endTime: slot.end,
+      });
       setTimeout(() => setBooked(null), 5000);
     } catch {
       // silent fail
@@ -126,6 +140,28 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
+      </div>
+
+      {/* Hangout mode toggle */}
+      <div className="flex items-center gap-1.5 px-4 sm:px-5 py-2.5 border-b border-gray-100 bg-gray-50/50">
+        {(['in_person', 'phone', 'video'] as HangoutMode[]).map((mode) => {
+          const cfg = MODE_CONFIG[mode];
+          const isActive = hangoutMode === mode;
+          return (
+            <button
+              key={mode}
+              onClick={() => setHangoutMode(mode)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                isActive
+                  ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
+              }`}
+            >
+              <span>{cfg.emoji}</span>
+              {cfg.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Sync status — only show if MY calendar isn't synced */}
@@ -233,6 +269,16 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
         </button>
       </div>
 
+      {/* Add to Calendar modal */}
+      {calendarModal && (
+        <AddToCalendarModal
+          meetupId={calendarModal.meetupId}
+          meetupTitle={calendarModal.title}
+          startTime={calendarModal.startTime}
+          endTime={calendarModal.endTime}
+          onClose={() => setCalendarModal(null)}
+        />
+      )}
     </div>
   );
 }
