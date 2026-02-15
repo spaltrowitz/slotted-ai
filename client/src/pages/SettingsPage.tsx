@@ -801,6 +801,7 @@ export default function SettingsPage() {
                 <label className="block text-[11px] font-semibold text-violet-700 mb-2">Preferred video call platforms</label>
                 <div className="flex flex-wrap gap-1.5">
                   {[
+                    { value: 'phone', emoji: '📞', label: 'Phone Call' },
                     { value: 'facetime', emoji: '📱', label: 'FaceTime' },
                     { value: 'zoom', emoji: '📹', label: 'Zoom' },
                     { value: 'google_meet', emoji: '🌐', label: 'Google Meet' },
