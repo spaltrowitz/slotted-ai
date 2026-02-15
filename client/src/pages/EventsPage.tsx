@@ -291,6 +291,13 @@ export default function EventsPage() {
   // Tab
   const [tab, setTab] = useState<'search' | 'discover' | 'calendar'>('search');
 
+  // Share modal
+  const [shareEvent, setShareEvent] = useState<EventResult | null>(null);
+  const [shareFriends, setShareFriends] = useState<Set<string>>(new Set());
+  const [shareMessage, setShareMessage] = useState('');
+  const [shareSending, setShareSending] = useState(false);
+  const [shareSent, setShareSent] = useState(false);
+
   // ─── Load friends + city ───
   useEffect(() => {
     if (!user) return;
@@ -526,6 +533,40 @@ export default function EventsPage() {
   // ─── Quick suggestions based on city ───
   const quickSuggestions = CITY_SUGGESTIONS[city] || CITY_SUGGESTIONS['New York'] || [];
 
+  // ─── Share event with friends ───
+  const openShareModal = (ev: EventResult) => {
+    setShareEvent(ev);
+    setShareFriends(new Set());
+    setShareMessage('');
+    setShareSent(false);
+  };
+
+  const toggleShareFriend = (id: string) => {
+    setShareFriends((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleShare = async () => {
+    if (!shareEvent || shareFriends.size === 0) return;
+    setShareSending(true);
+    try {
+      await api.post('/events/share', {
+        friendIds: Array.from(shareFriends),
+        event: shareEvent,
+        message: shareMessage || undefined,
+      });
+      setShareSent(true);
+      setTimeout(() => { setShareEvent(null); setShareSent(false); }, 1500);
+    } catch (err) {
+      console.error('Share failed:', err);
+    } finally {
+      setShareSending(false);
+    }
+  };
+
   // ---------------------------------------------------------------------------
   // Event card renderer
   // ---------------------------------------------------------------------------
@@ -563,8 +604,17 @@ export default function EventsPage() {
               {formatPrice(ev.priceMin, ev.priceMax)}
             </span>
           )}
-          {/* Multi-source ticket links */}
+          {/* Multi-source ticket links + share */}
           <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); openShareModal(ev); }}
+              className="rounded-full p-1.5 text-gray-400 hover:text-slotted-600 hover:bg-slotted-50 transition-all"
+              title="Send to a friend"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
             {allUrls.map(({ source: s, url }) => (
               <a
                 key={s}
@@ -1207,6 +1257,125 @@ export default function EventsPage() {
               <p className="mt-2 text-sm text-gray-400">Set your city in Settings to see events on the calendar.</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ====== SHARE MODAL ====== */}
+      {shareEvent && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !shareSending && setShareEvent(null)}>
+          <div
+            className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Event preview */}
+            <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-4 bg-gray-50/50">
+              {shareEvent.imageUrl ? (
+                <img src={shareEvent.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0" />
+              ) : (
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 text-lg">
+                  {typeEmoji(shareEvent.type)}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-gray-900 truncate">{shareEvent.title}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {formatDateTime(shareEvent.datetimeLocal || shareEvent.datetime)}
+                  {shareEvent.venue ? ` · ${shareEvent.venue}` : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => setShareEvent(null)}
+                className="rounded-full p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors shrink-0"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {shareSent ? (
+              /* Sent confirmation */
+              <div className="flex flex-col items-center py-10 px-5">
+                <span className="text-4xl">✅</span>
+                <p className="mt-2 text-sm font-semibold text-gray-900">Sent!</p>
+                <p className="text-xs text-gray-400">They'll see it in their notifications</p>
+              </div>
+            ) : (
+              <>
+                {/* Friend picker */}
+                <div className="px-5 pt-4 pb-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Send to</p>
+                  {friends.length === 0 ? (
+                    <p className="text-xs text-gray-400 py-3">No friends yet — invite friends first!</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                      {friends.map((f) => {
+                        const selected = shareFriends.has(f.id);
+                        return (
+                          <button
+                            key={f.id}
+                            onClick={() => toggleShareFriend(f.id)}
+                            className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
+                              selected
+                                ? 'border-slotted-400 bg-slotted-100 text-slotted-700 shadow-sm'
+                                : 'border-gray-200 bg-white text-gray-600 hover:border-slotted-200'
+                            }`}
+                          >
+                            {f.photoUrl ? (
+                              <img src={f.photoUrl} alt="" className="h-5 w-5 rounded-full" />
+                            ) : (
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[9px] font-semibold text-white">
+                                {f.displayName?.[0] ?? '?'}
+                              </span>
+                            )}
+                            {selected ? '✓ ' : ''}{f.displayName?.split(' ')[0] || f.email}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Optional message */}
+                <div className="px-5 py-3">
+                  <input
+                    type="text"
+                    value={shareMessage}
+                    onChange={(e) => setShareMessage(e.target.value)}
+                    placeholder="Add a message (optional)..."
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100 transition-all"
+                    onKeyDown={(e) => { if (e.key === 'Enter' && shareFriends.size > 0) handleShare(); }}
+                  />
+                </div>
+
+                {/* Send button */}
+                <div className="border-t border-gray-100 px-5 py-4 flex items-center justify-between">
+                  <p className="text-[11px] text-gray-400">
+                    {shareFriends.size > 0 ? `Sending to ${shareFriends.size} friend${shareFriends.size > 1 ? 's' : ''}` : 'Select friends above'}
+                  </p>
+                  <button
+                    onClick={handleShare}
+                    disabled={shareSending || shareFriends.size === 0}
+                    className="rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 flex items-center gap-2"
+                  >
+                    {shareSending ? (
+                      <>
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        Sending…
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                        Send
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </AppShell>

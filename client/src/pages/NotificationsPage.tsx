@@ -149,6 +149,15 @@ export default function NotificationsPage() {
     meetup_confirmed: { emoji: '✅', bg: 'bg-emerald-50', border: 'border-emerald-100' },
     meetup_reminder: { emoji: '⏰', bg: 'bg-blue-50', border: 'border-blue-100' },
     calendar_match: { emoji: '✨', bg: 'bg-amber-50', border: 'border-amber-100' },
+    event_shared: { emoji: '🎟️', bg: 'bg-purple-50', border: 'border-purple-100' },
+  };
+
+  /** Parse a shared event from the notification body if it starts with [EVENT_SHARE] */
+  const parseSharedEvent = (body: string) => {
+    if (!body.startsWith('[EVENT_SHARE]')) return null;
+    try {
+      return JSON.parse(body.replace('[EVENT_SHARE]', ''));
+    } catch { return null; }
   };
 
   const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'requests' | 'reminders'>('all');
@@ -156,6 +165,7 @@ export default function NotificationsPage() {
   const unreadCount = notifications.filter((n) => !n.read).length;
   const requestTypes = ['friend_request', 'meetup_request'];
   const reminderTypes = ['meetup_reminder', 'calendar_match'];
+  // event_shared notifications are shown in all tabs
 
   const filteredNotifications = notifications.filter((n) => {
     if (activeTab === 'unread') return !n.read;
@@ -266,9 +276,54 @@ export default function NotificationsPage() {
                       <p className={`text-sm font-semibold ${notification.read ? 'text-gray-700' : 'text-gray-900'}`}>
                         {notification.title}
                       </p>
-                      <p className="mt-0.5 text-sm text-gray-500">
-                        <NotificationBody text={notification.body} />
-                      </p>
+                      {/* Shared event card rendering */}
+                      {(() => {
+                        const sharedEvent = parseSharedEvent(notification.body);
+                        if (sharedEvent) {
+                          return (
+                            <div className="mt-2">
+                              <a
+                                href={sharedEvent.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3 transition-all hover:shadow-md hover:border-slotted-200"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {sharedEvent.imageUrl ? (
+                                  <img src={sharedEvent.imageUrl} alt="" className="h-14 w-14 rounded-lg object-cover shrink-0 shadow-sm" />
+                                ) : (
+                                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-purple-100 to-pink-100 text-xl">
+                                    🎟️
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-gray-900 truncate">{sharedEvent.title}</p>
+                                  <p className="text-xs text-gray-500 truncate">
+                                    {sharedEvent.datetimeLocal ? new Date(sharedEvent.datetimeLocal).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''}
+                                    {sharedEvent.venue ? ` · ${sharedEvent.venue}` : ''}
+                                  </p>
+                                  {sharedEvent.priceMin !== undefined && (
+                                    <p className="text-[11px] text-gray-400 mt-0.5">
+                                      {sharedEvent.priceMin === 0 ? 'Free' : `From $${sharedEvent.priceMin}`}
+                                    </p>
+                                  )}
+                                </div>
+                                <span className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-slotted-600 hover:bg-slotted-50 transition-colors">
+                                  🎟️ Tickets
+                                </span>
+                              </a>
+                              {sharedEvent.senderMessage && (
+                                <p className="mt-1.5 text-xs text-gray-500 italic">"{sharedEvent.senderMessage}"</p>
+                              )}
+                            </div>
+                          );
+                        }
+                        return (
+                          <p className="mt-0.5 text-sm text-gray-500">
+                            <NotificationBody text={notification.body} />
+                          </p>
+                        );
+                      })()}
                     </div>
                     <span className="shrink-0 text-xs text-gray-400">{timeAgo(notification.created_at)}</span>
                   </div>

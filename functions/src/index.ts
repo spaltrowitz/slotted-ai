@@ -395,7 +395,7 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
         userId: data.id,
         type: "friend_request" as any,
         title: "Welcome to Slotted! 👋",
-        body: "Invite your friends so Slotted can find the best times for you to hang out. Head to the Friends tab to send invites!",
+        body: "Get started in 3 quick steps: 1️⃣ Go to Settings to connect your calendar and set your preferences. 2️⃣ Head to the Friends tab to invite friends. 3️⃣ Check the Events tab to discover local shows, concerts & more!",
       });
     }
 
@@ -4419,6 +4419,132 @@ app.patch("/events/invites/:id", requireAuth, async (req: AuthRequest, res: Resp
 
     if (error) { res.status(500).json({ error: error.message }); return; }
     res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /events/share — share an event with friends (like Instagram DMs)
+// Sends a notification to each selected friend with the event details
+// ---------------------------------------------------------------------------
+app.post("/events/share", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { friendIds, event, message: userMessage } = req.body;
+    if (!Array.isArray(friendIds) || friendIds.length === 0) {
+      res.status(400).json({ error: "friendIds must be a non-empty array" });
+      return;
+    }
+    if (!event || !event.title) {
+      res.status(400).json({ error: "event object with title is required" });
+      return;
+    }
+
+    const senderName = me.display_name?.split(" ")[0] || "A friend";
+    const eventDate = event.datetimeLocal
+      ? new Date(event.datetimeLocal).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+      : "";
+
+    // Build notification body with embedded event data for rich rendering
+    // Format: [EVENT_SHARE]{json} so the frontend can parse and render a card
+    const eventPayload = {
+      title: event.title,
+      venue: event.venue || "",
+      city: event.city || "",
+      datetime: event.datetime || "",
+      datetimeLocal: event.datetimeLocal || "",
+      url: event.url || "",
+      urls: event.urls || [],
+      imageUrl: event.imageUrl || "",
+      type: event.type || "event",
+      source: event.source || "",
+      priceMin: event.priceMin,
+      priceMax: event.priceMax,
+      performers: event.performers || [],
+      senderMessage: userMessage || "",
+    };
+
+    const notifBody = `[EVENT_SHARE]${JSON.stringify(eventPayload)}`;
+    const humanTitle = `${senderName} shared an event with you!`;
+    const humanPreview = `${event.title}${eventDate ? ` — ${eventDate}` : ""}${event.venue ? ` at ${event.venue}` : ""}`;
+
+    // Determine notification type — try event_shared first, fall back to calendar_match
+    let notifType = "event_shared";
+
+    const sentTo: string[] = [];
+    const errors: string[] = [];
+
+    for (const friendId of friendIds) {
+      try {
+        // Try event_shared type first
+        const { error } = await getSupabase().from("notifications").insert({
+          user_id: friendId,
+          type: notifType,
+          title: humanTitle,
+          body: notifBody,
+          related_user_id: me.id,
+        });
+
+        if (error) {
+          // If constraint violation, fall back to calendar_match
+          if (error.code === "23514" && notifType === "event_shared") {
+            notifType = "calendar_match";
+            const { error: fallbackErr } = await getSupabase().from("notifications").insert({
+              user_id: friendId,
+              type: "calendar_match",
+              title: humanTitle,
+              body: notifBody,
+              related_user_id: me.id,
+            });
+            if (fallbackErr) {
+              errors.push(`${friendId}: ${fallbackErr.message}`);
+              continue;
+            }
+          } else {
+            errors.push(`${friendId}: ${error.message}`);
+            continue;
+          }
+        }
+
+        sentTo.push(friendId);
+
+        // Also send push notification with human-readable text
+        try {
+          const { data: tokens } = await getSupabase()
+            .from("fcm_tokens")
+            .select("token")
+            .eq("user_id", friendId);
+
+          if (tokens && tokens.length > 0) {
+            await Promise.allSettled(
+              tokens.map((t: any) =>
+                admin.messaging().send({
+                  token: t.token,
+                  notification: {
+                    title: humanTitle,
+                    body: humanPreview,
+                  },
+                  webpush: {
+                    fcmOptions: { link: "https://slotted-ai.web.app/notifications" },
+                  },
+                }).catch(() => {}),
+              ),
+            );
+          }
+        } catch { /* silent push failure */ }
+      } catch (err: any) {
+        errors.push(`${friendId}: ${err.message}`);
+      }
+    }
+
+    res.json({
+      sent: sentTo.length,
+      total: friendIds.length,
+      errors: errors.length > 0 ? errors : undefined,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

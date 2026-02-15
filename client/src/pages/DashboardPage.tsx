@@ -107,8 +107,15 @@ const isBufferEvent = (ev: CalEvent) => ev.id?.startsWith('buffer_') ?? false;
 export default function DashboardPage() {
   const { user, calendarConnected, calendarJustConnected } = useAuth();
 
-  // Calendar view state
-  const [calView, setCalView] = useState<'agenda' | 'week' | 'month'>('month');
+  // Calendar view state — persist preference in localStorage
+  const [calView, setCalView] = useState<'agenda' | 'week' | 'month'>(() => {
+    const saved = localStorage.getItem('slotted_cal_view');
+    return saved === 'agenda' || saved === 'week' || saved === 'month' ? saved : 'month';
+  });
+  const handleSetCalView = (v: 'agenda' | 'week' | 'month') => {
+    setCalView(v);
+    localStorage.setItem('slotted_cal_view', v);
+  };
   const [calEvents, setCalEvents] = useState<CalEvent[]>([]);
   const [calEventsLoading, setCalEventsLoading] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 1 = next week, etc.
@@ -565,7 +572,7 @@ export default function DashboardPage() {
               {(['week', 'month', 'agenda'] as const).map((v) => (
                 <button
                   key={v}
-                  onClick={() => { setCalView(v); if (v === 'week') setWeekOffset(0); }}
+                  onClick={() => { handleSetCalView(v); if (v === 'week') setWeekOffset(0); }}
                   className={`rounded-md px-3 py-1 text-[11px] font-semibold transition-all ${
                     calView === v
                       ? 'bg-white text-gray-900 shadow-sm'
