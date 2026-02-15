@@ -8,7 +8,8 @@
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
-    "deploy": "firebase deploy --only functions",
+    "predeploy:check": "node -e \"const fs=require('fs');const src=fs.readFileSync('src/index.ts','utf8');const lines=src.split('\\n');const bad=[];lines.forEach((l,i)=>{if(/localhost/.test(l)&&/redirect|frontendUrl|REDIRECT_URI|FRONTEND_URL/.test(l))bad.push('L'+(i+1)+': '+l.trim())});if(bad.length){console.error('ERROR: localhost in redirect/URL lines:\\n'+bad.join('\\n'));process.exit(1)}else{console.log('OK: No localhost in redirect/URL code')}\"",
+    "deploy": "npm run build && npm run predeploy:check && firebase deploy --only functions",
     "logs": "firebase functions:log"
   },
   "engines": {

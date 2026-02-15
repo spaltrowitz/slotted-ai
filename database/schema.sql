@@ -289,7 +289,6 @@ CREATE TABLE user_calendars (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   calendar_id     TEXT NOT NULL,                      -- Google Calendar ID or Apple CalDAV URL
-  calendar_name   TEXT NOT NULL,
   calendar_color  TEXT,                               -- hex color from provider
   is_selected     BOOLEAN NOT NULL DEFAULT TRUE,      -- user wants this calendar used for availability
   access_role     TEXT,                               -- owner, writer, reader, freeBusyReader
@@ -388,11 +387,25 @@ CREATE INDEX idx_activity_dismissals_user ON activity_dismissals (user_id, activ
 CREATE INDEX idx_activity_dismissals_friend ON activity_dismissals (user_id, friend_id);
 
 -- ============================================================
--- Row Level Security (RLS) — enable after setting up Supabase auth
+-- Row Level Security (RLS)
 -- ============================================================
--- ALTER TABLE users ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE friendships ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE availability ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE meetups ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE meetup_participants ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE suggestion_events ENABLE ROW LEVEL SECURITY;
+-- RLS is enabled on all tables. The backend uses the service_role key
+-- which bypasses RLS. No anon/authenticated policies are defined,
+-- blocking all direct Supabase client access.
+-- ============================================================
+ALTER TABLE users                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fcm_tokens           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE friendships          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE availability         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE meetups              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE meetup_participants  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE suggestion_events    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feedback             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE meetup_logs          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_preferences     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_calendars       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE friend_groups        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE friend_group_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pending_invites      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_dismissals  ENABLE ROW LEVEL SECURITY;

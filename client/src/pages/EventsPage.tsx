@@ -289,7 +289,7 @@ export default function EventsPage() {
   const [mode, setMode] = useState<'search' | 'match'>('search');
 
   // Tab
-  const [tab, setTab] = useState<'search' | 'discover' | 'calendar'>('search');
+  const [tab, setTab] = useState<'discover' | 'search' | 'calendar'>('discover');
 
   // Share modal
   const [shareEvent, setShareEvent] = useState<EventResult | null>(null);
@@ -309,6 +309,10 @@ export default function EventsPage() {
 
   // Price filter
   const [priceFilter, setPriceFilter] = useState<'any' | 'free' | 'under50' | 'under100' | 'under200'>('any');
+
+  // Smart suggestions (events matched to shared interests + availability)
+  const [smartSuggestions, setSmartSuggestions] = useState<any[]>([]);
+  const [smartLoaded, setSmartLoaded] = useState(false);
 
   // ─── Load friends + city + saved events ───
   useEffect(() => {
@@ -338,14 +342,19 @@ export default function EventsPage() {
     })();
   }, [user]);
 
-  // ─── Preload trending events ───
+  // ─── Preload trending events + smart suggestions ───
   useEffect(() => {
     if (!city || trendingLoaded) return;
     (async () => {
       try {
-        const { data } = await api.get('/events/discover', { params: { city, perPage: 8 } });
-        setTrendingEvents(data.events || []);
+        const [discoverRes, suggestRes] = await Promise.all([
+          api.get('/events/discover', { params: { city, perPage: 8 } }),
+          api.get('/events/suggestions').catch(() => ({ data: { suggestions: [] } })),
+        ]);
+        setTrendingEvents(discoverRes.data.events || []);
         setTrendingLoaded(true);
+        setSmartSuggestions(suggestRes.data.suggestions || []);
+        setSmartLoaded(true);
       } catch { /* ignore */ }
     })();
   }, [city, trendingLoaded]);
@@ -632,9 +641,22 @@ export default function EventsPage() {
   // ---------------------------------------------------------------------------
   const renderEventCard = (ev: EventResult) => {
     const allSources = ev.sources || [ev.source];
-    const allUrls = ev.urls || [{ source: ev.source, url: ev.url }];
+    // Deduplicate URLs by source — only show one link per source
+    const rawUrls = ev.urls || [{ source: ev.source, url: ev.url }];
+    const seenSources = new Set<string>();
+    const allUrls = rawUrls.filter(({ source: s }) => {
+      if (seenSources.has(s)) return false;
+      seenSources.add(s);
+      return true;
+    });
+    const primaryUrl = allUrls[0]?.url || ev.url;
     return (
-      <div key={ev.id} className="flex items-center gap-3 px-4 sm:px-5 py-3.5 transition-colors hover:bg-gray-50/50">
+      <a
+        key={ev.id}
+        href={primaryUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-3 px-4 sm:px-5 py-3.5 transition-colors hover:bg-gray-50/50 cursor-pointer">
         {ev.imageUrl ? (
           <img src={ev.imageUrl} alt="" className="hidden sm:block h-14 w-14 rounded-xl object-cover shrink-0 shadow-sm" />
         ) : (
@@ -704,7 +726,7 @@ export default function EventsPage() {
             ))}
           </div>
         </div>
-      </div>
+      </a>
     );
   };
 
@@ -751,6 +773,62 @@ export default function EventsPage() {
         </p>
       </div>
 
+      {/* ─── Smart Picks: Events matched to you + friends ─── */}
+      {smartLoaded && smartSuggestions.length > 0 && tab === 'search' && !searched && (
+        <div className="mb-5 rounded-2xl border border-slotted-200/40 bg-gradient-to-r from-slotted-50/30 to-purple-50/20 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slotted-100/50">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🎯</span>
+              <h2 className="font-display text-sm font-semibold text-gray-900">Events to do with friends</h2>
+            </div>
+            <span className="text-[10px] font-medium text-slotted-500">Based on shared interests &amp; availability</span>
+          </div>
+          <div className="divide-y divide-slotted-100/30">
+            {smartSuggestions.slice(0, 4).map((ev: any) => (
+              <div key={ev.id} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-white/50">
+                {ev.imageUrl ? (
+                  <img src={ev.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0 shadow-sm" />
+                ) : (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 text-lg">🎟️</div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{ev.title}</p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {ev.datetimeLocal ? new Date(ev.datetimeLocal).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''}
+                    {ev.venue ? ` · ${ev.venue}` : ''}
+                  </p>
+                  <p className="text-[11px] text-slotted-600 font-medium mt-0.5 truncate">{ev.reason}</p>
+                </div>
+                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  <div className="flex -space-x-1.5">
+                    {(ev.matchingFriends || []).slice(0, 3).map((f: any) => (
+                      f.photo ? (
+                        <img key={f.id} src={f.photo} alt="" className="h-6 w-6 rounded-full ring-2 ring-white" title={f.name} />
+                      ) : (
+                        <div key={f.id} className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[8px] font-bold text-white ring-2 ring-white" title={f.name}>
+                          {f.name?.[0]}
+                        </div>
+                      )
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => openShareModal(ev)} className="rounded-full p-1 text-gray-400 hover:text-slotted-600 hover:bg-slotted-50 transition-all" title="Send to friend">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                    </button>
+                    {ev.url && (
+                      <a href={ev.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                        className="rounded-full bg-slotted-100 px-2 py-0.5 text-[9px] font-semibold text-slotted-700 hover:bg-slotted-200 transition-all">
+                        🎟️ Tickets
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ─── Trending / What's Hot ─── */}
       {!searched && trendingEvents.length > 0 && tab === 'search' && (
         <div className="mb-5">
@@ -776,7 +854,7 @@ export default function EventsPage() {
 
       {/* ─── Tab Switcher ─── */}
       <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1 mb-5">
-        {(['search', 'discover', 'calendar'] as const).map((t) => (
+        {(['discover', 'search', 'calendar'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -784,7 +862,7 @@ export default function EventsPage() {
               tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
-            {t === 'search' ? '🔍 Search' : t === 'discover' ? '🗺️ Discover' : '📅 Calendar'}
+            {t === 'discover' ? '🗺️ Discover' : t === 'search' ? '🔍 Search' : '📅 Calendar'}
           </button>
         ))}
       </div>

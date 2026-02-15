@@ -344,6 +344,9 @@ export default function OnboardingPage() {
             <p className="text-sm text-gray-500">
               We only read your busy/free times — never event details
             </p>
+            <p className="text-xs text-amber-600 font-medium">
+              ⚠️ When Google asks for permissions, please make sure to select all 3 checkboxes so Slotted can work properly.
+            </p>
             {calendarConnected ? (
               <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
                 <span className="text-2xl">✅</span>

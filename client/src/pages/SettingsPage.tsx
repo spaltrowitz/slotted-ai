@@ -300,9 +300,14 @@ export default function SettingsPage() {
                 )}
 
                 {!googleCalendarConnected && (
-                  <p className="mt-1.5 text-[11px] text-gray-400">
-                    We only read busy/free times — never event names or details
-                  </p>
+                  <div className="mt-1.5 space-y-1">
+                    <p className="text-[11px] text-gray-400">
+                      We only read busy/free times — never event names or details
+                    </p>
+                    <p className="text-[11px] text-amber-600 font-medium">
+                      ⚠️ When Google asks for permissions, please select all 3 checkboxes so Slotted can work properly.
+                    </p>
+                  </div>
                 )}
 
                 {/* Apple Calendar */}

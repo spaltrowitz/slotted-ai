@@ -127,6 +127,9 @@ export default function DashboardPage() {
   const [activities, setActivities] = useState<ActivityFeedItem[]>([]);
   const [dismissingActivity, setDismissingActivity] = useState<string | null>(null);
 
+  // Smart event suggestions
+  const [eventSuggestions, setEventSuggestions] = useState<any[]>([]);
+
   // Meetups
   const [meetups, setMeetups] = useState<Meetup[]>([]);
   const [didntHappenId, setDidntHappenId] = useState<string | null>(null);
@@ -183,6 +186,11 @@ export default function DashboardPage() {
       }
       setDashboardLoading(false);
     });
+
+    // Load smart event suggestions (non-blocking)
+    api.get('/events/suggestions').then((r) => {
+      setEventSuggestions(r.data.suggestions || []);
+    }).catch(() => {});
 
     return () => { active = false; };
   }, [userUid]); // only depends on UID string, not the mutable User object
@@ -894,6 +902,53 @@ export default function DashboardPage() {
       )}
 
       {/* ─── ACTIVITY FEED ─── */}
+      {/* ─── SMART EVENT PICKS ─── */}
+      {eventSuggestions.length > 0 && (
+        <div className="mb-6 bg-white rounded-2xl shadow-sm border border-gray-200/60 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">🎯</span>
+              <h2 className="font-display text-sm font-semibold text-gray-900">Events to do with friends</h2>
+            </div>
+            <Link to="/events" className="text-[11px] font-semibold text-slotted-600 hover:text-slotted-700 transition-colors">
+              Browse all →
+            </Link>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {eventSuggestions.slice(0, 3).map((ev: any) => (
+              <Link key={ev.id} to={`/events`} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-slotted-50/30">
+                {ev.imageUrl ? (
+                  <img src={ev.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0 shadow-sm" />
+                ) : (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 text-lg">
+                    🎟️
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{ev.title}</p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {ev.datetimeLocal ? new Date(ev.datetimeLocal).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''}
+                    {ev.venue ? ` · ${ev.venue}` : ''}
+                  </p>
+                  <p className="text-[11px] text-slotted-600 font-medium mt-0.5 truncate">{ev.reason}</p>
+                </div>
+                <div className="flex -space-x-1.5 shrink-0">
+                  {(ev.matchingFriends || []).slice(0, 3).map((f: any) => (
+                    f.photo ? (
+                      <img key={f.id} src={f.photo} alt="" className="h-6 w-6 rounded-full ring-2 ring-white" title={f.name} />
+                    ) : (
+                      <div key={f.id} className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[8px] font-bold text-white ring-2 ring-white" title={f.name}>
+                        {f.name?.[0]}
+                      </div>
+                    )
+                  ))}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {activities.length > 0 && (
         <div className="mb-6 bg-white rounded-2xl shadow-sm border border-gray-200/60 p-5">
           <div className="flex items-center gap-2 mb-3">

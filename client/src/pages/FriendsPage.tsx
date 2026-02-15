@@ -39,6 +39,7 @@ interface SavedGroup {
   id: string;
   name: string;
   members: { id: string; displayName: string; photoUrl?: string }[];
+  pendingEmails?: string[];
 }
 
 /** Collapsible "How it works" explainer */
@@ -281,20 +282,6 @@ export default function FriendsPage() {
         }),
       });
       if (res.ok) {
-        // Send invite emails to non-members
-        if (invitedEmails.length > 0) {
-          for (const email of invitedEmails) {
-            try {
-              await fetch('/api/friends/invite', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email }),
-              });
-            } catch {
-              // Silent — best effort invite
-            }
-          }
-        }
         setNewGroupName('');
         setCreateGroupSelectedIds(new Set());
         setInvitedEmails([]);
@@ -407,8 +394,8 @@ export default function FriendsPage() {
               </div>
             ) : null;
           })()}
-          {/* Hangout cadence */}
-          {f.lastHangoutDate && (() => {
+          {/* Hangout cadence — only show after 2+ logged hangouts */}
+          {f.lastHangoutDate && (f.totalHangouts ?? 0) >= 2 && (() => {
             const days = f.daysSinceLastHangout ?? 0;
             const cadence = f.avgCadenceDays;
             const isOverdue = cadence && days > cadence;
@@ -524,7 +511,10 @@ export default function FriendsPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{group.name}</p>
                     <p className="text-[11px] text-gray-400 truncate">
-                      {group.members.map(m => m.displayName.split(' ')[0]).join(', ')}
+                      {[
+                        ...group.members.map(m => m.displayName.split(' ')[0]),
+                        ...(group.pendingEmails || []).map(e => `${e} ⏳`),
+                      ].join(', ')}
                     </p>
                   </div>
                 </div>

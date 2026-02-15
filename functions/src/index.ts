@@ -14,6 +14,26 @@ import { getSupabase } from "./supabase";
 admin.initializeApp();
 setGlobalOptions({ maxInstances: 10 });
 
+// ---------------------------------------------------------------------------
+// Startup env-var validation — fail loudly if critical vars are missing
+// ---------------------------------------------------------------------------
+const REQUIRED_ENV_VARS = [
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_REDIRECT_URI",
+  "FRONTEND_URL",
+] as const;
+
+const missingVars = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
+if (missingVars.length) {
+  console.error(
+    `[FATAL] Missing required environment variables: ${missingVars.join(", ")}. ` +
+    "Add them to functions/.env before deploying.",
+  );
+}
+
 const app = express();
 
 // CORS: restrict to known origins in production
@@ -332,7 +352,7 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
       try {
         const { data: pendingRows } = await getSupabase()
           .from("pending_invites")
-          .select("inviter_id")
+          .select("inviter_id, group_id")
           .eq("invited_email", email.toLowerCase());
 
         if (pendingRows && pendingRows.length > 0) {
@@ -375,6 +395,25 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
               body: `${data.display_name || email} joined Slotted and you're now connected.`,
               relatedUserId: data.id,
             });
+          }
+
+          // Auto-add to any groups from pending invites
+          const groupIdsToJoin = [...new Set(
+            pendingRows
+              .filter((r: any) => r.group_id)
+              .map((r: any) => r.group_id)
+          )];
+          for (const groupId of groupIdsToJoin) {
+            try {
+              await getSupabase()
+                .from("friend_group_members")
+                .upsert(
+                  { group_id: groupId, user_id: data.id },
+                  { onConflict: "group_id,user_id" },
+                );
+            } catch (groupErr) {
+              console.error(`Failed to auto-add user to group ${groupId}:`, groupErr);
+            }
           }
 
           // Clean up fulfilled pending invites
@@ -1330,6 +1369,52 @@ function zonedToUtc(dateStr: string, timeStr: string, tz: string): Date {
  * Apply travel buffer to free slots — shrink each slot by `bufferMin` on both ends.
  * If the resulting slot is shorter than `minDurationMin`, discard it.
  */
+/**
+ * Round a timestamp UP to the next :00 or :30 boundary.
+ */
+function ceilToHalfHour(iso: string): string {
+  const dt = new Date(iso);
+  const min = dt.getMinutes();
+  if (min === 0 || min === 30) return dt.toISOString();
+  if (min < 30) {
+    dt.setMinutes(30, 0, 0);
+  } else {
+    dt.setMinutes(0, 0, 0);
+    dt.setHours(dt.getHours() + 1);
+  }
+  return dt.toISOString();
+}
+
+/**
+ * Round a timestamp DOWN to the previous :00 or :30 boundary.
+ */
+function floorToHalfHour(iso: string): string {
+  const dt = new Date(iso);
+  const min = dt.getMinutes();
+  if (min === 0 || min === 30) return dt.toISOString();
+  if (min < 30) {
+    dt.setMinutes(0, 0, 0);
+  } else {
+    dt.setMinutes(30, 0, 0);
+  }
+  return dt.toISOString();
+}
+
+/**
+ * Round overlaps to clean :00/:30 boundaries and filter out slots < minDuration.
+ */
+function roundOverlaps(
+  overlaps: { start: string; end: string }[],
+  minDurationMin = 30,
+): { start: string; end: string }[] {
+  return overlaps
+    .map((o) => ({ start: ceilToHalfHour(o.start), end: floorToHalfHour(o.end) }))
+    .filter((o) => {
+      const durMin = (new Date(o.end).getTime() - new Date(o.start).getTime()) / 60000;
+      return durMin >= minDurationMin;
+    });
+}
+
 function applyTravelBuffer(
   slots: { start_time: string; end_time: string }[],
   bufferMin: number,
@@ -1942,10 +2027,13 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
     }
 
     // Clamp overlaps to each user's preferred time windows
-    const overlaps = clampOverlapsToPreferences(rawOverlaps, [
+    const clampedOverlaps = clampOverlapsToPreferences(rawOverlaps, [
       { preferred_times: me.preferred_times, timezone: me.timezone },
       { preferred_times: friendUser?.preferred_times, timezone: friendUser?.timezone },
     ]);
+
+    // Round to clean :00/:30 boundaries
+    const overlaps = roundOverlaps(clampedOverlaps, isCallMode ? 15 : 30);
 
     // AI-score the overlaps (pass mode for call-specific scoring)
     const suggestions = await scoreOverlaps(me.id, friendId, overlaps, 8, mode);
@@ -2071,6 +2159,9 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
     }));
     currentOverlaps = clampOverlapsToPreferences(currentOverlaps, allParticipantProfiles);
 
+    // Round to clean :00/:30 boundaries
+    currentOverlaps = roundOverlaps(currentOverlaps, 30);
+
     // AI-score the group overlaps
     const suggestions = await scoreGroupOverlaps(me.id, friendIds, currentOverlaps, 8);
 
@@ -2166,9 +2257,15 @@ app.get("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
 
     const userMap = new Map((memberUsers || []).map((u: any) => [u.id, u]));
 
+    // Fetch pending invites for these groups
+    const { data: pendingInvites } = await sb
+      .from("pending_invites")
+      .select("group_id, invited_email")
+      .in("group_id", allGroupIds);
+
     const result = (groups || []).map((g: any) => {
       const members = (allMembers || [])
-        .filter((m: any) => m.group_id === g.id)
+        .filter((m: any) => m.group_id === g.id && m.user_id !== me.id)
         .map((m: any) => {
           const u = userMap.get(m.user_id);
           return {
@@ -2178,7 +2275,10 @@ app.get("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
             photoUrl: u?.photo_url || null,
           };
         });
-      return { ...g, members };
+      const pendingEmails = (pendingInvites || [])
+        .filter((p: any) => p.group_id === g.id)
+        .map((p: any) => p.invited_email);
+      return { ...g, members, pendingEmails };
     });
 
     res.json({ groups: result });
@@ -2193,9 +2293,12 @@ app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
     const me = await getDbUser(req.uid!);
     if (!me) { res.status(404).json({ error: "User not found" }); return; }
 
-    const { name, emoji, memberIds } = req.body;
-    if (!name || !Array.isArray(memberIds) || memberIds.length === 0) {
-      res.status(400).json({ error: "name and memberIds[] are required" });
+    const { name, emoji, memberIds, invitedEmails } = req.body;
+    const hasMemberIds = Array.isArray(memberIds) && memberIds.length > 0;
+    const hasInvitedEmails = Array.isArray(invitedEmails) && invitedEmails.length > 0;
+
+    if (!name || (!hasMemberIds && !hasInvitedEmails)) {
+      res.status(400).json({ error: "name and at least one member or invited email are required" });
       return;
     }
 
@@ -2209,8 +2312,8 @@ app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
 
     if (gErr) { res.status(500).json({ error: gErr.message }); return; }
 
-    // Add creator + all members
-    const allIds = [me.id, ...memberIds.filter((id: string) => id !== me.id)];
+    // Add creator + all existing members
+    const allIds = [me.id, ...(hasMemberIds ? memberIds.filter((id: string) => id !== me.id) : [])];
     const rows = allIds.map((uid: string) => ({ group_id: group.id, user_id: uid }));
 
     const { error: mErr } = await sb
@@ -2219,7 +2322,47 @@ app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
 
     if (mErr) { res.status(500).json({ error: mErr.message }); return; }
 
-    res.json(group);
+    // Handle invited emails — create pending invites with group_id
+    const pendingResults: string[] = [];
+    if (hasInvitedEmails) {
+      for (const rawEmail of invitedEmails) {
+        const email = rawEmail.trim().toLowerCase();
+        if (!email) continue;
+        try {
+          // Check if user already exists on Slotted
+          const { data: existingUser } = await sb
+            .from("users")
+            .select("id")
+            .eq("email", email)
+            .single();
+
+          if (existingUser) {
+            // User exists — add them to the group directly and send friend request if needed
+            if (existingUser.id !== me.id) {
+              await sb.from("friend_group_members")
+                .upsert({ group_id: group.id, user_id: existingUser.id }, { onConflict: "group_id,user_id" });
+
+              // Also create/ensure friendship
+              const [userA, userB] = me.id < existingUser.id ? [me.id, existingUser.id] : [existingUser.id, me.id];
+              await sb.from("friendships")
+                .upsert({ user_a_id: userA, user_b_id: userB, invited_by: me.id, status: "pending" }, { onConflict: "user_a_id,user_b_id" });
+            }
+          } else {
+            // User doesn't exist — store pending invite with group_id
+            await sb.from("pending_invites")
+              .upsert(
+                { inviter_id: me.id, invited_email: email, group_id: group.id },
+                { onConflict: "inviter_id,invited_email" },
+              );
+            pendingResults.push(email);
+          }
+        } catch (inviteErr) {
+          console.error(`Failed to process invite for ${email}:`, inviteErr);
+        }
+      }
+    }
+
+    res.json({ ...group, pendingInvites: pendingResults });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -2694,17 +2837,17 @@ app.get("/meetups/:meetupId/writable-calendars", requireAuth, async (req: AuthRe
     if (me.google_refresh_token) {
       const { data: gcals } = await getSupabase()
         .from("user_calendars")
-        .select("calendar_id, calendar_name, calendar_color, access_role, source")
+        .select("calendar_id, calendar_color, access_role, source")
         .eq("user_id", me.id)
         .eq("source", "google")
         .eq("is_selected", true)
         .in("access_role", ["owner", "writer"])
-        .order("calendar_name");
+        .order("calendar_id");
 
       (gcals || []).forEach((c: any) => {
         calendars.push({
           id: c.calendar_id,
-          name: c.calendar_name,
+          name: "Google Calendar",
           color: c.calendar_color,
           source: "google",
         });
@@ -2715,16 +2858,16 @@ app.get("/meetups/:meetupId/writable-calendars", requireAuth, async (req: AuthRe
     if (me.apple_calendar_connected) {
       const { data: acals } = await getSupabase()
         .from("user_calendars")
-        .select("calendar_id, calendar_name, calendar_color, source")
+        .select("calendar_id, calendar_color, source")
         .eq("user_id", me.id)
         .eq("source", "apple")
         .eq("is_selected", true)
-        .order("calendar_name");
+        .order("calendar_id");
 
       (acals || []).forEach((c: any) => {
         calendars.push({
           id: c.calendar_id,
-          name: c.calendar_name,
+          name: "Apple Calendar",
           color: c.calendar_color,
           source: "apple",
         });
@@ -3427,8 +3570,7 @@ function normalizeTitle(title: string): string {
   return title
     .toLowerCase()
     .replace(/\(.*?\)/g, "")           // strip parenthetical info
-    .replace(/[-–—:].*$/g, "")         // strip everything after dash/colon (venue/city suffixes)
-    .replace(/\b(the|a|an|at|in|on)\b/g, "")
+    .replace(/\b(the|a|an|at|in|on|of)\b/g, "")
     .replace(/[^a-z0-9\s]/g, "")       // remove punctuation
     .replace(/\s+/g, " ")
     .trim();
@@ -3442,9 +3584,15 @@ function normalizeTitle(title: string): string {
 function titlesMatch(a: string, b: string): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  // If one is a substring of the other (at least 6 chars to avoid false positives)
-  if (a.length >= 6 && b.includes(a)) return true;
-  if (b.length >= 6 && a.includes(b)) return true;
+  // If one is a substring of the other (at least 8 chars to avoid false positives)
+  if (a.length >= 8 && b.includes(a)) return true;
+  if (b.length >= 8 && a.includes(b)) return true;
+  // Levenshtein-lite: if strings are very similar (differ by < 15% of chars)
+  if (a.length > 10 && b.length > 10) {
+    const shorter = a.length < b.length ? a : b;
+    const longer = a.length < b.length ? b : a;
+    if (longer.includes(shorter.slice(0, Math.floor(shorter.length * 0.8)))) return true;
+  }
   return false;
 }
 
@@ -3466,11 +3614,20 @@ function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
       const repNorm = normalizeTitle(rep.title);
       const repDate = rep.datetime?.slice(0, 10) || "";
 
-      // Same date (or within 1 day for timezone edge cases) + similar title
+      // Same or similar title + same venue area
+      // For recurring shows (same venue), merge across ALL dates — we'll show the next upcoming one
+      const evVenue = (ev.venue || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const repVenue = (rep.venue || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const sameVenue = !evVenue || !repVenue || evVenue === repVenue
+        || evVenue.includes(repVenue.slice(0, 10)) || repVenue.includes(evVenue.slice(0, 10));
+
+      // For recurring shows at the same venue, merge across all dates
+      // For one-off events, still require same date
       const dateDiff = Math.abs(new Date(evDate).getTime() - new Date(repDate).getTime());
       const sameDate = dateDiff <= 86400000; // within 24h
+      const isRecurringShow = sameVenue && evVenue.length > 0;
 
-      if (sameDate && titlesMatch(normTitle, repNorm)) {
+      if (titlesMatch(normTitle, repNorm) && (sameDate || isRecurringShow)) {
         group.push(ev);
         matched = true;
         break;
@@ -3484,8 +3641,14 @@ function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
 
   // Merge each group into a single event with combined metadata
   return groups.map((group) => {
+    // Sort group by date to pick the earliest upcoming showtime
+    const now = Date.now();
+    const futureEvents = group.filter((e) => new Date(e.datetime).getTime() >= now);
+    const sortedByDate = (futureEvents.length > 0 ? futureEvents : group)
+      .sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+
     // Pick the "best" listing as the primary (prefer Ticketmaster, then image, then lowest price)
-    const sorted = [...group].sort((a, b) => {
+    const sorted = [...sortedByDate].sort((a, b) => {
       // Prefer Ticketmaster as primary source
       if (a.source === "ticketmaster" && b.source !== "ticketmaster") return -1;
       if (a.source !== "ticketmaster" && b.source === "ticketmaster") return 1;
@@ -3504,9 +3667,22 @@ function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
 
     const primary = sorted[0];
 
-    // Collect all source URLs
-    const urls = group.map((ev) => ({ source: ev.source, url: ev.url }));
-    const sources = [...new Set(group.map((ev) => ev.source))];
+    // Collect all source URLs — deduplicate by source, prefer Ticketmaster first
+    const seenSources = new Set<string>();
+    const urls: { source: string; url: string }[] = [];
+    // Sort to put ticketmaster first
+    const sortedGroup = [...group].sort((a, b) => {
+      if (a.source === "ticketmaster") return -1;
+      if (b.source === "ticketmaster") return 1;
+      return 0;
+    });
+    for (const ev of sortedGroup) {
+      if (!seenSources.has(ev.source)) {
+        seenSources.add(ev.source);
+        urls.push({ source: ev.source, url: ev.url });
+      }
+    }
+    const sources = [...seenSources];
 
     // Merge prices — take the lowest min and highest max across sources
     const allMins = group.map((e) => e.priceMin).filter((p): p is number => p !== undefined && p > 0);
@@ -3520,6 +3696,9 @@ function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
 
     return {
       ...primary,
+      // Use the earliest upcoming date (not the source-preferred one)
+      datetime: sortedByDate[0].datetime,
+      datetimeLocal: sortedByDate[0].datetimeLocal,
       sources,
       urls,
       imageUrl: bestImage || primary.imageUrl,
@@ -5089,7 +5268,7 @@ function getOAuth2Client() {
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI || "http://localhost:5173/api/calendar/callback",
+    process.env.GOOGLE_REDIRECT_URI || "https://slotted-ai.web.app/api/calendar/callback",
   );
 }
 
@@ -5198,7 +5377,6 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
           await getSupabase()
             .from("user_calendars")
             .update({
-              calendar_name: cal.summary || cal.id!,
               calendar_color: cal.backgroundColor || null,
               access_role: cal.accessRole || null,
             })
@@ -5211,7 +5389,6 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
             .insert({
               user_id: dbUser.id,
               calendar_id: cal.id!,
-              calendar_name: cal.summary || cal.id!,
               calendar_color: cal.backgroundColor || null,
               is_selected: cal.accessRole === "owner",
               access_role: cal.accessRole || null,
@@ -5222,11 +5399,11 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
     }
 
     // Redirect back to the frontend settings page
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
     res.redirect(`${frontendUrl}/settings?calendar=connected`);
   } catch (err: any) {
     console.error("Calendar OAuth callback error:", err);
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
     res.redirect(`${frontendUrl}/settings?calendar=error`);
   }
 });
@@ -5508,7 +5685,6 @@ app.post("/calendar/apple/connect", requireAuth, async (req: AuthRequest, res: R
     const rows = calendars.map((cal) => ({
       user_id: dbUser.id,
       calendar_id: cal.url,
-      calendar_name: cal.displayName || cal.url.split("/").filter(Boolean).pop() || "Apple Calendar",
       calendar_color: null,
       is_selected: true, // default-select all Apple calendars
       access_role: "owner",
@@ -5526,7 +5702,6 @@ app.post("/calendar/apple/connect", requireAuth, async (req: AuthRequest, res: R
       calendarsFound: calendars.length,
       calendars: rows.map((r) => ({
         calendar_id: r.calendar_id,
-        calendar_name: r.calendar_name,
         is_selected: r.is_selected,
         source: r.source,
       })),
@@ -5617,14 +5792,18 @@ app.get("/calendar/apple/list", requireAuth, async (req: AuthRequest, res: Respo
     console.log("Found", calendars.length, "Apple calendars");
 
     // Upsert fresh calendar metadata
-    const rows = calendars.map((cal) => ({
-      user_id: user.id,
-      calendar_id: cal.url,
-      calendar_name: cal.displayName || cal.url.split("/").filter(Boolean).pop() || "Apple Calendar",
-      calendar_color: null,
-      access_role: "owner",
-      source: "apple",
-    }));
+    // Build a name map from the provider API (names are NOT stored in DB)
+    const calNameMap = new Map<string, string>();
+    const rows = calendars.map((cal) => {
+      calNameMap.set(cal.url, cal.displayName || cal.url.split("/").filter(Boolean).pop() || "Apple Calendar");
+      return {
+        user_id: user.id,
+        calendar_id: cal.url,
+        calendar_color: null,
+        access_role: "owner",
+        source: "apple",
+      };
+    });
 
     if (rows.length) {
       const { error: upsertError } = await getSupabase()
@@ -5644,14 +5823,20 @@ app.get("/calendar/apple/list", requireAuth, async (req: AuthRequest, res: Respo
       .select("*")
       .eq("user_id", user.id)
       .eq("source", "apple")
-      .order("calendar_name");
+      .order("calendar_id");
 
     if (selectError) {
       console.error("Failed to fetch stored Apple calendars:", selectError);
     }
 
-    console.log("Returning", stored?.length || 0, "stored Apple calendars");
-    res.json({ calendars: stored || [] });
+    // Merge provider-sourced names into the response (not stored in DB)
+    const enriched = (stored || []).map((row: any) => ({
+      ...row,
+      calendar_name: calNameMap.get(row.calendar_id) || "Apple Calendar",
+    }));
+
+    console.log("Returning", enriched.length, "stored Apple calendars");
+    res.json({ calendars: enriched });
   } catch (err: any) {
     console.error("Apple calendar list error:", err);
     res.status(500).json({ error: err.message });
@@ -5702,19 +5887,19 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
 
           const { data: selectedGoogleCals } = await sb
             .from("user_calendars")
-            .select("calendar_id, calendar_name, calendar_color")
+            .select("calendar_id, calendar_color")
             .eq("user_id", dbUser.id)
             .eq("is_selected", true)
             .eq("source", "google");
 
           const googleCals = selectedGoogleCals || [];
-          console.log("Google calendars selected:", googleCals.length, googleCals.map((c: any) => c.calendar_name));
+          console.log("Google calendars selected:", googleCals.length, googleCals.map((c: any) => c.calendar_id));
 
           // If no Google calendars selected, check if any exist and auto-select owned ones
           if (googleCals.length === 0) {
             const { data: allGoogleCals } = await sb
               .from("user_calendars")
-              .select("calendar_id, calendar_name, calendar_color, is_selected, access_role")
+              .select("calendar_id, calendar_color, is_selected, access_role")
               .eq("user_id", dbUser.id)
               .eq("source", "google");
             
@@ -5731,7 +5916,6 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
                 const rows = calendars.map((cal) => ({
                   user_id: dbUser.id,
                   calendar_id: cal.id!,
-                  calendar_name: cal.summary || cal.id!,
                   calendar_color: cal.backgroundColor || null,
                   is_selected: cal.accessRole === "owner",
                   access_role: cal.accessRole || null,
@@ -5744,7 +5928,6 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
                   const owned = rows.filter(r => r.is_selected);
                   googleCals.push(...owned.map(r => ({
                     calendar_id: r.calendar_id,
-                    calendar_name: r.calendar_name,
                     calendar_color: r.calendar_color,
                   })));
                   console.log("Auto-imported and selected", owned.length, "Google calendars");
@@ -5776,7 +5959,7 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
 
           const googlePromises = googleCals.map(async (cal: any) => {
             try {
-              console.log(`Fetching Google events for "${cal.calendar_name}" (${cal.calendar_id}), timeMin=${now.toISOString()}, timeMax=${windowEnd.toISOString()}`);
+              console.log(`Fetching Google events for calendar ${cal.calendar_id}, timeMin=${now.toISOString()}, timeMax=${windowEnd.toISOString()}`);
               const eventsRes = await calendarApi.events.list({
                 calendarId: cal.calendar_id,
                 timeMin: now.toISOString(),
@@ -5787,7 +5970,7 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
               });
 
               const rawItems = eventsRes.data.items || [];
-              console.log(`Google cal "${cal.calendar_name}": ${rawItems.length} raw events`);
+              console.log(`Google cal ${cal.calendar_id}: ${rawItems.length} raw events`);
               if (rawItems.length > 0) {
                 console.log("Sample events:", rawItems.slice(0, 3).map(e => ({
                   summary: e.summary,
@@ -5830,7 +6013,7 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
                   allDay: isAllDay,
                   location: event.location || null,
                   source: "google",
-                  calendarName: cal.calendar_name || "Google Calendar",
+                  calendarName: "Google Calendar",
                   color: cal.calendar_color || "#4285f4",
                 });
               }
@@ -5852,7 +6035,7 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
       try {
         const { data: selectedAppleCals } = await sb
           .from("user_calendars")
-          .select("calendar_id, calendar_name")
+          .select("calendar_id")
           .eq("user_id", dbUser.id)
           .eq("is_selected", true)
           .eq("source", "apple");
@@ -5890,7 +6073,7 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
                     allDay: ev.allDay,
                     location: ev.location,
                     source: "apple",
-                    calendarName: cal.calendar_name || "Apple Calendar",
+                    calendarName: "Apple Calendar",
                     color: "#ff3b30", // Apple red
                   });
                 }
@@ -6009,11 +6192,14 @@ app.get("/calendar/list", requireAuth, async (req: AuthRequest, res: Response) =
     }
 
     // Upsert fresh calendar metadata — preserve is_selected for existing rows
+    // Build a name map from the provider API (names are NOT stored in DB)
+    const calNameMap = new Map<string, string>();
     for (const cal of calendars) {
+      calNameMap.set(cal.id!, cal.summary || cal.id!);
+
       const row = {
         user_id: dbUser.id,
         calendar_id: cal.id!,
-        calendar_name: cal.summary || cal.id!,
         calendar_color: cal.backgroundColor || null,
         access_role: cal.accessRole || null,
         source: "google" as const,
@@ -6032,7 +6218,6 @@ app.get("/calendar/list", requireAuth, async (req: AuthRequest, res: Response) =
         await getSupabase()
           .from("user_calendars")
           .update({
-            calendar_name: row.calendar_name,
             calendar_color: row.calendar_color,
             access_role: row.access_role,
           })
@@ -6055,9 +6240,15 @@ app.get("/calendar/list", requireAuth, async (req: AuthRequest, res: Response) =
       .select("*")
       .eq("user_id", dbUser.id)
       .eq("source", "google")
-      .order("calendar_name");
+      .order("calendar_id");
 
-    res.json({ calendars: stored || [] });
+    // Merge provider-sourced names into the response (not stored in DB)
+    const enriched = (stored || []).map((row: any) => ({
+      ...row,
+      calendar_name: calNameMap.get(row.calendar_id) || row.calendar_id,
+    }));
+
+    res.json({ calendars: enriched });
   } catch (err: any) {
     console.error("Calendar list error:", err);
     res.status(500).json({ error: err.message });
@@ -6078,7 +6269,7 @@ app.get("/calendar/selected", requireAuth, async (req: AuthRequest, res: Respons
       .select("*")
       .eq("user_id", dbUser.id)
       .eq("is_selected", true)
-      .order("calendar_name");
+      .order("calendar_id");
 
     res.json({ calendars: data || [] });
   } catch (err: any) {
@@ -6119,7 +6310,7 @@ app.put("/calendar/selected", requireAuth, async (req: AuthRequest, res: Respons
       .from("user_calendars")
       .select("*")
       .eq("user_id", dbUser.id)
-      .order("calendar_name");
+      .order("calendar_id");
 
     res.json({ calendars: data || [] });
   } catch (err: any) {
