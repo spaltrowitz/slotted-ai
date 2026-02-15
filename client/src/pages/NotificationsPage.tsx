@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
 import api from '../lib/api';
@@ -265,7 +266,9 @@ export default function NotificationsPage() {
                       <p className={`text-sm font-semibold ${notification.read ? 'text-gray-700' : 'text-gray-900'}`}>
                         {notification.title}
                       </p>
-                      <p className="mt-0.5 text-sm text-gray-500">{notification.body}</p>
+                      <p className="mt-0.5 text-sm text-gray-500">
+                        <NotificationBody text={notification.body} />
+                      </p>
                     </div>
                     <span className="shrink-0 text-xs text-gray-400">{timeAgo(notification.created_at)}</span>
                   </div>
@@ -413,4 +416,54 @@ export default function NotificationsPage() {
       )}
     </AppShell>
   );
+}
+
+/** Renders notification body text with clickable links for known routes */
+function NotificationBody({ text }: { text: string }) {
+  const linkMap: [RegExp, string][] = [
+    [/Friends tab/gi, '/friends'],
+    [/Settings/gi, '/settings'],
+    [/Events tab/gi, '/events'],
+    [/Dashboard/gi, '/'],
+  ];
+
+  const parts: (string | React.ReactElement)[] = [];
+  let remaining = text;
+  let key = 0;
+
+  while (remaining.length > 0) {
+    let earliest: { index: number; length: number; to: string; match: string } | null = null;
+
+    for (const [regex, to] of linkMap) {
+      regex.lastIndex = 0;
+      const m = regex.exec(remaining);
+      if (m && (!earliest || m.index < earliest.index)) {
+        earliest = { index: m.index, length: m[0].length, to, match: m[0] };
+      }
+    }
+
+    if (!earliest) {
+      parts.push(remaining);
+      break;
+    }
+
+    if (earliest.index > 0) {
+      parts.push(remaining.slice(0, earliest.index));
+    }
+
+    parts.push(
+      <Link
+        key={key++}
+        to={earliest.to}
+        className="font-semibold text-slotted-600 underline underline-offset-2 hover:text-slotted-700"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {earliest.match}
+      </Link>
+    );
+
+    remaining = remaining.slice(earliest.index + earliest.length);
+  }
+
+  return <>{parts}</>;
 }

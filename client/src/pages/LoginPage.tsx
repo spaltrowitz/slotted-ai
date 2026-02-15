@@ -101,10 +101,10 @@ export default function LoginPage() {
       {/* Local vs Long-Distance — two modes */}
       <section className="relative z-10 mx-auto max-w-4xl px-6 pb-10">
         <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">
-          For every kind of friendship
+          For every kind of relationship
         </h2>
         <p className="text-center text-sm text-gray-500 mb-8 max-w-lg mx-auto">
-          Across town or across the country — Slotted keeps you connected.
+          Across town or across the world — Slotted keeps you connected.
         </p>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -113,7 +113,7 @@ export default function LoginPage() {
             <div className="flex items-center gap-3 mb-4">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white shadow-sm text-2xl">🏙️</div>
               <div>
-                <h3 className="font-display text-base font-bold text-gray-900">Local Friends</h3>
+                <h3 className="font-display text-base font-bold text-gray-900">Local Friends & Family</h3>
                 <p className="text-xs text-teal-600 font-medium">In-person hangouts made easy</p>
               </div>
             </div>
@@ -136,7 +136,7 @@ export default function LoginPage() {
             <div className="flex items-center gap-3 mb-4">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white shadow-sm text-2xl">🌎</div>
               <div>
-                <h3 className="font-display text-base font-bold text-gray-900">Long-Distance Friends</h3>
+                <h3 className="font-display text-base font-bold text-gray-900">Long-Distance Loved Ones</h3>
                 <p className="text-xs text-violet-600 font-medium">Stay close even when far apart</p>
               </div>
             </div>
