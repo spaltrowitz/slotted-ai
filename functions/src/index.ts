@@ -1198,6 +1198,26 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
     }
   }
 
+  // --- Manual busy blocks ---
+  {
+    const { data: manualBlocks } = await sb
+      .from("manual_busy_blocks")
+      .select("start_time, end_time")
+      .eq("user_id", dbUser.id)
+      .gte("end_time", now.toISOString())
+      .lte("start_time", windowEnd.toISOString());
+
+    if (manualBlocks && manualBlocks.length > 0) {
+      for (const block of manualBlocks) {
+        allBusyBlocks.push({
+          start: new Date(block.start_time).toISOString(),
+          end: new Date(block.end_time).toISOString(),
+        });
+      }
+      console.log(`📝 Added ${manualBlocks.length} manual busy blocks for user ${dbUser.id}`);
+    }
+  }
+
   // ─── Trip buffer: detect multi-day events and block buffer days ───
   const tbBefore = !!dbUser.trip_buffer_before;
   const tbAfter = dbUser.trip_buffer_after !== false;
@@ -1736,8 +1756,26 @@ async function scoreGroupOverlaps(
         score += 8;
         reasons.push("Plenty of time");
       }
+    } else if (participantIds.length >= 2) {
+      // Group hangouts: 2-3 hour window is the sweet spot
+      if (durationMin >= 120 && durationMin <= 180) {
+        score += 25;
+        reasons.push("Ideal 2–3 hr group window");
+      } else if (durationMin > 180) {
+        score += 20;
+        reasons.push("3+ hour window");
+      } else if (durationMin >= 90) {
+        score += 12;
+        reasons.push("1.5 hr window");
+      } else if (durationMin >= 60) {
+        score += 5;
+        reasons.push("1 hour window — tight for a group");
+      } else if (durationMin < 60) {
+        score -= 15;
+        reasons.push("Short for a group hangout");
+      }
     } else {
-      // For in-person: longer is better
+      // 1-to-1 in-person: longer is better
       if (durationMin >= 120) {
         score += 15;
         reasons.push("2+ hour window");
@@ -2844,10 +2882,25 @@ app.get("/meetups/:meetupId/writable-calendars", requireAuth, async (req: AuthRe
         .in("access_role", ["owner", "writer"])
         .order("calendar_id");
 
+      // Fetch display names live from Google API (not stored in DB for privacy)
+      let googleNameMap = new Map<string, string>();
+      try {
+        const oauth2 = await getAuthedCalendarClient(req.uid!);
+        if (oauth2) {
+          const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+          const calListRes = await calendarApi.calendarList.list();
+          for (const cal of calListRes.data.items || []) {
+            if (cal.id) googleNameMap.set(cal.id, cal.summary || cal.id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch Google calendar names for writable-calendars:", err);
+      }
+
       (gcals || []).forEach((c: any) => {
         calendars.push({
           id: c.calendar_id,
-          name: "Google Calendar",
+          name: googleNameMap.get(c.calendar_id) || c.calendar_id,
           color: c.calendar_color,
           source: "google",
         });
@@ -2864,10 +2917,23 @@ app.get("/meetups/:meetupId/writable-calendars", requireAuth, async (req: AuthRe
         .eq("is_selected", true)
         .order("calendar_id");
 
+      // Fetch display names live from Apple CalDAV (not stored in DB for privacy)
+      let appleNameMap = new Map<string, string>();
+      if (me.apple_caldav_username && me.apple_caldav_password) {
+        try {
+          const appleCals = await fetchAppleCalendars(me.apple_caldav_username, me.apple_caldav_password);
+          for (const cal of appleCals) {
+            appleNameMap.set(cal.url, cal.displayName || cal.url.split("/").filter(Boolean).pop() || "Apple Calendar");
+          }
+        } catch (err) {
+          console.error("Failed to fetch Apple calendar names for writable-calendars:", err);
+        }
+      }
+
       (acals || []).forEach((c: any) => {
         calendars.push({
           id: c.calendar_id,
-          name: "Apple Calendar",
+          name: appleNameMap.get(c.calendar_id) || "Apple Calendar",
           color: c.calendar_color,
           source: "apple",
         });
@@ -5126,21 +5192,28 @@ app.post("/meetup-logs", requireAuth, async (req: AuthRequest, res: Response) =>
 
     const { friend_id, friend_name, hangout_date, activity_type, duration_min, day_of_week, time_of_day, notice_days, was_spontaneous, rating } = req.body;
 
+    // Validate activity_type against allowed DB values
+    const VALID_ACTIVITIES = ["coffee", "meal", "drinks", "walk", "workout", "movie", "game_night", "phone_call", "facetime", "video_call", "other"];
+    const cleanActivity = activity_type && VALID_ACTIVITIES.includes(activity_type) ? activity_type : (activity_type ? "other" : null);
+
+    const row: Record<string, any> = {
+      user_id: dbUser.id,
+      friend_id: friend_id || null,
+      friend_name: friend_name || null,
+      hangout_date: hangout_date || new Date().toISOString().slice(0, 10),
+      duration_min: duration_min || null,
+      notice_days: notice_days || null,
+      was_spontaneous: was_spontaneous || false,
+      rating: rating || null,
+    };
+    // Only include fields with values — avoids NOT NULL constraint issues for optional columns
+    if (cleanActivity) row.activity_type = cleanActivity;
+    if (time_of_day) row.time_of_day = time_of_day;
+    if (day_of_week !== undefined && day_of_week !== null) row.day_of_week = day_of_week;
+
     const { data, error } = await getSupabase()
       .from("meetup_logs")
-      .insert({
-        user_id: dbUser.id,
-        friend_id: friend_id || null,
-        friend_name: friend_name || null,
-        hangout_date: hangout_date || new Date().toISOString().slice(0, 10),
-        activity_type: activity_type || "other",
-        duration_min: duration_min || null,
-        day_of_week: day_of_week ?? new Date().getDay(),
-        time_of_day: time_of_day || "afternoon",
-        notice_days: notice_days || null,
-        was_spontaneous: was_spontaneous || false,
-        rating: rating || null,
-      })
+      .insert(row)
       .select()
       .single();
 
@@ -5779,7 +5852,7 @@ app.get("/calendar/apple/list", requireAuth, async (req: AuthRequest, res: Respo
   try {
     console.log("Fetching Apple calendars for user:", req.uid);
     const user = await getDbUser(req.uid!);
-    console.log("User found:", !!user, "Apple connected:", !!user?.apple_calendar_connected, "Has username:", !!user?.apple_caldav_username, "Has password:", !!user?.apple_caldav_password);
+    console.log("User found:", !!user, "Apple connected:", !!user?.apple_calendar_connected);
     
     if (!user?.apple_caldav_username || !user?.apple_caldav_password) {
       console.error("Apple Calendar credentials missing for user:", req.uid);
@@ -5970,16 +6043,7 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
               });
 
               const rawItems = eventsRes.data.items || [];
-              console.log(`Google cal ${cal.calendar_id}: ${rawItems.length} raw events`);
-              if (rawItems.length > 0) {
-                console.log("Sample events:", rawItems.slice(0, 3).map(e => ({
-                  summary: e.summary,
-                  status: e.status,
-                  transparency: e.transparency,
-                  start: e.start,
-                  end: e.end,
-                })));
-              }
+              console.log(`Google cal: ${rawItems.length} raw events`);
 
               for (const event of rawItems) {
                 if (event.status === "cancelled") continue;
@@ -6147,13 +6211,41 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
       }
     }
 
+    // ─── Manual busy blocks: inject as calendar events for display ───
+    {
+      const { data: manualBlocks } = await sb
+        .from("manual_busy_blocks")
+        .select("*")
+        .eq("user_id", dbUser.id)
+        .gte("end_time", now.toISOString())
+        .lte("start_time", windowEnd.toISOString());
+
+      if (manualBlocks && manualBlocks.length > 0) {
+        for (const block of manualBlocks) {
+          allEvents.push({
+            id: `manual_${block.id}`,
+            title: block.label || "Busy",
+            start: new Date(block.start_time).toISOString(),
+            end: new Date(block.end_time).toISOString(),
+            allDay: false,
+            location: null,
+            source: "google" as const, // use google source so styling doesn't break
+            calendarName: "Slotted",
+            color: "#f59e0b", // amber-500 to distinguish manual blocks
+          });
+        }
+        console.log(`Manual busy blocks: injected ${manualBlocks.length} blocks into calendar display`);
+      }
+    }
+
     // Sort by start time
     allEvents.sort((a, b) => a.start.localeCompare(b.start));
 
-    const googleCount = allEvents.filter(e => e.source === "google").length;
+    const googleCount = allEvents.filter(e => e.source === "google" && !e.id.startsWith("manual_")).length;
     const appleCount = allEvents.filter(e => e.source === "apple").length;
     const bufferCount = allEvents.filter(e => e.id.startsWith("buffer_")).length;
-    console.log(`Calendar events: ${allEvents.length} total (${googleCount} Google, ${appleCount} Apple, ${bufferCount} trip buffers)`);
+    const manualCount = allEvents.filter(e => e.id.startsWith("manual_")).length;
+    console.log(`Calendar events: ${allEvents.length} total (${googleCount} Google, ${appleCount} Apple, ${bufferCount} trip buffers, ${manualCount} manual blocks)`);
 
     res.json({
       events: allEvents,
@@ -6164,6 +6256,97 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
     });
   } catch (err: any) {
     console.error("Calendar events error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Manual Busy Blocks — users can mark times as busy on the dashboard calendar
+// ---------------------------------------------------------------------------
+
+/** GET /busy-blocks — fetch user's manual busy blocks for a time range */
+app.get("/busy-blocks", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const daysAhead = parseInt(req.query.days as string) || 30;
+    const now = new Date();
+    const windowEnd = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+
+    const { data: blocks, error } = await getSupabase()
+      .from("manual_busy_blocks")
+      .select("*")
+      .eq("user_id", me.id)
+      .gte("end_time", now.toISOString())
+      .lte("start_time", windowEnd.toISOString())
+      .order("start_time", { ascending: true });
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ blocks: blocks || [] });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /busy-blocks — create a manual busy block */
+app.post("/busy-blocks", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { start_time, end_time, label } = req.body;
+    if (!start_time || !end_time) {
+      res.status(400).json({ error: "start_time and end_time required" });
+      return;
+    }
+    if (new Date(end_time) <= new Date(start_time)) {
+      res.status(400).json({ error: "end_time must be after start_time" });
+      return;
+    }
+
+    const { data: block, error } = await getSupabase()
+      .from("manual_busy_blocks")
+      .insert({
+        user_id: me.id,
+        start_time,
+        end_time,
+        label: label || "Busy",
+      })
+      .select()
+      .single();
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+
+    // Re-sync availability so the new block is reflected immediately
+    await syncUserCalendar(req.uid!);
+
+    res.json({ block });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /busy-blocks/:blockId — remove a manual busy block */
+app.delete("/busy-blocks/:blockId", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { blockId } = req.params;
+    const { error } = await getSupabase()
+      .from("manual_busy_blocks")
+      .delete()
+      .eq("id", blockId)
+      .eq("user_id", me.id);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+
+    // Re-sync availability so removing the block updates free slots
+    await syncUserCalendar(req.uid!);
+
+    res.json({ deleted: true });
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });

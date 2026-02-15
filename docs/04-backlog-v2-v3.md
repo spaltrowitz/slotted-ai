@@ -308,6 +308,42 @@
 
 ---
 
+## Up Next: New Event Source Integrations
+
+> Eventbrite, Meetup, and NYC Open Data backend functions + frontend support have been implemented and deployed. The following steps remain to fully activate these sources:
+
+### Already Done
+- **Backend:** `searchEventbrite()`, `searchMeetup()`, `searchNYCOpenData()` functions added to `functions/src/index.ts`
+- **Wired in:** All 3 endpoints (`/events/discover`, `/events/search`, `/events/match`) now query 5 sources in parallel
+- **Frontend:** Source badges (Eventbrite = orange, Meetup = red, NYC Free = green) and dynamic source counts
+- **DB migration:** `saved_events.source` CHECK constraint updated to allow `'eventbrite' | 'meetup' | 'nyc_open_data'`
+
+### Still Needs
+1. **Obtain API keys and set as Firebase secrets:**
+   - `EVENTBRITE_API_KEY` — sign up at [eventbrite.com/platform](https://www.eventbrite.com/platform)
+   - `MEETUP_API_KEY` — apply at [meetup.com/api](https://www.meetup.com/api)
+   - `NYC_OPEN_DATA_APP_TOKEN` — (optional, raises rate limits) register at [data.cityofnewyork.us](https://data.cityofnewyork.us)
+2. **Run the DB migration** (`migrations/add_new_event_sources.sql`) against Supabase
+3. **Test each source end-to-end** with real API keys — verify events appear, save correctly, and match with friend availability
+4. **Consider adding autocomplete suggestions** for the new sources (currently only SeatGeek/Ticketmaster have autocomplete)
+
+### Other APIs Evaluated (Not Integrated)
+- **Partiful** — No public API; events are private/invite-only
+- **PredictHQ** — Aggregates 1000+ sources; good for enrichment later (paid)
+- **Bandsintown** — Strong for concert/music discovery; free API
+- **Yelp Events** — Local events via Fusion API; free tier available
+- **Google Events (SerpAPI)** — Broad but paid wrapper
+
+---
+
+## Up Next: Security & Privacy Hardening
+
+> Complete before broader launch / user growth
+
+- **Encrypt OAuth/CalDAV credentials at rest:** Google `access_token`, `refresh_token`, and Apple `caldav_password` are stored in plaintext in the `users` table. Use Supabase Vault (`pgsodium`) or `pgcrypto` with a server-side key (stored as a Firebase Functions secret) to encrypt these columns. If the DB is ever breached, tokens would be useless without the encryption key. See the instructions in the conversation where RLS was enabled for implementation details.
+
+---
+
 ## Icebox / Research Ideas (No Timeline)
 
 > Explore these if user research validates demand

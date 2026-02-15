@@ -121,6 +121,11 @@ export default function DashboardPage() {
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 1 = next week, etc.
   const [monthOffset, setMonthOffset] = useState(0); // 0 = this month, 1 = next month, etc.
 
+  // Manual busy block mode
+  const [markBusyMode, setMarkBusyMode] = useState(false);
+  const [busyBlockSaving, setBusyBlockSaving] = useState(false);
+  const [busyBlockJustSaved, setBusyBlockJustSaved] = useState(false);
+
   // Dashboard data
   const [friendsToSee, setFriendsToSee] = useState<FriendToSee[]>([]);
 
@@ -141,9 +146,9 @@ export default function DashboardPage() {
 
   // Log form
   const [showLogForm, setShowLogForm] = useState(false);
-  const [logActivity, setLogActivity] = useState('hangout');
-  const [logDuration, setLogDuration] = useState(60);
-  const [logTimeOfDay, setLogTimeOfDay] = useState('afternoon');
+  const [logActivity, setLogActivity] = useState('');
+  const [logDuration, setLogDuration] = useState<number | null>(null);
+  const [logTimeOfDay, setLogTimeOfDay] = useState('');
   const [logRating, setLogRating] = useState(0);
   const [logSaving, setLogSaving] = useState(false);
   const [logSaved, setLogSaved] = useState(false);
@@ -201,9 +206,9 @@ export default function DashboardPage() {
     api.post('/calendar/sync').catch(() => {});
   }, [userUid]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch calendar events
+  // Fetch calendar events (works for both calendar-connected and manual-only users)
   useEffect(() => {
-    if (!userUid || !calendarConnected) return;
+    if (!userUid) return;
     let active = true;
     setCalEventsLoading(true);
 
@@ -227,6 +232,44 @@ export default function DashboardPage() {
 
     return () => { active = false; };
   }, [userUid, calendarConnected, calView, monthOffset]);
+
+  /* ─── manual busy block handlers ─── */
+  const isManualBlock = (ev: CalEvent) => ev.id?.startsWith('manual_') ?? false;
+
+  const handleAddBusyBlock = async (dateStr: string, hour: number) => {
+    if (busyBlockSaving) return;
+    setBusyBlockSaving(true);
+    try {
+      const startTime = new Date(`${dateStr}T${String(hour).padStart(2, '0')}:00:00`);
+      const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour block
+      await api.post('/busy-blocks', {
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        label: 'Busy',
+      });
+      // Refresh calendar events to show the new block
+      const fetchDays = calView === 'month' ? 45 : 14;
+      const { data } = await api.get(`/calendar/events?days=${fetchDays}`);
+      setCalEvents(data.events || []);
+      setBusyBlockJustSaved(true);
+      setTimeout(() => setBusyBlockJustSaved(false), 1500);
+    } catch (err) {
+      console.error('Failed to add busy block:', err);
+    } finally {
+      setBusyBlockSaving(false);
+    }
+  };
+
+  const handleRemoveBusyBlock = async (eventId: string) => {
+    // eventId is like "manual_<uuid>"
+    const blockId = eventId.replace('manual_', '');
+    try {
+      await api.delete(`/busy-blocks/${blockId}`);
+      setCalEvents((prev) => prev.filter((ev) => ev.id !== eventId));
+    } catch (err) {
+      console.error('Failed to remove busy block:', err);
+    }
+  };
 
   /* ─── derived ─── */
   const now = useMemo(() => new Date(), []);
@@ -476,16 +519,16 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Calendar connected but no events — nudge to select calendars */}
-      {calendarConnected && !calEventsLoading && calEvents.length === 0 && !calendarJustConnected && (
+      {/* Calendar connected but no events — nudge to select calendars or mark busy */}
+      {calendarConnected && !calEventsLoading && calEvents.filter(e => !e.id.startsWith('manual_')).length === 0 && !calendarJustConnected && (
         <div className="mb-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <span className="text-lg">📅</span>
           <p className="text-sm text-amber-800">
-            Your calendar is connected but no events are showing up.{' '}
+            Your calendar is connected but no events are showing.{' '}
             <Link to="/settings" className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-700">
-              Go to Settings
+              Check calendar selection
             </Link>{' '}
-            to make sure you've selected the specific calendars you want to sync.
+            or use <button onClick={() => { setMarkBusyMode(true); handleSetCalView('week'); setWeekOffset(0); }} className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-700">Mark Busy</button> to add your availability manually.
           </p>
         </div>
       )}
@@ -578,29 +621,57 @@ export default function DashboardPage() {
       )}
 
       {/* ─── CALENDAR ─── */}
-      {calendarConnected && (
-        <div className="mb-6 rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+      {(calendarConnected || true) && (
+        <div id="cal-section" className={`mb-6 rounded-2xl border ${markBusyMode ? 'border-amber-300 ring-2 ring-amber-100' : 'border-gray-200/60'} bg-white shadow-sm overflow-hidden transition-all`}>
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
             <div className="flex items-center gap-2">
               <span className="text-base">📅</span>
               <h2 className="font-display text-sm font-semibold text-gray-900">My Calendar</h2>
+              {busyBlockJustSaved && (
+                <span className="text-[10px] font-medium text-emerald-600 animate-in fade-in">✓ Saved</span>
+              )}
             </div>
-            <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-              {(['week', 'month', 'agenda'] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => { handleSetCalView(v); if (v === 'week') setWeekOffset(0); }}
-                  className={`rounded-md px-3 py-1 text-[11px] font-semibold transition-all ${
-                    calView === v
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  {v === 'week' ? 'Week' : v === 'month' ? 'Month' : 'Agenda'}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const next = !markBusyMode;
+                  setMarkBusyMode(next);
+                  if (next && calView !== 'week') { handleSetCalView('week'); setWeekOffset(0); }
+                }}
+                className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all ${
+                  markBusyMode
+                    ? 'bg-amber-500 text-white shadow-sm hover:bg-amber-600'
+                    : 'border border-gray-200 text-gray-500 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50'
+                }`}
+              >
+                {markBusyMode ? '✓ Done' : '✏️ Mark Busy'}
+              </button>
+              <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+                {(['week', 'month', 'agenda'] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => { handleSetCalView(v); if (v === 'week') setWeekOffset(0); if (v !== 'week') setMarkBusyMode(false); }}
+                    className={`rounded-md px-3 py-1 text-[11px] font-semibold transition-all ${
+                      calView === v
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    {v === 'week' ? 'Week' : v === 'month' ? 'Month' : 'Agenda'}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
+
+          {/* Mark busy helper text */}
+          {markBusyMode && (
+            <div className="border-b border-amber-100 bg-amber-50/50 px-5 py-2">
+              <p className="text-[11px] text-amber-700">
+                <span className="font-semibold">Tap any hour</span> to mark it as busy. Tap a <span className="font-semibold text-amber-800">yellow block</span> to remove it. Your friends will see these times as unavailable.
+              </p>
+            </div>
+          )}
 
           {/* Week navigation bar */}
           {calView === 'week' && (
@@ -695,12 +766,13 @@ export default function DashboardPage() {
                     const dayTimedEvents = timedEventsForDate(dateStr);
                     return (
                       <div key={dateStr} className={`relative border-r border-gray-50 last:border-r-0 ${isToday ? 'bg-slotted-50/20' : ''}`}>
-                        {/* Hour gridlines */}
+                        {/* Hour gridlines (tappable in mark-busy mode) */}
                         {hours.map((h) => (
                           <div
                             key={h}
-                            className="absolute w-full border-t border-gray-100"
-                            style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT}px` }}
+                            className={`absolute w-full border-t border-gray-100 ${markBusyMode ? 'cursor-pointer hover:bg-amber-100/40 transition-colors z-[5]' : ''}`}
+                            style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
+                            onClick={markBusyMode ? () => handleAddBusyBlock(dateStr, h) : undefined}
                           />
                         ))}
                         {/* Current time indicator */}
@@ -710,7 +782,7 @@ export default function DashboardPage() {
                           if (nowMin >= START_HOUR * 60 && nowMin <= END_HOUR * 60) {
                             const top = ((nowMin - START_HOUR * 60) / 60) * HOUR_HEIGHT;
                             return (
-                              <div className="absolute w-full z-20" style={{ top: `${top}px` }}>
+                              <div className="absolute w-full z-20 pointer-events-none" style={{ top: `${top}px` }}>
                                 <div className="flex items-center">
                                   <div className="h-2.5 w-2.5 rounded-full bg-red-500 -ml-1" />
                                   <div className="flex-1 h-0.5 bg-red-500" />
@@ -724,27 +796,42 @@ export default function DashboardPage() {
                         {dayTimedEvents.map((ev) => {
                           const { top, height } = eventStyle(ev);
                           const isBuf = isBufferEvent(ev);
+                          const isManual = isManualBlock(ev);
                           const bgColor = isBuf ? '#94a3b8' : (ev.color || (ev.source === 'apple' ? '#ff3b30' : '#4285f4'));
                           return (
                             <div
                               key={ev.id}
-                              className={`absolute left-0.5 right-0.5 rounded-md px-1.5 py-0.5 overflow-hidden cursor-default z-10 ${isBuf ? 'border-2 border-dashed border-slate-400' : 'border border-white/30'}`}
+                              className={`absolute left-0.5 right-0.5 rounded-md px-1.5 py-0.5 overflow-hidden z-10 ${
+                                isManual
+                                  ? 'border-2 border-dashed border-amber-400 cursor-pointer hover:opacity-70'
+                                  : isBuf
+                                    ? 'border-2 border-dashed border-slate-400 cursor-default'
+                                    : 'border border-white/30 cursor-default'
+                              }`}
                               style={{
                                 top: `${top}px`,
                                 height: `${height}px`,
-                                backgroundColor: isBuf ? '#f1f5f9' : bgColor + 'dd',
-                                backgroundImage: isBuf ? 'repeating-linear-gradient(135deg, transparent, transparent 4px, rgba(148,163,184,0.15) 4px, rgba(148,163,184,0.15) 6px)' : undefined,
+                                backgroundColor: isManual ? '#fef3c7' : (isBuf ? '#f1f5f9' : bgColor + 'dd'),
+                                backgroundImage: isManual
+                                  ? 'repeating-linear-gradient(135deg, transparent, transparent 4px, rgba(245,158,11,0.15) 4px, rgba(245,158,11,0.15) 6px)'
+                                  : isBuf
+                                    ? 'repeating-linear-gradient(135deg, transparent, transparent 4px, rgba(148,163,184,0.15) 4px, rgba(148,163,184,0.15) 6px)'
+                                    : undefined,
                                 minHeight: '20px',
                               }}
-                              title={`${ev.title}\n${formatEventTime(ev.start, ev.end, ev.allDay)}${ev.location ? '\n📍 ' + ev.location : ''}\n${isBuf ? '🗓️ Slotted' : (ev.source === 'apple' ? '🍎' : '📧') + ' ' + ev.calendarName}`}
+                              title={isManual ? `${ev.title} (tap to remove)` : `${ev.title}\n${formatEventTime(ev.start, ev.end, ev.allDay)}${ev.location ? '\n📍 ' + ev.location : ''}\n${isBuf ? '🗓️ Slotted' : (ev.source === 'apple' ? '🍎' : '📧') + ' ' + ev.calendarName}`}
+                              onClick={isManual ? () => handleRemoveBusyBlock(ev.id) : undefined}
                             >
-                              <p className={`text-[10px] font-semibold truncate leading-tight ${isBuf ? 'text-slate-600' : 'text-white'}`}>{ev.title}</p>
+                              <p className={`text-[10px] font-semibold truncate leading-tight ${isManual ? 'text-amber-700' : isBuf ? 'text-slate-600' : 'text-white'}`}>
+                                {isManual ? '✏️ ' : ''}{ev.title}
+                              </p>
                               {height >= 36 && (
-                                <p className="text-[9px] text-white/80 truncate">
+                                <p className={`text-[9px] truncate ${isManual ? 'text-amber-600/70' : 'text-white/80'}`}>
                                   {new Date(ev.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                                  {isManual && ' · tap to remove'}
                                 </p>
                               )}
-                              {height >= 52 && ev.location && (
+                              {!isManual && height >= 52 && ev.location && (
                                 <p className="text-[9px] text-white/70 truncate">📍 {ev.location}</p>
                               )}
                             </div>
@@ -1157,7 +1244,7 @@ export default function DashboardPage() {
                 {ACTIVITY_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
-                    onClick={() => setLogActivity(opt.value)}
+                    onClick={() => setLogActivity(logActivity === opt.value ? '' : opt.value)}
                     className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
                       logActivity === opt.value
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
@@ -1175,7 +1262,7 @@ export default function DashboardPage() {
                 {DURATION_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
-                    onClick={() => setLogDuration(opt.value)}
+                    onClick={() => setLogDuration(logDuration === opt.value ? null : opt.value)}
                     className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
                       logDuration === opt.value
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
@@ -1193,7 +1280,7 @@ export default function DashboardPage() {
                 {TIME_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
-                    onClick={() => setLogTimeOfDay(opt.value)}
+                    onClick={() => setLogTimeOfDay(logTimeOfDay === opt.value ? '' : opt.value)}
                     className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
                       logTimeOfDay === opt.value
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
@@ -1228,18 +1315,21 @@ export default function DashboardPage() {
                   try {
                     const hangoutDate = new Date(logDate + 'T12:00:00');
                     await api.post('/meetup-logs', {
-                      activity_type: logActivity,
-                      duration_min: logDuration,
+                      activity_type: logActivity || null,
+                      duration_min: logDuration || null,
                       day_of_week: hangoutDate.getDay(),
-                      time_of_day: logTimeOfDay,
+                      time_of_day: logTimeOfDay || null,
                       rating: logRating || null,
                       hangout_date: logDate,
                       friend_id: logFriendId || null,
                       friend_name: (!logFriendId && logFriendName.trim()) ? logFriendName.trim() : null,
                     });
                     setLogSaved(true);
-                    setTimeout(() => { setLogSaved(false); setShowLogForm(false); setLogFriendId(''); setLogFriendName(''); setLogDate(new Date().toISOString().slice(0, 10)); }, 2000);
-                  } catch { /* silent */ }
+                    setTimeout(() => { setLogSaved(false); setShowLogForm(false); setLogFriendId(''); setLogFriendName(''); setLogDate(new Date().toISOString().slice(0, 10)); setLogActivity(''); setLogDuration(null); setLogTimeOfDay(''); setLogRating(0); }, 2000);
+                  } catch (err: any) {
+                    console.error('Hangout log error:', err);
+                    alert(err?.response?.data?.error || 'Failed to save hangout. Please try again.');
+                  }
                   finally { setLogSaving(false); }
                 }}
                 className={`rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
@@ -1261,12 +1351,13 @@ export default function DashboardPage() {
       {!calendarConnected && (
         <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50/50 p-5 text-center">
           <span className="text-2xl">📅</span>
-          <p className="mt-1.5 text-sm font-medium text-gray-700">Connect your calendar</p>
+          <p className="mt-1.5 text-sm font-medium text-gray-700">Connect your calendar for automatic availability</p>
+          <p className="mt-1 text-xs text-gray-400">Or use <button onClick={() => { setMarkBusyMode(true); handleSetCalView('week'); setWeekOffset(0); document.getElementById('cal-section')?.scrollIntoView({ behavior: 'smooth' }); }} className="font-semibold text-amber-600 hover:text-amber-700 underline underline-offset-2">Mark Busy</button> on the calendar above to set your availability manually</p>
           <Link
             to="/settings"
-            className="mt-2 inline-block rounded-xl gradient-btn px-5 py-2 text-xs font-semibold text-white shadow-sm"
+            className="mt-3 inline-block rounded-xl gradient-btn px-5 py-2 text-xs font-semibold text-white shadow-sm"
           >
-            Connect →
+            Connect Google Calendar →
           </Link>
         </div>
       )}

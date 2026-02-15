@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
+import AddToCalendarModal from './AddToCalendarModal';
 
 interface ScoredSlot {
   start: string;
@@ -32,6 +33,13 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
   const [error, setError] = useState<string | null>(null);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [booked, setBooked] = useState<string | null>(null);
+  const [bookError, setBookError] = useState<string | null>(null);
+  const [calendarModal, setCalendarModal] = useState<{
+    meetupId: string;
+    title: string;
+    startTime: string;
+    endTime: string;
+  } | null>(null);
 
   const fetchGroupOverlaps = useCallback(async () => {
     setLoading(true);
@@ -56,6 +64,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
 
   const handleBook = async (slot: ScoredSlot) => {
     setBookingSlot(slot.start);
+    setBookError(null);
     try {
       const title = friendNames.length <= 2
         ? `Hangout with ${friendNames.join(' & ')}`
@@ -75,13 +84,21 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
           return;
         }
       }
+      setBookingSlot(null);
       setBooked(slot.start);
       onBook?.(slot);
-      setTimeout(() => setBooked(null), 3000);
-    } catch {
-      // silent fail
-    } finally {
+      // Show Add to Calendar modal
+      setCalendarModal({
+        meetupId: data.id,
+        title,
+        startTime: slot.start,
+        endTime: slot.end,
+      });
+      setTimeout(() => setBooked(null), 5000);
+    } catch (err: any) {
       setBookingSlot(null);
+      setBookError(err.response?.data?.error || 'Failed to book — please try again');
+      setTimeout(() => setBookError(null), 4000);
     }
   };
 
@@ -229,7 +246,11 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
 
       {/* Footer */}
       <div className="border-t border-gray-100 px-5 py-3 flex justify-between items-center">
-        <p className="text-[11px] text-gray-400">Based on the next 2 weeks of all calendars</p>
+        {bookError ? (
+          <p className="text-[11px] text-red-500 font-medium">{bookError}</p>
+        ) : (
+          <p className="text-[11px] text-gray-400">Based on the next 2 weeks of all calendars</p>
+        )}
         <button
           onClick={fetchGroupOverlaps}
           disabled={loading}
@@ -238,6 +259,17 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
           {loading ? 'Syncing…' : '🔄 Refresh'}
         </button>
       </div>
+
+      {/* Add to Calendar modal */}
+      {calendarModal && (
+        <AddToCalendarModal
+          meetupId={calendarModal.meetupId}
+          meetupTitle={calendarModal.title}
+          startTime={calendarModal.startTime}
+          endTime={calendarModal.endTime}
+          onClose={() => setCalendarModal(null)}
+        />
+      )}
     </div>
   );
 }

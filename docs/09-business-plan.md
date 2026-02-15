@@ -162,6 +162,35 @@ Being clear about who the product isn't for prevents feature creep and sharpens 
 
 ## 10. Go-to-Market Strategy
 
+### The Group Event Wedge (from beta user research)
+
+Early beta feedback surfaced an insight that may reshape go-to-market: **the 1:1 "coffee with Sarah" use case may not be painful enough to drive adoption, but large group coordination is.**
+
+A beta tester (Emma — one of the most socially active people in the initial cohort) was asked whether she'd use a weekly "mark your busy times" feature. Her response:
+
+> *"I probably wouldn't, because it's an extra step — I'd rather just text. But I would be open to it for identifying a big group hang, like 10 people to go see a show. Sort of what we use Doodle for."*
+
+This maps to a key observation: for 1:1 plans, texting is "good enough" for most people — even though it's objectively inefficient. But for **5–10 person coordination**, texting genuinely breaks down. Group chats become chaotic, Doodle is functional but widely disliked, and no tool does it well.
+
+**Strategic implication:** The activation hook may not be "find time for coffee with one friend" but rather "get 8 friends to a show without 47 messages." Slotted already has group scheduling, event discovery, and event sharing built. The infrastructure supports this use case today.
+
+**Two-phase positioning:**
+
+| Phase | Hook | Long-term value |
+|---|---|---|
+| **Activation** | "Getting your friend group to a show shouldn't take 47 messages" | Gets users to sign up and invite their friend clusters |
+| **Retention** | 1:1 scheduling, cadence tracking, Social Battery | Keeps users coming back for the everyday social maintenance |
+
+The group event use case solves the cold start problem differently: instead of asking one person to invite friends one-by-one, the *organizer* invites the whole group at once — instantly seeding a friend cluster. If even 6 out of 10 people sign up to coordinate a group event, that's 6 connected users from a single invite flow.
+
+**Competitive advantage over Doodle:**
+- Doodle is per-event (create poll → collect votes → done). Slotted is always-on — once friends connect, finding the next group time is one tap.
+- Doodle has no calendar integration. Slotted already knows when people are free.
+- Doodle doesn't help with "what to do." Slotted's event discovery + sharing does.
+- Doodle feels corporate. Slotted is designed for friends.
+
+**What this means for beta testing:** Prioritize testing the group scheduling flow with an actual group event (concert, dinner, game night). If 8+ people can find a time through Slotted faster than through a group chat, that's a demonstrable, shareable win.
+
 ### Phase 1: Private Beta (Current — Feb/Mar 2026)
 
 - **Audience:** 15–30 friends and family as initial beta testers
@@ -320,6 +349,7 @@ The free tier must deliver the **complete "aha moment"** before any limit is hit
 | **"I'll just text my friends"** | You will! And that's fine for simple plans. Slotted is for when texting fails — the 4-person dinner that takes 47 messages to schedule, the friend you keep meaning to see but never actually coordinate with. |
 | **"Scheduling apps feel impersonal / corporate"** | That's Calendly. Slotted is designed with soft social language ("Not this time" vs. "Decline"), no visible status judgments, and warm nudges — not meeting invites. It should feel like a thoughtful friend, not an HR tool. |
 | **"What about my privacy?"** | Slotted was designed privacy-first from day one. Friends never see your calendar details, Social Battery status, or how busy you are. There are no social judgments encoded (no "group-only" friend labels). The AI uses everyone's data to generate suggestions but never exposes raw inputs. Data is encrypted, never sold, and you can delete your account at any time. |
+| **"I don't have everything on my Google Calendar"** | This surfaced in beta user research. Many socially active people — especially the exact users Slotted is built for — don't keep a single, accurate digital calendar. They use multiple calendars (Apple for personal, Outlook for work), keep plans in their head, or add events at wrong times as loose reminders. Slotted's core assumption (calendar sync = source of truth) breaks for these users. *This is a product-level challenge, not just a messaging problem.* Three possible responses: (1) Ship Apple Calendar + Outlook support to capture fragmented calendars, (2) Elevate manual availability entry from a fallback to a first-class experience — a weekly "tap the times you're busy" check-in that's faster than maintaining a calendar, (3) Let the AI suggest times proactively and let users simply accept or reject — requiring no availability input at all. The right answer likely depends on how common this pattern is across beta testers. |
 
 ---
 

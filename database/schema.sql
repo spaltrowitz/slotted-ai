@@ -387,6 +387,22 @@ CREATE INDEX idx_activity_dismissals_user ON activity_dismissals (user_id, activ
 CREATE INDEX idx_activity_dismissals_friend ON activity_dismissals (user_id, friend_id);
 
 -- ============================================================
+-- MANUAL BUSY BLOCKS  (user-created busy times from dashboard)
+-- ============================================================
+CREATE TABLE manual_busy_blocks (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  start_time  TIMESTAMPTZ NOT NULL,
+  end_time    TIMESTAMPTZ NOT NULL,
+  label       TEXT,                                      -- optional label like "Dinner plans" or "Busy"
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  CHECK (end_time > start_time)
+);
+
+CREATE INDEX idx_manual_busy_blocks_user_time ON manual_busy_blocks (user_id, start_time, end_time);
+
+-- ============================================================
 -- Row Level Security (RLS)
 -- ============================================================
 -- RLS is enabled on all tables. The backend uses the service_role key
@@ -409,3 +425,4 @@ ALTER TABLE friend_groups        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE friend_group_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pending_invites      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_dismissals  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE manual_busy_blocks   ENABLE ROW LEVEL SECURITY;
