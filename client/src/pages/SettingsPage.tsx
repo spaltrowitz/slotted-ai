@@ -40,6 +40,7 @@ export default function SettingsPage() {
   const [customCallStart, setCustomCallStart] = useState('12:00');
   const [customCallEnd, setCustomCallEnd] = useState('13:00');
   const [customCallLabel, setCustomCallLabel] = useState('');
+  const [videoPlatforms, setVideoPlatforms] = useState<string[]>([]);
 
   // Event interest preferences
   const [eventInterests, setEventInterests] = useState<string[]>([]);
@@ -67,6 +68,7 @@ export default function SettingsPage() {
           if (me.recharging_days) setRechargingDays(me.recharging_days);
           if (me.share_hangouts !== undefined) setShareHangouts(me.share_hangouts);
           if (me.call_windows && Array.isArray(me.call_windows)) setCallWindows(me.call_windows);
+          if (me.video_platforms && Array.isArray(me.video_platforms)) setVideoPlatforms(me.video_platforms);
           if (me.neighborhood) setNeighborhood(me.neighborhood);
           if (me.work_neighborhood) setWorkNeighborhood(me.work_neighborhood);
           if (me.office_days && Array.isArray(me.office_days)) {
@@ -114,6 +116,7 @@ export default function SettingsPage() {
           officeDays: officeDaysInts,
           officeScheduleVaries: officeVaries,
           callWindows,
+          videoPlatforms,
           eventInterests,
           eventCity,
           displayName: displayName.trim() || undefined,
@@ -792,6 +795,39 @@ export default function SettingsPage() {
               <p className="text-xs text-gray-500 mb-3">
                 Set recurring windows when you're available for phone or video calls. These help Slotted match you with long-distance friends.
               </p>
+
+              {/* Preferred video platforms */}
+              <div className="mb-4">
+                <label className="block text-[11px] font-semibold text-violet-700 mb-2">Preferred video call platforms</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { value: 'facetime', emoji: '📱', label: 'FaceTime' },
+                    { value: 'zoom', emoji: '📹', label: 'Zoom' },
+                    { value: 'google_meet', emoji: '🌐', label: 'Google Meet' },
+                    { value: 'teams', emoji: '💼', label: 'Teams' },
+                    { value: 'whatsapp', emoji: '💬', label: 'WhatsApp' },
+                    { value: 'duo', emoji: '📞', label: 'Google Meet (Duo)' },
+                  ].map((p) => {
+                    const selected = videoPlatforms.includes(p.value);
+                    return (
+                      <button
+                        key={p.value}
+                        onClick={() => setVideoPlatforms((prev) =>
+                          selected ? prev.filter((v) => v !== p.value) : [...prev, p.value]
+                        )}
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                          selected
+                            ? 'border-violet-400 bg-violet-50 text-violet-700 shadow-sm'
+                            : 'border-gray-200 text-gray-500 hover:border-violet-200 hover:bg-violet-50/50'
+                        }`}
+                      >
+                        {p.emoji} {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-[10px] text-gray-400">Select all that you use — friends will see your preferences when scheduling a video call.</p>
+              </div>
 
               {/* Existing windows */}
               {callWindows.length > 0 && (

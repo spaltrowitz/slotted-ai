@@ -3,12 +3,12 @@ import api from '../lib/api';
 import AddToCalendarModal from './AddToCalendarModal';
 
 type HangoutMode = 'in_person' | 'phone' | 'video';
-type VideoPlatform = 'facetime' | 'zoom' | 'google_meet' | 'teams' | '';
+type VideoPlatform = 'facetime' | 'zoom' | 'google_meet' | 'teams' | 'whatsapp' | 'duo' | '';
 
 const MODE_CONFIG: Record<HangoutMode, { emoji: string; label: string; shortLabel: string }> = {
   in_person: { emoji: '🤝', label: 'In person', shortLabel: 'Meet up' },
   phone: { emoji: '📞', label: 'Phone call', shortLabel: 'Call' },
-  video: { emoji: '💻', label: 'Video call', shortLabel: 'Video' },
+  video: { emoji: '💻', label: 'Video call', shortLabel: 'Video call' },
 };
 
 const VIDEO_PLATFORMS: { value: VideoPlatform; emoji: string; label: string }[] = [
@@ -16,6 +16,8 @@ const VIDEO_PLATFORMS: { value: VideoPlatform; emoji: string; label: string }[] 
   { value: 'zoom', emoji: '📹', label: 'Zoom' },
   { value: 'google_meet', emoji: '🌐', label: 'Google Meet' },
   { value: 'teams', emoji: '💼', label: 'Teams' },
+  { value: 'whatsapp', emoji: '💬', label: 'WhatsApp' },
+  { value: 'duo', emoji: '📞', label: 'Google Meet (Duo)' },
 ];
 
 
@@ -85,7 +87,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
     const bookingTitle = hangoutMode === 'in_person'
       ? `Hangout with ${friendName}`
       : platformLabel
-        ? `${platformLabel} ${modeLabel} with ${friendName}`
+        ? `${platformLabel} call with ${friendName}`
         : `${modeLabel} with ${friendName}`;
     try {
       const { data } = await api.post('/meetups', {

@@ -491,11 +491,12 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
       socialBattery, rechargingDays, planningStyle,
       neighborhood, workNeighborhood, officeDays,
       callWindows, tripBufferBefore, tripBufferAfter, shareHangouts, officeScheduleVaries,
-      eventInterests, eventCity, displayName,
+      eventInterests, eventCity, displayName, videoPlatforms,
     } = req.body;
 
     const updates: Record<string, any> = {};
     if (displayName !== undefined) updates.display_name = displayName;
+    if (videoPlatforms !== undefined) updates.video_platforms = videoPlatforms;
     if (socialFrequency !== undefined) updates.social_frequency = socialFrequency;
     if (preferredTimes !== undefined) updates.preferred_times = preferredTimes;
     if (travelBuffer !== undefined) updates.travel_buffer_min = parseInt(travelBuffer, 10);
