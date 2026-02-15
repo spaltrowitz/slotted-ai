@@ -389,8 +389,8 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Send a welcome notification encouraging the user to invite friends
-    if (data) {
+    // Send a welcome notification only for brand-new users (not on every login)
+    if (data && !existing) {
       await createNotification({
         userId: data.id,
         type: "friend_request" as any,
@@ -3970,9 +3970,9 @@ app.get("/events/discover", requireAuth, async (req: AuthRequest, res: Response)
 
     const effectiveCity = (req.query.city as string) || city;
 
-    // Search all APIs for upcoming events in the city (no keyword required)
-    const dateFrom = new Date().toISOString().split("T")[0];
-    const dateTo = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]; // Next 30 days
+    // Date range — use query params if provided, otherwise default to next 30 days
+    const dateFrom = (req.query.dateFrom as string) || new Date().toISOString().split("T")[0];
+    const dateTo = (req.query.dateTo as string) || new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
 
     const searchParams = { q: type || effectiveCity, city: effectiveCity, type, dateFrom, dateTo, perPage };
     const [sgEvents, tmEvents, ebEvents, muEvents, nycEvents] = await Promise.all([

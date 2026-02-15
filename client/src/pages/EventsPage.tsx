@@ -256,7 +256,7 @@ export default function EventsPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestLoading, setSuggestLoading] = useState(false);
-  const suggestTimer = useRef<ReturnType<typeof setTimeout>>();
+  const suggestTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestBoxRef = useRef<HTMLDivElement>(null);
 
@@ -273,6 +273,7 @@ export default function EventsPage() {
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverCategory, setDiscoverCategory] = useState('');
   const [discoverLoaded, setDiscoverLoaded] = useState(false);
+  const [discoverTimeFilter, setDiscoverTimeFilter] = useState<'all' | 'today' | 'tomorrow' | 'weekend'>('all');
 
   // Trending (preloaded on page mount)
   const [trendingEvents, setTrendingEvents] = useState<EventResult[]>([]);
@@ -414,22 +415,54 @@ export default function EventsPage() {
   }, [query, city, eventType, dateFrom, dateTo, mode, selectedFriends]);
 
   // ─── Discover ───
-  const loadDiscover = useCallback(async (category?: string) => {
+  const getTimeFilterDates = useCallback((filter: 'all' | 'today' | 'tomorrow' | 'weekend') => {
+    const today = new Date();
+    const fmt = (d: Date) => d.toLocaleDateString('en-CA'); // YYYY-MM-DD
+    if (filter === 'today') {
+      return { dateFrom: fmt(today), dateTo: fmt(today) };
+    }
+    if (filter === 'tomorrow') {
+      const tmrw = new Date(today);
+      tmrw.setDate(tmrw.getDate() + 1);
+      return { dateFrom: fmt(tmrw), dateTo: fmt(tmrw) };
+    }
+    if (filter === 'weekend') {
+      // Find next Saturday (or today if it's already Saturday)
+      const dayOfWeek = today.getDay(); // 0=Sun
+      const daysToSat = dayOfWeek === 6 ? 0 : dayOfWeek === 0 ? 6 : 6 - dayOfWeek;
+      const sat = new Date(today);
+      sat.setDate(sat.getDate() + daysToSat);
+      const sun = new Date(sat);
+      sun.setDate(sun.getDate() + 1);
+      return { dateFrom: fmt(sat), dateTo: fmt(sun) };
+    }
+    return {}; // 'all' — no date filter, API defaults to next 30 days
+  }, []);
+
+  const loadDiscover = useCallback(async (category?: string, timeFilter?: 'all' | 'today' | 'tomorrow' | 'weekend') => {
     setDiscoverLoading(true);
     try {
       const params: Record<string, string> = {};
       if (city) params.city = city;
       if (category) params.type = category;
+      const dates = getTimeFilterDates(timeFilter || discoverTimeFilter);
+      if (dates.dateFrom) params.dateFrom = dates.dateFrom;
+      if (dates.dateTo) params.dateTo = dates.dateTo;
       const { data } = await api.get('/events/discover', { params });
       setDiscoverEvents(data.events || []);
       setDiscoverLoaded(true);
     } catch { /* ignore */ }
     finally { setDiscoverLoading(false); }
-  }, [city]);
+  }, [city, discoverTimeFilter, getTimeFilterDates]);
 
   const handleDiscoverCategory = (cat: string) => {
     setDiscoverCategory(cat);
     loadDiscover(cat);
+  };
+
+  const handleTimeFilter = (filter: 'all' | 'today' | 'tomorrow' | 'weekend') => {
+    setDiscoverTimeFilter(filter);
+    loadDiscover(discoverCategory, filter);
   };
 
   useEffect(() => {
@@ -1011,6 +1044,39 @@ export default function EventsPage() {
             </div>
           )}
 
+          {/* Time filter toggles */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 shrink-0">When:</span>
+            <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 overflow-x-auto">
+              {[
+                { value: 'all' as const, label: '📅 All', desc: 'Next 30 days' },
+                { value: 'today' as const, label: '☀️ Today', desc: new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) },
+                { value: 'tomorrow' as const, label: '🌅 Tomorrow', desc: (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); })() },
+                { value: 'weekend' as const, label: '🎉 This Weekend', desc: (() => {
+                  const today = new Date();
+                  const day = today.getDay();
+                  const daysToSat = day === 6 ? 0 : day === 0 ? 6 : 6 - day;
+                  const sat = new Date(today); sat.setDate(sat.getDate() + daysToSat);
+                  const sun = new Date(sat); sun.setDate(sun.getDate() + 1);
+                  return `${sat.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}–${sun.toLocaleDateString('en-US', { day: 'numeric' })}`;
+                })() },
+              ].map((t) => (
+                <button
+                  key={t.value}
+                  onClick={() => handleTimeFilter(t.value)}
+                  title={t.desc}
+                  className={`rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-all whitespace-nowrap ${
+                    discoverTimeFilter === t.value
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Results */}
           {!discoverLoading && discoverLoaded && discoverEvents.length > 0 && (
             <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
@@ -1020,6 +1086,9 @@ export default function EventsPage() {
                   <h2 className="font-display text-sm font-semibold text-gray-900">
                     {discoverCategory
                       ? `${DISCOVER_CATEGORIES.find(c => c.value === discoverCategory)?.label || 'Events'} in ${city}`
+                      : discoverTimeFilter === 'today' ? `Today in ${city}`
+                      : discoverTimeFilter === 'tomorrow' ? `Tomorrow in ${city}`
+                      : discoverTimeFilter === 'weekend' ? `This Weekend in ${city}`
                       : `Upcoming in ${city}`}
                   </h2>
                   <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">{discoverEvents.length}</span>
