@@ -396,10 +396,10 @@ export default function EventsPage() {
       {/* All events list */}
       {!loading && events.length > 0 && (
         <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-            <div className="flex items-center gap-2">
-              <span className="text-base">🎟️</span>
-              <h2 className="font-display text-sm font-semibold text-gray-900">
+          <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-5 py-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-base shrink-0">🎫</span>
+              <h2 className="font-display text-sm font-semibold text-gray-900 truncate">
                 {mode === 'match' ? 'All Events Found' : 'Search Results'}
               </h2>
               <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
@@ -427,12 +427,12 @@ export default function EventsPage() {
                 href={ev.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-gray-50/50"
+                className="flex items-center gap-3 px-4 sm:px-5 py-3.5 transition-colors hover:bg-gray-50/50"
               >
                 {ev.imageUrl ? (
-                  <img src={ev.imageUrl} alt="" className="h-14 w-14 rounded-xl object-cover shrink-0 shadow-sm" />
+                  <img src={ev.imageUrl} alt="" className="hidden sm:block h-14 w-14 rounded-xl object-cover shrink-0 shadow-sm" />
                 ) : (
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 text-xl">
+                  <div className="hidden sm:flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 text-xl">
                     {ev.type === 'theater' ? '🎭' : ev.type === 'concert' ? '🎵' : ev.type === 'sports' ? '⚽' : '🎟️'}
                   </div>
                 )}

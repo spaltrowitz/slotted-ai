@@ -336,12 +336,24 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
           .eq("invited_email", email.toLowerCase());
 
         if (pendingRows && pendingRows.length > 0) {
-          for (const row of pendingRows) {
-            if (row.inviter_id === data.id) continue; // skip self
+          // Deduplicate — only process unique inviter IDs
+          const uniqueInviterIds = [...new Set(pendingRows.map((r: any) => r.inviter_id))];
+          for (const inviterId of uniqueInviterIds) {
+            if (inviterId === data.id) continue; // skip self
             const [userA, userB] =
-              data.id < row.inviter_id
-                ? [data.id, row.inviter_id]
-                : [row.inviter_id, data.id];
+              data.id < inviterId
+                ? [data.id, inviterId]
+                : [inviterId, data.id];
+
+            // Check if friendship already exists (may have been created by accept-invite)
+            const { data: existingFriendship } = await getSupabase()
+              .from("friendships")
+              .select("id")
+              .eq("user_a_id", userA)
+              .eq("user_b_id", userB)
+              .single();
+
+            if (existingFriendship) continue; // Already connected — skip
 
             await getSupabase()
               .from("friendships")
@@ -349,7 +361,7 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
                 {
                   user_a_id: userA,
                   user_b_id: userB,
-                  invited_by: row.inviter_id,
+                  invited_by: inviterId,
                   status: "accepted",
                 },
                 { onConflict: "user_a_id,user_b_id" },
@@ -357,7 +369,7 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
 
             // Notify the inviter
             await createNotification({
-              userId: row.inviter_id,
+              userId: inviterId,
               type: "friend_accepted",
               title: "New friend joined!",
               body: `${data.display_name || email} joined Slotted and you're now connected.`,
@@ -375,6 +387,16 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
         console.error("Pending invite auto-connect failed:", pendingErr);
         // Non-blocking — don't fail the signup
       }
+    }
+
+    // Send a welcome notification encouraging the user to invite friends
+    if (data) {
+      await createNotification({
+        userId: data.id,
+        type: "friend_request" as any,
+        title: "Welcome to Slotted! 👋",
+        body: "Invite your friends so Slotted can find the best times for you to hang out. Head to the Friends tab to send invites!",
+      });
     }
 
     res.json(data);
@@ -516,7 +538,7 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
 /** POST /users/me/onboarding — save onboarding answers */
 app.post("/users/me/onboarding", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { socialFrequency, preferredTimes, travelBuffer, socialBattery, rechargingDays, socialGoal, preferredDuration } =
+    const { socialFrequency, preferredTimes, travelBuffer, socialBattery, rechargingDays, socialGoal, preferredDuration, preferredCallDuration } =
       req.body;
 
     const { data, error } = await getSupabase()
@@ -529,6 +551,7 @@ app.post("/users/me/onboarding", requireAuth, async (req: AuthRequest, res: Resp
         recharging_days: rechargingDays || [],
         social_goal: socialGoal || null,
         preferred_duration: preferredDuration || null,
+        preferred_call_duration: preferredCallDuration || null,
         onboarded: true,
       })
       .eq("firebase_uid", req.uid!)
@@ -865,16 +888,27 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
       return;
     }
 
-    // Notify the referrer that the new user connected
+    // Notify the referrer that the new user connected — but only if no notification was already sent
     if (data) {
-      await createNotification({
-        userId: referrer.id,
-        type: "friend_accepted",
-        title: "New friend connected!",
-        body: `${me.display_name || me.email} joined Slotted via your invite and you're now connected.`,
-        relatedUserId: me.id,
-        relatedId: data.id,
-      });
+      // Check if a notification was already created for this connection (e.g. from pending_invites auto-connect)
+      const { data: existingNotif } = await getSupabase()
+        .from("notifications")
+        .select("id")
+        .eq("user_id", referrer.id)
+        .eq("type", "friend_accepted")
+        .eq("related_user_id", me.id)
+        .single();
+
+      if (!existingNotif) {
+        await createNotification({
+          userId: referrer.id,
+          type: "friend_accepted",
+          title: "New friend connected!",
+          body: `${me.display_name || me.email} joined Slotted via your invite and you're now connected.`,
+          relatedUserId: me.id,
+          relatedId: data.id,
+        });
+      }
     }
 
     res.json(data);

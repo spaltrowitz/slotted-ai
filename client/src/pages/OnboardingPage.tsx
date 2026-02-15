@@ -7,6 +7,7 @@ interface OnboardingData {
   socialGoal: string;
   preferredTimes: string[];
   preferredDuration: string;
+  preferredCallDuration: string;
   personalTimeMode: string;
   tripBuffer: string;
   calendarConnected: boolean;
@@ -17,6 +18,7 @@ const steps = [
   'social-goal',
   'times',
   'hangout-duration',
+  'call-duration',
   'personal-time',
   'trip-buffer',
   'calendar',
@@ -31,6 +33,7 @@ export default function OnboardingPage() {
     socialGoal: '',
     preferredTimes: [],
     preferredDuration: '',
+    preferredCallDuration: '',
     personalTimeMode: '',
     tripBuffer: '',
     calendarConnected: false,
@@ -59,7 +62,7 @@ export default function OnboardingPage() {
     if (step > 0) setStep(step - 1);
   };
 
-  const stepEmojis = ['🗓️', '�', '🌅', '⏱️', '🛡️', '✈️', '📅'];
+  const stepEmojis = ['🗓️', '🎯', '🌅', '⏱️', '📞', '🛡️', '✈️', '📅'];
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white relative overflow-hidden">
@@ -94,7 +97,7 @@ export default function OnboardingPage() {
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
               Hey {user?.displayName?.split(' ')[0]}! 👋 How often do you like to
-              see friends?
+              see people you care about?
             </h2>
             <div className="space-y-2">
               {[
@@ -129,7 +132,7 @@ export default function OnboardingPage() {
               What's your social goal right now?
             </h2>
             <p className="text-sm text-gray-500">
-              This helps us calibrate how aggressively we suggest meetups
+              This helps us calibrate how often we suggest getting together
             </p>
             <div className="space-y-2">
               {[
@@ -201,7 +204,7 @@ export default function OnboardingPage() {
         {currentStep === 'hangout-duration' && (
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
-              How long do your hangouts usually last?
+              How long are your in-person hangouts?
             </h2>
             <p className="text-sm text-gray-500">
               We'll look for windows that fit your style
@@ -231,7 +234,41 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Q5: Protect Personal Time */}
+        {/* Q5: Call / FaceTime Duration */}
+        {currentStep === 'call-duration' && (
+          <div className="space-y-4">
+            <h2 className="font-display text-xl font-bold text-gray-900">
+              How about calls & FaceTime?
+            </h2>
+            <p className="text-sm text-gray-500">
+              For long-distance friends & family — how long do your calls usually last?
+            </p>
+            <div className="space-y-2">
+              {[
+                { value: 'quick', label: '💬 Quick check-in (10–20 min)' },
+                { value: 'medium', label: '📱 A solid call (30–60 min)' },
+                { value: 'long', label: '📞 A real catch-up (1–2 hrs)' },
+                { value: 'none', label: '🙅 I don\'t really do calls' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() =>
+                    setData({ ...data, preferredCallDuration: opt.value })
+                  }
+                  className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                    data.preferredCallDuration === opt.value
+                      ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
+                      : 'border-gray-200 text-gray-700 hover:border-slotted-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Q6: Protect Personal Time */}
         {currentStep === 'personal-time' && (
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
