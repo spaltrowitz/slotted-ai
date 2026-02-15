@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
+import CounterProposePanel from '../components/CounterProposePanel';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -13,6 +14,7 @@ interface Notification {
   read: boolean;
   created_at: string;
   related_id?: string;
+  related_user_id?: string;
   related_user?: {
     display_name: string;
     photo_url: string | null;
@@ -33,6 +35,7 @@ export default function NotificationsPage() {
   } | null>(null);
   const [friendRequestLoading, setFriendRequestLoading] = useState<string | null>(null);
   const [friendRequestDone, setFriendRequestDone] = useState<Record<string, string>>({});
+  const [counterProposeFor, setCounterProposeFor] = useState<string | null>(null);
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
@@ -369,9 +372,11 @@ export default function NotificationsPage() {
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : rsvpDone[notification.id] === 'maybe'
                               ? 'border-amber-200 bg-amber-50 text-amber-700'
-                              : 'border-gray-200 bg-gray-50 text-gray-600'
+                              : rsvpDone[notification.id] === 'counter_proposed'
+                                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                : 'border-gray-200 bg-gray-50 text-gray-600'
                         }`}>
-                          {rsvpDone[notification.id] === 'accepted' ? '✅ Accepted' : rsvpDone[notification.id] === 'maybe' ? '🤔 Maybe' : 'Not this time'}
+                          {rsvpDone[notification.id] === 'accepted' ? '✅ Accepted' : rsvpDone[notification.id] === 'maybe' ? '🤔 Maybe' : rsvpDone[notification.id] === 'counter_proposed' ? '🔄 Suggested new time' : 'Not this time'}
                         </span>
                       ) : (
                         <div className="flex flex-wrap gap-2">
@@ -390,13 +395,40 @@ export default function NotificationsPage() {
                             🤔 Maybe
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleRsvp(notification.id, notification.related_id!, 'declined'); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (notification.related_user_id) {
+                                setCounterProposeFor(counterProposeFor === notification.id ? null : notification.id);
+                              } else {
+                                handleRsvp(notification.id, notification.related_id!, 'declined');
+                              }
+                            }}
                             disabled={rsvpLoading === notification.id}
                             className="rounded-lg border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 disabled:opacity-50"
                           >
                             Not this time
                           </button>
                         </div>
+                      )}
+
+                      {/* Counter-propose panel */}
+                      {counterProposeFor === notification.id && notification.related_id && notification.related_user_id && (
+                        <CounterProposePanel
+                          meetupId={notification.related_id}
+                          friendId={notification.related_user_id}
+                          friendName={notification.related_user?.display_name || 'your friend'}
+                          originalTime={notification.body}
+                          onCounterProposed={() => {
+                            setCounterProposeFor(null);
+                            setRsvpDone((prev) => ({ ...prev, [notification.id]: 'counter_proposed' }));
+                            markAsRead(notification.id);
+                          }}
+                          onJustDecline={() => {
+                            setCounterProposeFor(null);
+                            handleRsvp(notification.id, notification.related_id!, 'declined');
+                          }}
+                          onCancel={() => setCounterProposeFor(null)}
+                        />
                       )}
                     </div>
                   )}

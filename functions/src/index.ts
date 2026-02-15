@@ -2490,6 +2490,113 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
   }
 });
 
+/** POST /meetups/:meetupId/counter-propose — decline original + create new meetup with reversed roles */
+app.post("/meetups/:meetupId/counter-propose", requireAuth, async (req: AuthRequest, res: Response) => {
+  const { meetupId } = req.params;
+  const { startTime, endTime } = req.body;
+
+  if (!startTime || !endTime) {
+    res.status(400).json({ error: "startTime and endTime are required" });
+    return;
+  }
+
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // Get the original meetup
+    const { data: originalMeetup, error: meetupErr } = await getSupabase()
+      .from("meetups")
+      .select("*")
+      .eq("id", meetupId)
+      .single();
+
+    if (meetupErr || !originalMeetup) {
+      res.status(404).json({ error: "Meetup not found" });
+      return;
+    }
+
+    // Decline the counter-proposer on the original meetup (silently — no notification)
+    await getSupabase()
+      .from("meetup_participants")
+      .update({ rsvp: "declined" })
+      .eq("meetup_id", meetupId)
+      .eq("user_id", me.id);
+
+    // Get the original creator's ID (the person to receive the counter-proposal)
+    const originalCreatorId = originalMeetup.created_by;
+
+    // Get all other participants from the original meetup (excluding counter-proposer)
+    const { data: origParticipants } = await getSupabase()
+      .from("meetup_participants")
+      .select("user_id")
+      .eq("meetup_id", meetupId)
+      .neq("user_id", me.id);
+
+    const otherParticipantIds = (origParticipants || []).map((p: any) => p.user_id);
+
+    // Create a new meetup with the counter-proposer as creator
+    const newTitle = originalMeetup.title || "Hangout";
+    const { data: newMeetup, error: newErr } = await getSupabase()
+      .from("meetups")
+      .insert({
+        title: newTitle,
+        description: originalMeetup.description,
+        location: originalMeetup.location,
+        start_time: startTime,
+        end_time: endTime,
+        created_by: me.id,
+      })
+      .select()
+      .single();
+
+    if (newErr || !newMeetup) {
+      res.status(500).json({ error: newErr?.message || "Failed to create counter-proposal" });
+      return;
+    }
+
+    // Add participants: counter-proposer as accepted, everyone else as pending
+    const participants = [
+      { meetup_id: newMeetup.id, user_id: me.id, rsvp: "accepted" },
+      ...otherParticipantIds.map((pid: string) => ({
+        meetup_id: newMeetup.id,
+        user_id: pid,
+        rsvp: "pending",
+      })),
+    ];
+
+    await getSupabase().from("meetup_participants").insert(participants);
+
+    // Format original and new times for the notification
+    const origDt = new Date(originalMeetup.start_time);
+    const origTimeStr = origDt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
+      " at " + origDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+    const newDt = new Date(startTime);
+    const newTimeStr = newDt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
+      " at " + newDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+    // Notify each original participant with a single combined notification
+    for (const pid of otherParticipantIds) {
+      await createNotification({
+        userId: pid,
+        type: "meetup_request",
+        title: `🔄 ${me.display_name || "Someone"} suggested a different time`,
+        body: `Can't make ${origTimeStr} — how about ${newTimeStr}? (${newTitle})`,
+        relatedUserId: me.id,
+        relatedId: newMeetup.id,
+      });
+    }
+
+    res.json({ ...newMeetup, counterProposedFrom: meetupId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** PATCH /meetups/:meetupId/didnt-happen — mark a meetup as didn't happen with reason */
 app.patch("/meetups/:meetupId/didnt-happen", requireAuth, async (req: AuthRequest, res: Response) => {
   const { meetupId } = req.params;

@@ -298,14 +298,27 @@ export default function EventsPage() {
   const [shareSending, setShareSending] = useState(false);
   const [shareSent, setShareSent] = useState(false);
 
-  // ─── Load friends + city ───
+  // Recent searches (localStorage-backed)
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('slotted_recent_searches') || '[]'); } catch { return []; }
+  });
+
+  // Saved/bookmarked event IDs
+  const [savedEventIds, setSavedEventIds] = useState<Set<string>>(new Set());
+  const [savingEventId, setSavingEventId] = useState<string | null>(null);
+
+  // Price filter
+  const [priceFilter, setPriceFilter] = useState<'any' | 'free' | 'under50' | 'under100' | 'under200'>('any');
+
+  // ─── Load friends + city + saved events ───
   useEffect(() => {
     if (!user) return;
     (async () => {
       try {
-        const [friendsRes, meRes] = await Promise.all([
+        const [friendsRes, meRes, savedRes] = await Promise.all([
           api.get('/friends'),
           api.get('/users/me'),
+          api.get('/events/saved').catch(() => ({ data: { events: [] } })),
         ]);
         const accepted = (friendsRes.data.friends || [])
           .filter((f: any) => f.status === 'accepted')
@@ -318,6 +331,9 @@ export default function EventsPage() {
           setDefaultCity(majorCity);
           if (!city) setCity(majorCity);
         }
+        // Load saved event IDs
+        const savedIds = new Set<string>((savedRes.data.events || savedRes.data || []).map((e: any) => e.external_id as string));
+        setSavedEventIds(savedIds);
       } catch { /* ignore */ }
     })();
   }, [user]);
@@ -383,9 +399,23 @@ export default function EventsPage() {
   };
 
   // ─── Search ───
+  const addRecentSearch = useCallback((q: string) => {
+    setRecentSearches((prev) => {
+      const updated = [q, ...prev.filter((s) => s.toLowerCase() !== q.toLowerCase())].slice(0, 8);
+      try { localStorage.setItem('slotted_recent_searches', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }, []);
+
+  const clearRecentSearches = () => {
+    setRecentSearches([]);
+    try { localStorage.removeItem('slotted_recent_searches'); } catch {}
+  };
+
   const handleSearch = useCallback(async (overrideQuery?: string) => {
     const q = (overrideQuery || query).trim();
     if (!q) return;
+    addRecentSearch(q);
     setTab('search');
     setLoading(true);
     setSearched(true);
@@ -530,6 +560,36 @@ export default function EventsPage() {
   const scoreEmoji = (score: number) =>
     score >= 85 ? '🔥' : score >= 70 ? '👍' : score >= 55 ? '🤔' : '😐';
 
+  // ─── Save/bookmark event ───
+  const handleSaveEvent = async (ev: EventResult) => {
+    setSavingEventId(ev.id);
+    try {
+      if (savedEventIds.has(ev.id)) {
+        setSavedEventIds((prev) => { const next = new Set(prev); next.delete(ev.id); return next; });
+      } else {
+        await api.post('/events/save', { event: ev });
+        setSavedEventIds((prev) => new Set(prev).add(ev.id));
+      }
+    } catch (err) { console.error('Save failed:', err); }
+    finally { setSavingEventId(null); }
+  };
+
+  // ─── Price filter ───
+  const filterByPrice = useCallback((evts: EventResult[]) => {
+    if (priceFilter === 'any') return evts;
+    return evts.filter((ev) => {
+      const price = ev.priceMin ?? ev.priceMax ?? Infinity;
+      if (priceFilter === 'free') return price === 0;
+      if (priceFilter === 'under50') return price <= 50;
+      if (priceFilter === 'under100') return price <= 100;
+      if (priceFilter === 'under200') return price <= 200;
+      return true;
+    });
+  }, [priceFilter]);
+
+  const filteredEvents = useMemo(() => filterByPrice(events), [events, filterByPrice]);
+  const filteredDiscoverEvents = useMemo(() => filterByPrice(discoverEvents), [discoverEvents, filterByPrice]);
+
   // ─── Quick suggestions based on city ───
   const quickSuggestions = CITY_SUGGESTIONS[city] || CITY_SUGGESTIONS['New York'] || [];
 
@@ -604,8 +664,22 @@ export default function EventsPage() {
               {formatPrice(ev.priceMin, ev.priceMax)}
             </span>
           )}
-          {/* Multi-source ticket links + share */}
+          {/* Save + share + ticket links */}
           <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleSaveEvent(ev); }}
+              disabled={savingEventId === ev.id}
+              className={`rounded-full p-1.5 transition-all ${
+                savedEventIds.has(ev.id)
+                  ? 'text-red-500 hover:text-red-600'
+                  : 'text-gray-300 hover:text-red-400 hover:bg-red-50'
+              }`}
+              title={savedEventIds.has(ev.id) ? 'Saved' : 'Save for later'}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill={savedEventIds.has(ev.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+            </button>
             <button
               onClick={(e) => { e.stopPropagation(); openShareModal(ev); }}
               className="rounded-full p-1.5 text-gray-400 hover:text-slotted-600 hover:bg-slotted-50 transition-all"
@@ -825,6 +899,44 @@ export default function EventsPage() {
                 className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 shadow-sm focus:border-slotted-400 focus:outline-none" />
             </div>
 
+            {/* Price filter + date presets */}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-[10px] text-gray-400 font-medium">Price:</span>
+              <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+                {([
+                  { value: 'any' as const, label: 'Any' },
+                  { value: 'free' as const, label: 'Free' },
+                  { value: 'under50' as const, label: '<$50' },
+                  { value: 'under100' as const, label: '<$100' },
+                  { value: 'under200' as const, label: '<$200' },
+                ] as const).map((p) => (
+                  <button key={p.value} onClick={() => setPriceFilter(p.value)}
+                    className={`rounded-md px-2 py-1 text-[10px] font-semibold transition-all whitespace-nowrap ${
+                      priceFilter === p.value ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
+                    }`}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[10px] text-gray-400 font-medium ml-1">Quick:</span>
+              {([
+                { label: 'Today', from: () => { const d = new Date(); return d.toLocaleDateString('en-CA'); }, to: () => { const d = new Date(); return d.toLocaleDateString('en-CA'); } },
+                { label: 'This Weekend', from: () => { const d = new Date(); const day = d.getDay(); const sat = new Date(d); sat.setDate(d.getDate() + (day === 6 ? 0 : day === 0 ? 6 : 6 - day)); return sat.toLocaleDateString('en-CA'); }, to: () => { const d = new Date(); const day = d.getDay(); const sun = new Date(d); sun.setDate(d.getDate() + (day === 0 ? 0 : 7 - day)); return sun.toLocaleDateString('en-CA'); } },
+                { label: 'Next Week', from: () => { const d = new Date(); d.setDate(d.getDate() + (7 - d.getDay() + 1)); return d.toLocaleDateString('en-CA'); }, to: () => { const d = new Date(); d.setDate(d.getDate() + (7 - d.getDay() + 7)); return d.toLocaleDateString('en-CA'); } },
+                { label: 'This Month', from: () => new Date().toLocaleDateString('en-CA'), to: () => { const d = new Date(); d.setMonth(d.getMonth() + 1, 0); return d.toLocaleDateString('en-CA'); } },
+              ]).map((preset) => (
+                <button key={preset.label}
+                  onClick={() => { setDateFrom(preset.from()); setDateTo(preset.to()); }}
+                  className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-500 hover:border-slotted-200 hover:bg-slotted-50 hover:text-slotted-600 transition-all">
+                  {preset.label}
+                </button>
+              ))}
+              {(dateFrom || dateTo) && (
+                <button onClick={() => { setDateFrom(''); setDateTo(''); }}
+                  className="text-[10px] text-gray-400 hover:text-red-400 transition-colors">✕ Clear</button>
+              )}
+            </div>
+
             {/* Match mode + friend picker */}
             <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
               <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
@@ -935,7 +1047,7 @@ export default function EventsPage() {
           )}
 
           {/* All events list */}
-          {!loading && events.length > 0 && (
+          {!loading && filteredEvents.length > 0 && (
             <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
               <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-5 py-3">
                 <div className="flex items-center gap-2 min-w-0">
@@ -943,7 +1055,7 @@ export default function EventsPage() {
                   <h2 className="font-display text-sm font-semibold text-gray-900 truncate">
                     {mode === 'match' ? 'All Events Found' : 'Search Results'}
                   </h2>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">{events.length}</span>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">{filteredEvents.length}{priceFilter !== 'any' ? ` of ${events.length}` : ''}</span>
                 </div>
                 {sourceCounts && (
                   <div className="hidden sm:flex items-center gap-2 text-[10px] text-gray-400 flex-wrap">
@@ -953,18 +1065,20 @@ export default function EventsPage() {
                   </div>
                 )}
               </div>
-              <div className="divide-y divide-gray-100">{events.map(renderEventCard)}</div>
+              <div className="divide-y divide-gray-100">{filteredEvents.map(renderEventCard)}</div>
             </div>
           )}
 
           {/* Empty state */}
-          {!loading && searched && events.length === 0 && (
+          {!loading && searched && filteredEvents.length === 0 && (
             <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
               <div className="flex flex-col items-center justify-center px-6 py-16">
                 <span className="text-5xl mb-2">🎭</span>
                 <h3 className="mt-3 font-display text-lg font-bold text-gray-900">No events found</h3>
                 <p className="mt-2 max-w-sm text-center text-sm text-gray-400 leading-relaxed">
-                  Try a different search term, broader date range, or different city.
+                  {priceFilter !== 'any' && events.length > 0
+                    ? `${events.length} events found but none match your price filter. Try adjusting the price range.`
+                    : 'Try a different search term, broader date range, or different city.'}
                 </p>
               </div>
             </div>
@@ -973,6 +1087,31 @@ export default function EventsPage() {
           {/* Pre-search discovery content */}
           {!loading && !searched && (
             <div className="space-y-5">
+              {/* Recent searches */}
+              {recentSearches.length > 0 && (
+                <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🕔</span>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Recent Searches</h3>
+                    </div>
+                    <button onClick={clearRecentSearches} className="text-[10px] text-gray-400 hover:text-red-400 transition-colors">Clear</button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {recentSearches.map((s) => (
+                      <button key={s}
+                        onClick={() => { setQuery(s); setTimeout(() => handleSearch(s), 50); }}
+                        className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs text-gray-600 transition-all hover:border-slotted-200 hover:bg-slotted-50 hover:text-slotted-700 flex items-center gap-1.5">
+                        <svg className="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Quick search suggestions */}
               <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
                 <div className="flex items-center gap-2 mb-3">
@@ -1128,7 +1267,7 @@ export default function EventsPage() {
           </div>
 
           {/* Results */}
-          {!discoverLoading && discoverLoaded && discoverEvents.length > 0 && (
+          {!discoverLoading && discoverLoaded && filteredDiscoverEvents.length > 0 && (
             <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
               <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-5 py-3">
                 <div className="flex items-center gap-2">
@@ -1141,20 +1280,22 @@ export default function EventsPage() {
                       : discoverTimeFilter === 'weekend' ? `This Weekend in ${city}`
                       : `Upcoming in ${city}`}
                   </h2>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">{discoverEvents.length}</span>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">{filteredDiscoverEvents.length}{priceFilter !== 'any' ? ` of ${discoverEvents.length}` : ''}</span>
                 </div>
               </div>
-              <div className="divide-y divide-gray-100">{discoverEvents.map(renderEventCard)}</div>
+              <div className="divide-y divide-gray-100">{filteredDiscoverEvents.map(renderEventCard)}</div>
             </div>
           )}
 
           {/* Empty */}
-          {!discoverLoading && discoverLoaded && discoverEvents.length === 0 && (
+          {!discoverLoading && discoverLoaded && filteredDiscoverEvents.length === 0 && (
             <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center shadow-sm">
               <span className="text-4xl">🤷</span>
               <h3 className="mt-3 font-display text-base font-bold text-gray-700">No events found</h3>
               <p className="mt-2 text-sm text-gray-400">
-                {city ? `Try a different category or check back later for events near ${city}.` : 'Set your city above to discover local events.'}
+                {priceFilter !== 'any' && discoverEvents.length > 0
+                  ? `${discoverEvents.length} events found but none match your price filter.`
+                  : city ? `Try a different category or check back later for events near ${city}.` : 'Set your city above to discover local events.'}
               </p>
             </div>
           )}
