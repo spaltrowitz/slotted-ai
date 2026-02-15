@@ -3329,8 +3329,14 @@ function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
 
   // Merge each group into a single event with combined metadata
   return groups.map((group) => {
-    // Pick the "best" listing as the primary (prefer one with image, then lowest price)
+    // Pick the "best" listing as the primary (prefer Ticketmaster, then image, then lowest price)
     const sorted = [...group].sort((a, b) => {
+      // Prefer Ticketmaster as primary source
+      if (a.source === "ticketmaster" && b.source !== "ticketmaster") return -1;
+      if (a.source !== "ticketmaster" && b.source === "ticketmaster") return 1;
+      // Then SeatGeek (StubHub) as secondary
+      if (a.source === "seatgeek" && b.source !== "seatgeek") return -1;
+      if (a.source !== "seatgeek" && b.source === "seatgeek") return 1;
       // Prefer entries with images
       if (a.imageUrl && !b.imageUrl) return -1;
       if (!a.imageUrl && b.imageUrl) return 1;
@@ -3338,9 +3344,6 @@ function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
       if ((a.priceMin || Infinity) !== (b.priceMin || Infinity)) {
         return (a.priceMin || Infinity) - (b.priceMin || Infinity);
       }
-      // Prefer SeatGeek (usually has better data for live events)
-      if (a.source === "seatgeek" && b.source !== "seatgeek") return -1;
-      if (a.source !== "seatgeek" && b.source === "seatgeek") return 1;
       return 0;
     });
 
@@ -3952,38 +3955,62 @@ app.get("/events/suggest", requireAuth, async (req: AuthRequest, res: Response) 
 /** GET /events/discover — browse local popular events by category */
 app.get("/events/discover", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const city = req.query.city as string || "";
+    let city = req.query.city as string || "";
     const type = req.query.type as string || "";
     const page = parseInt(req.query.page as string || "1", 10);
     const perPage = Math.min(parseInt(req.query.perPage as string || "20", 10), 50);
 
+    // Load user profile for city fallback and event interests
+    const me = await getDbUser(req.uid!);
+
     if (!city) {
-      // Try to get city from user profile
-      const me = await getDbUser(req.uid!);
       const userCity = me?.event_city || me?.neighborhood || "";
       if (!userCity) {
         res.json({ events: [], message: "Set your city in Settings to discover local events." });
         return;
       }
-      req.query.city = userCity;
+      city = userCity;
     }
-
-    const effectiveCity = (req.query.city as string) || city;
 
     // Date range — use query params if provided, otherwise default to next 30 days
     const dateFrom = (req.query.dateFrom as string) || new Date().toISOString().split("T")[0];
     const dateTo = (req.query.dateTo as string) || new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
 
-    const searchParams = { q: type || effectiveCity, city: effectiveCity, type, dateFrom, dateTo, perPage };
-    const [sgEvents, tmEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
-      searchSeatGeek(searchParams),
-      searchTicketmaster(searchParams),
-      searchEventbrite(searchParams),
-      searchMeetup(searchParams),
-      searchNYCOpenData(searchParams),
-    ]);
+    // If no category filter specified, use the user's event interests to personalize results
+    const userInterests: string[] = me?.event_interests || [];
+    let effectiveType = type;
+    let searchQueries: string[] = [];
 
-    const allEvents = [...sgEvents, ...tmEvents, ...ebEvents, ...muEvents, ...nycEvents];
+    if (!type && userInterests.length > 0) {
+      // Search for each user interest separately, then merge
+      searchQueries = userInterests.slice(0, 4); // limit to 4 interests to control API calls
+    } else {
+      searchQueries = [type || city];
+    }
+
+    // Run searches for each interest category in parallel
+    const allResultSets = await Promise.all(
+      searchQueries.map(async (q) => {
+        const searchParams = {
+          q: q || city,
+          city,
+          type: type || (q !== city ? q : ""),
+          dateFrom,
+          dateTo,
+          perPage: Math.ceil(perPage / Math.max(searchQueries.length, 1)),
+        };
+        const [sgEvents, tmEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
+          searchSeatGeek(searchParams),
+          searchTicketmaster(searchParams),
+          searchEventbrite(searchParams),
+          searchMeetup(searchParams),
+          searchNYCOpenData(searchParams),
+        ]);
+        return [...sgEvents, ...tmEvents, ...ebEvents, ...muEvents, ...nycEvents];
+      }),
+    );
+
+    const allEvents = allResultSets.flat();
     allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
     // Deduplicate across sources (e.g. Hamilton on both SeatGeek & Ticketmaster)
@@ -3998,14 +4025,10 @@ app.get("/events/discover", requireAuth, async (req: AuthRequest, res: Response)
       total: unique.length,
       page,
       perPage,
-      city: effectiveCity,
-      sources: {
-        seatgeek: sgEvents.length,
-        ticketmaster: tmEvents.length,
-        eventbrite: ebEvents.length,
-        meetup: muEvents.length,
-        nyc_open_data: nycEvents.length,
-      },
+      city,
+      personalizedByInterests: !type && userInterests.length > 0,
+      interests: userInterests,
+      sources: {},
     });
   } catch (err: any) {
     console.error("Event discover error:", err);

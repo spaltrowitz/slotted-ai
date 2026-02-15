@@ -118,6 +118,8 @@ export default function FriendsPage() {
   const [newGroupName, setNewGroupName] = useState('');
   const [createGroupSelectedIds, setCreateGroupSelectedIds] = useState<Set<string>>(new Set());
   const [creatingGroup, setCreatingGroup] = useState(false);
+  const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
+  const [inviteEmailInput, setInviteEmailInput] = useState('');
   const [myEventInterests, setMyEventInterests] = useState<string[]>([]);
 
   const inviteUrl = `https://slotted-ai.web.app?ref=${user?.uid ?? ''}`;
@@ -243,8 +245,25 @@ export default function FriendsPage() {
     setSelectedFriendId(null);
   };
 
+  const handleAddInviteEmail = () => {
+    const email = inviteEmailInput.trim().toLowerCase();
+    if (!email) return;
+    // Basic email validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    // Don't add duplicates
+    if (invitedEmails.includes(email)) { setInviteEmailInput(''); return; }
+    // Don't add if already a friend
+    if (acceptedFriends.some(f => f.friend.email.toLowerCase() === email)) { setInviteEmailInput(''); return; }
+    setInvitedEmails(prev => [...prev, email]);
+    setInviteEmailInput('');
+  };
+
+  const handleRemoveInviteEmail = (email: string) => {
+    setInvitedEmails(prev => prev.filter(e => e !== email));
+  };
+
   const handleCreateGroup = async () => {
-    if (!newGroupName.trim() || createGroupSelectedIds.size === 0 || !user) return;
+    if (!newGroupName.trim() || (createGroupSelectedIds.size === 0 && invitedEmails.length === 0) || !user) return;
     setCreatingGroup(true);
     try {
       const token = await user.getIdToken();
@@ -254,11 +273,28 @@ export default function FriendsPage() {
         body: JSON.stringify({
           name: newGroupName.trim(),
           memberIds: Array.from(createGroupSelectedIds),
+          invitedEmails: invitedEmails.length > 0 ? invitedEmails : undefined,
         }),
       });
       if (res.ok) {
+        // Send invite emails to non-members
+        if (invitedEmails.length > 0) {
+          for (const email of invitedEmails) {
+            try {
+              await fetch('/api/friends/invite', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+              });
+            } catch {
+              // Silent — best effort invite
+            }
+          }
+        }
         setNewGroupName('');
         setCreateGroupSelectedIds(new Set());
+        setInvitedEmails([]);
+        setInviteEmailInput('');
         setShowCreateGroup(false);
         fetchGroups();
       }
@@ -530,16 +566,58 @@ export default function FriendsPage() {
               </label>
             ))}
           </div>
+          {/* Invite friends not on Slotted */}
+          <div className="mt-4 mb-4">
+            <p className="text-xs font-medium text-gray-500 mb-2">Friends not on Slotted yet? Invite by email:</p>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                value={inviteEmailInput}
+                onChange={(e) => setInviteEmailInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddInviteEmail(); } }}
+                placeholder="friend@email.com"
+                className="flex-1 rounded-xl border border-gray-200 px-4 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100"
+              />
+              <button
+                onClick={handleAddInviteEmail}
+                type="button"
+                className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-medium text-purple-600 hover:bg-purple-100 transition-all"
+              >
+                + Add
+              </button>
+            </div>
+            {invitedEmails.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {invitedEmails.map(email => (
+                  <span key={email} className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-medium text-amber-700">
+                    ✉️ {email}
+                    <button
+                      onClick={() => handleRemoveInviteEmail(email)}
+                      className="ml-0.5 text-amber-400 hover:text-red-500 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {invitedEmails.length > 0 && (
+              <p className="mt-1.5 text-[10px] text-gray-400">
+                These friends will receive an invite to join Slotted and will be added to the group once they sign up.
+              </p>
+            )}
+          </div>
+
           <div className="flex gap-2">
             <button
               onClick={handleCreateGroup}
-              disabled={creatingGroup || !newGroupName.trim() || createGroupSelectedIds.size === 0}
+              disabled={creatingGroup || !newGroupName.trim() || (createGroupSelectedIds.size === 0 && invitedEmails.length === 0)}
               className="rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md disabled:opacity-50"
             >
               {creatingGroup ? 'Creating...' : 'Create Group'}
             </button>
             <button
-              onClick={() => { setShowCreateGroup(false); setCreateGroupSelectedIds(new Set()); setNewGroupName(''); }}
+              onClick={() => { setShowCreateGroup(false); setCreateGroupSelectedIds(new Set()); setNewGroupName(''); setInvitedEmails([]); setInviteEmailInput(''); }}
               className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all"
             >
               Cancel

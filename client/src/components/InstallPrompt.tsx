@@ -119,7 +119,12 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900">
-                Add Slotted to your home screen
+                <button
+                  onClick={handleInstall}
+                  className="text-left underline decoration-slotted-300 underline-offset-2 hover:text-slotted-600 transition-colors cursor-pointer"
+                >
+                  Install Slotted as an app on your phone
+                </button>
               </p>
               <p className="mt-0.5 text-xs text-gray-500">
                 Get the full app experience — quick access, notifications, and more.

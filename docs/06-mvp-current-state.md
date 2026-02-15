@@ -2,8 +2,8 @@
 
 | Field | Value |
 |---|---|
-| **Version** | 1.0 |
-| **Last Updated** | February 13, 2026 |
+| **Version** | 1.1 |
+| **Last Updated** | February 15, 2026 |
 | **Status** | In Development |
 | **Based On** | [03-prd-mvp-v1.md](03-prd-mvp-v1.md) (original), updated through iterative design sessions |
 
@@ -91,6 +91,63 @@ This document captures the **actual MVP** as it exists in code, including all de
 |---|---|---|
 | "Desktop web first, mobile in V2" | **PWA with install prompt** — iOS/Android/desktop instructions | Low-effort way to get mobile presence without building native apps. Detects platform and shows appropriate install steps. Dismissable for 7 days. |
 
+### 1.11 Event Search — Added (V1.1)
+
+| Original Plan | Current State | Why |
+|---|---|---|
+| Not in original PRD | **Events tab** with SeatGeek + Ticketmaster search | Users asked for activity inspiration. Dual-API search with deduplication, location-aware (defaults to user's city from settings), category filtering. Friends can share events with each other. |
+
+### 1.12 Dashboard Overhaul — Simplified & Reordered (V1.1)
+
+| Original Plan | Current State | Why |
+|---|---|---|
+| Dashboard with stats cards at top | **Today at a Glance** summary line, then sections: Upcoming → Calendar → People to See → Activity → History | Cleaner hierarchy. Stats removed in favor of a single natural-language summary ("2 hangouts coming up · 14 friends · 3 people to catch up with"). |
+| Separate cards for each People to See | **Compact avatar row** — horizontal scroll of friend faces | Less overwhelming, more scannable. Tap any avatar to go to Find Times. |
+| Calendar default: Week view | **Month view default**, persisted in localStorage | Users preferred month overview. Preference now saved per-device so it remembers across sessions. |
+| Fixed "Week / Month" toggle | **Week / Month / Agenda** three-way toggle | Added list-based Agenda view for quick scanning. |
+
+### 1.13 Invite Flow — Simplified (V1.1)
+
+| Original Plan | Current State | Why |
+|---|---|---|
+| Email input + "Send" button to invite friends | **Share buttons only** — Text / Email / Copy link | The "send invite" form was misleading — no email was actually sent. It only saved a pending DB record. Replaced with honest share buttons that open the user's actual text/email apps with a pre-filled message + invite link. |
+
+### 1.14 Hangout Logging — Enhanced (V1.1)
+
+| Original Plan | Current State | Why |
+|---|---|---|
+| Basic log: activity, duration, time, rating | **Full log form**: date picker + friend selector (Slotted friends as buttons, or type non-Slotted name) + activity + duration + time + vibe rating | Users need to specify *when* they hung out (not just "now") and *with whom*. Friend selector pre-populates accepted Slotted friends for one-tap selection. |
+
+### 1.15 Welcome Notification — Fixed (V1.1)
+
+| Original Plan | Current State | Why |
+|---|---|---|
+| Welcome notification on signup | **Only sent once per account** (was firing on every login) | Bug fix — the upsert endpoint ran on every login, creating duplicate welcome messages. Now checks if user already exists before sending. |
+
+### 1.16 Call Platform Options — Expanded (V1.1)
+
+| Original Plan | Current State | Why |
+|---|---|---|
+| Video call platforms: FaceTime, Zoom, Google Meet, Teams, WhatsApp, Duo | Added **Phone Call** as first option | Many users prefer regular phone calls over video. Phone Call is now the first option in the Calls & FaceTime settings card. |
+
+### 1.17 Landing Page — Updated (V1.1)
+
+| Original Plan | Current State | Why |
+|---|---|---|
+| Generic landing page | **Two sections**: Local friends & family + Long-distance friends & family | Reflects the app's dual value prop — scheduling in-person hangouts locally AND calls/video with long-distance connections. Inclusive "friends & family" language throughout. |
+
+### 1.18 Algorithm Enforcement — Added (V1.1)
+
+| Original Plan | Current State | Why |
+|---|---|---|
+| Settings existed but weren't enforced | **Full enforcement**: travel buffer, planning horizon, weekly quota warnings, behavior divergence detection | Settings like "planning style" and "travel buffer" now directly affect the AI's suggestions rather than being decorative. |
+
+### 1.19 Declined Meetup Filtering — Fixed (V1.1)
+
+| Original Plan | Current State | Why |
+|---|---|---|
+| Upcoming section filtered by meetup status only | **Also filters by user's RSVP** — declined meetups hidden from Upcoming | If you decline a meetup, it should not continue showing in your Upcoming section. Now checks both `m.status` and `m.myRsvp`. |
+
 ---
 
 ## 2. Current Feature Map
@@ -100,42 +157,52 @@ This document captures the **actual MVP** as it exists in code, including all de
 | Feature | Page/Component | Notes |
 |---|---|---|
 | Google OAuth login | AuthContext | Firebase Auth |
-| Onboarding survey | OnboardingPage | Preferred times, Social Battery defaults, calendar connection |
+| Onboarding survey | OnboardingPage | Preferred times, Social Battery defaults, calendar connection, call duration prefs |
 | Google Calendar sync | SettingsPage + backend | Real-time via webhooks, sync status shown to user only |
-| Apple Calendar connect | SettingsPage | App-specific password flow |
+| Apple Calendar connect | SettingsPage | App-specific password flow (CalDAV) |
 | Social Battery (self) | SettingsPage, SocialBattery component | Open / Ask Me / Recharging — private to user + AI |
 | Social frequency preference | SettingsPage | Daily / 2–3×/week / Weekly / Biweekly — "all friends combined" |
 | Recharging days | SettingsPage | Per-day-of-week defaults |
-| Trip buffer (before/after) | SettingsPage | Two independent toggles |
 | Travel buffer (minutes) | SettingsPage | Slider for transit time between events |
 | Personal time protection | SettingsPage | Slider controlling how aggressively AI protects free time |
-| Planning style | SettingsPage | Flexible / Planner / Spontaneous |
+| Planning style | SettingsPage | Flexible / Planner / Spontaneous — **enforced in algorithm** |
 | Preferred time windows | SettingsPage | Multi-select chips |
 | Neighborhoods (home + work) | SettingsPage | For location-aware suggestions |
 | Office days | SettingsPage | For work-vs-home scheduling |
-| Call windows | SettingsPage | For long-distance friend scheduling |
+| Call windows | SettingsPage | For long-distance friend scheduling, includes Phone Call as first option |
+| Call platforms | SettingsPage | Phone Call, FaceTime, Zoom, Google Meet, Teams, WhatsApp, Duo |
 | Manual availability | SettingsPage | Per-day time blocks for non-calendar users |
-| Friend requests (email) | FriendsPage | Mutual consent |
-| Invite link sharing | FriendsPage | Text / Email / Copy link |
-| Invite codes | FriendsPage + InvitePage | Unique per-user invite URLs |
+| Share invite link | FriendsPage | Text / Email / Copy link buttons (no fake email form) |
+| Invite codes | FriendsPage | Unique per-user invite URLs |
 | Friend list with selection | FriendsPage | Tap to select → floating action bar |
-| Friendship type labels | FriendsPage | Local / Long distance / Both per friend |
+| Friendship type labels | FriendsPage | Local / Long distance — auto-detected from neighborhoods |
+| Local vs long-distance sections | FriendsPage | Friends grouped by type with emoji tooltips |
+| Shared event interests | FriendsPage | Matching interests shown on friend cards |
 | 1:1 availability matching | FriendAvailability | AI-scored suggestions, book button |
 | Group availability matching | GroupAvailability | Multi-person AI scoring |
 | Friend groups (CRUD) | FriendsPage | Named groups with emoji, up to 8 members |
 | Floating action bar | FriendsPage | 1 selected → "Find 1:1 times", 2+ → "Find group times" |
-| Notifications inbox | NotificationsPage | Friend requests, meetup RSVPs, calendar matches, reminders |
+| Event search | EventsPage | SeatGeek + Ticketmaster dual-API, deduplication, location + category filters |
+| Event sharing | EventsPage | Share events with friends via in-app notifications |
+| Notifications inbox | NotificationsPage | Friend requests, meetup RSVPs, calendar matches, reminders, event shares |
 | Soft RSVP flow | NotificationsPage | Accept / Maybe / Not this time |
-| Dashboard stats | DashboardPage | Friends count, hangouts this month, calendar sync indicator |
-| People to See cards | DashboardPage | AI-prioritized friends, last hangout time, long-distance aware |
-| Upcoming hangouts | DashboardPage | With RSVP status badges |
-| Calendar embed | DashboardPage | Week/Month toggle, Google Calendar iframe |
-| Hangout logging | DashboardPage | Activity, duration, time of day, vibe rating |
+| Welcome notification | Backend | Sent once on account creation only (not on every login) |
+| Decline notifications | Backend | "❌ [name] declined your invite" sent to meetup creator |
+| Dashboard — Today summary | DashboardPage | Natural-language "at a glance" line (hangouts, friends, catch-ups) |
+| Dashboard — Upcoming | DashboardPage | Filters by status AND user's RSVP (declined meetups hidden) |
+| Dashboard — Calendar | DashboardPage | Week/Month/Agenda toggle, preference persisted in localStorage |
+| Dashboard — People to See | DashboardPage | Compact avatar row, horizontal scroll, tap to Find Times |
+| Dashboard — Activity Feed | DashboardPage | Overdue friends, recent activity, free weekend nudges |
+| Dashboard — Hangout History | DashboardPage | Hidden when empty, shows past confirmed meetups |
+| Hangout logging | DashboardPage | **Date picker**, **friend selector** (Slotted friends + manual name), activity, duration, time of day, vibe rating |
 | Auto-detected hangouts | DashboardPage | From calendar-confirmed meetups |
 | "Didn't happen" flow | DashboardPage | With reason selection |
 | Learned preferences display | SettingsPage | Shows AI-detected patterns after enough data |
 | Progressive profiling | Backend | Learns preferences from behavior, not upfront questions |
+| Algorithm enforcement | Backend | Travel buffer, planning horizon, weekly quota, behavior divergence detection |
 | PWA install prompt | InstallPrompt component | iOS / Android / desktop detection |
+| Push notifications | PushNotificationPrompt + backend | Firebase Cloud Messaging, web push |
+| Landing page | LoginPage | Two-section: local friends & family + long-distance friends & family |
 | Feedback form | SettingsPage | In-app text feedback |
 
 ### ❌ Not Yet Built (Still Planned for V1)
@@ -148,6 +215,7 @@ This document captures the **actual MVP** as it exists in code, including all de
 | ICS file download | Export confirmed meetups to any calendar | Not started |
 | Data export (JSON) | GDPR-compliant personal data export | Not started |
 | Account deletion | Immediate data purge | Not started |
+| Trip buffer (before/after) | Toggles for buffer days around travel | **Removed** — deemed unnecessary complexity |
 
 ### 🔄 Deferred to V2 (Unchanged from Original)
 
@@ -182,8 +250,9 @@ These emerged during development and now guide all feature decisions:
 |---|---|
 | [01-onboarding-survey-questions.md](01-onboarding-survey-questions.md) | Original survey question design |
 | [02-vibecoding-development-plan.md](02-vibecoding-development-plan.md) | Original 12-week dev plan |
-| [03-prd-mvp-v1.md](03-prd-mvp-v1.md) | Original PRD (V1.1) — **use this doc for current state** |
+| [03-prd-mvp-v1.md](03-prd-mvp-v1.md) | Original PRD (V1.1) |
 | [04-backlog-v2-v3.md](04-backlog-v2-v3.md) | V2/V3 feature backlog (still valid, some items pulled forward) |
 | [05-user-research-interview-guide.md](05-user-research-interview-guide.md) | User research interview guide |
 | **[06-mvp-current-state.md](06-mvp-current-state.md)** | **← This doc. Ground truth for what's built.** |
 | [07-app-name-options.md](07-app-name-options.md) | App naming exploration |
+| [08-web-push-notifications-setup.md](08-web-push-notifications-setup.md) | Push notification setup guide |
