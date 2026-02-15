@@ -101,9 +101,9 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
   return (
     <div className="rounded-2xl border border-purple-200/60 bg-white shadow-lg overflow-hidden">
       {/* Header — purple gradient for groups */}
-      <div className="flex items-center justify-between border-b border-purple-100 px-5 py-4 bg-gradient-to-r from-purple-50/50 to-fuchsia-50/30">
-        <div>
-          <h3 className="font-display text-sm font-bold text-gray-900">
+      <div className="flex items-center justify-between border-b border-purple-100 px-4 sm:px-5 py-4 bg-gradient-to-r from-purple-50/50 to-fuchsia-50/30">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-display text-sm font-bold text-gray-900 truncate">
             👥 Group Availability ({friendNames.length + 1} people)
           </h3>
           <p className="mt-0.5 text-[11px] text-gray-400">
@@ -112,7 +112,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
         </div>
         <button
           onClick={onClose}
-          className="rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-all"
+          className="rounded-lg border border-gray-200 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-all"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

@@ -237,30 +237,47 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
               /* ---------- Generic / Desktop fallback ---------- */
               <div className="space-y-4">
                 <p className="text-sm text-gray-500">
-                  To install Slotted on your device:
+                  You can install Slotted as an app or bookmark it for quick access:
                 </p>
 
                 <div className="space-y-3">
                   <Step
                     number={1}
-                    emoji="🌐"
-                    title="Open in your browser"
-                    description="Make sure you're viewing this page in Chrome, Safari, or Edge."
+                    emoji="📌"
+                    title="Install as an app (Chrome / Edge)"
+                    description={
+                      <>
+                        In Chrome, click the install icon{' '}
+                        <span className="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium">⊕</span>{' '}
+                        in the address bar, or go to <strong>⋮ → Install Slotted</strong>. In Edge, go to <strong>… → Apps → Install this site as an app</strong>.
+                      </>
+                    }
                   />
 
                   <Step
                     number={2}
-                    emoji="📲"
-                    title='Look for "Install" or "Add to Home Screen"'
-                    description="Check the browser menu or address bar for an install option."
+                    emoji="⭐"
+                    title="Or bookmark it for quick access"
+                    description={
+                      <>
+                        Press <strong>Ctrl+D</strong> (Windows) or <strong>⌘+D</strong> (Mac) to bookmark this page. You can also add it to your bookmarks bar for one-click access.
+                      </>
+                    }
                   />
 
                   <Step
                     number={3}
-                    emoji="✅"
-                    title="Confirm the install"
-                    description="Follow the prompts. Slotted will be available as an app on your device!"
+                    emoji="🔔"
+                    title="Enable notifications"
+                    description="After installing or bookmarking, make sure to enable push notifications below so you never miss a meetup request."
                   />
+                </div>
+
+                <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
+                  <p className="text-xs text-blue-700">
+                    <strong>Best on mobile:</strong> Slotted works on desktop, but the best experience is on your phone. Visit{' '}
+                    <strong>slotted-ai.web.app</strong> on your phone's browser and install it from there.
+                  </p>
                 </div>
               </div>
             )}

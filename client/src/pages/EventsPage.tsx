@@ -5,7 +5,7 @@ import api from '../lib/api';
 
 interface EventResult {
   id: string;
-  source: 'seatgeek' | 'ticketmaster';
+  source: 'seatgeek' | 'ticketmaster' | 'eventbrite' | 'meetup' | 'nyc_open_data';
   title: string;
   type: string;
   venue: string;
@@ -73,7 +73,7 @@ export default function EventsPage() {
   const [matches, setMatches] = useState<MatchedEvent[]>([]);
   const [loading, setLoading]= useState(false);
   const [searched, setSearched] = useState(false);
-  const [sourceCounts, setSourceCounts] = useState<{ seatgeek: number; ticketmaster: number } | null>(null);
+  const [sourceCounts, setSourceCounts] = useState<Record<string, number> | null>(null);
   const [matchMessage, setMatchMessage] = useState('');
 
   // Friend selection for availability matching
@@ -206,9 +206,9 @@ export default function EventsPage() {
             value={city}
             onChange={(e) => setCity(e.target.value)}
             placeholder={defaultCity || 'City (e.g. New York)'}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 shadow-sm focus:border-slotted-400 focus:outline-none w-40"
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 shadow-sm focus:border-slotted-400 focus:outline-none w-32 sm:w-40"
           />
-          <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+          <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 overflow-x-auto">
             {EVENT_TYPES.map((t) => (
               <button
                 key={t.value}
@@ -239,7 +239,7 @@ export default function EventsPage() {
         </div>
 
         {/* Mode toggle + friend picker */}
-        <div className="mt-3 flex items-center gap-3 border-t border-gray-100 pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
           <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
             <button
               onClick={() => setMode('search')}
@@ -348,7 +348,7 @@ export default function EventsPage() {
                   <span className="text-xs font-bold">{m.availabilityScore}</span>
                 </div>
                 {m.imageUrl && (
-                  <img src={m.imageUrl} alt="" className="h-12 w-12 rounded-lg object-cover shrink-0" />
+                  <img src={m.imageUrl} alt="" className="h-12 w-12 rounded-lg object-cover shrink-0 hidden sm:block" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -371,7 +371,7 @@ export default function EventsPage() {
                       {formatPrice(m.priceMin, m.priceMax)}
                     </span>
                   )}
-                  <span className="rounded-lg border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-500">
+                  <span className="hidden sm:inline-flex rounded-lg border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-500">
                     🎟️ Tickets
                   </span>
                 </div>
@@ -407,10 +407,15 @@ export default function EventsPage() {
               </span>
             </div>
             {sourceCounts && (
-              <div className="flex items-center gap-2 text-[10px] text-gray-400">
-                {sourceCounts.seatgeek > 0 && <span>SeatGeek: {sourceCounts.seatgeek}</span>}
-                {sourceCounts.seatgeek > 0 && sourceCounts.ticketmaster > 0 && <span>·</span>}
-                {sourceCounts.ticketmaster > 0 && <span>Ticketmaster: {sourceCounts.ticketmaster}</span>}
+              <div className="flex items-center gap-2 text-[10px] text-gray-400 flex-wrap">
+                {Object.entries(sourceCounts)
+                  .filter(([, count]) => count > 0)
+                  .map(([source, count], idx, arr) => (
+                    <span key={source}>
+                      {source === 'seatgeek' ? 'SeatGeek' : source === 'ticketmaster' ? 'Ticketmaster' : source === 'eventbrite' ? 'Eventbrite' : source === 'meetup' ? 'Meetup' : source === 'nyc_open_data' ? 'NYC Free' : source}: {count}
+                      {idx < arr.length - 1 ? ' ·' : ''}
+                    </span>
+                  ))}
               </div>
             )}
           </div>
@@ -456,9 +461,22 @@ export default function EventsPage() {
                   <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
                     ev.source === 'seatgeek'
                       ? 'bg-blue-50 text-blue-600'
-                      : 'bg-violet-50 text-violet-600'
+                      : ev.source === 'ticketmaster'
+                      ? 'bg-violet-50 text-violet-600'
+                      : ev.source === 'eventbrite'
+                      ? 'bg-orange-50 text-orange-600'
+                      : ev.source === 'meetup'
+                      ? 'bg-red-50 text-red-500'
+                      : ev.source === 'nyc_open_data'
+                      ? 'bg-green-50 text-green-600'
+                      : 'bg-gray-50 text-gray-600'
                   }`}>
-                    {ev.source === 'seatgeek' ? 'SeatGeek' : 'Ticketmaster'}
+                    {ev.source === 'seatgeek' ? 'SeatGeek'
+                      : ev.source === 'ticketmaster' ? 'Ticketmaster'
+                      : ev.source === 'eventbrite' ? 'Eventbrite'
+                      : ev.source === 'meetup' ? 'Meetup'
+                      : ev.source === 'nyc_open_data' ? 'NYC Free'
+                      : ev.source}
                   </span>
                 </div>
               </a>

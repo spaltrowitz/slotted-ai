@@ -100,21 +100,8 @@ function timeAgo(dateStr: string): string {
   return `${months} months ago`;
 }
 
-function friendLocalTime(tz: string | null): string | null {
-  if (!tz) return null;
-  try {
-    return new Date().toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true });
-  } catch { return null; }
-}
-
 /** Check if a calendar event is a Slotted trip buffer */
 const isBufferEvent = (ev: CalEvent) => ev.id?.startsWith('buffer_') ?? false;
-
-const TYPE_BADGE: Record<string, { emoji: string; label: string }> = {
-  local: { emoji: '📍', label: 'Local' },
-  long_distance: { emoji: '📞', label: 'Long distance' },
-  both: { emoji: '🌐', label: 'Both' },
-};
 
 /* ─── component ─── */
 export default function DashboardPage() {
@@ -444,12 +431,12 @@ export default function DashboardPage() {
     <AppShell>
       {/* ─── HEADER ─── */}
       <div className="mb-5">
-        <div className="flex items-center justify-between">
-          <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900 min-w-0 truncate">
             {greeting}, {user?.displayName?.split(' ')[0]} {timeEmoji}
           </h1>
           {/* Quick actions */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
             <button
               onClick={() => { setShowLogForm(true); document.getElementById('log-section')?.scrollIntoView({ behavior: 'smooth' }); }}
               className="rounded-xl gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
@@ -494,138 +481,12 @@ export default function DashboardPage() {
       {/* ─── LOADING SKELETON ─── */}
       {dashboardLoading && (
         <div className="mb-6 space-y-4 animate-pulse">
-          <div className="flex gap-3 overflow-hidden">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="flex-shrink-0 w-[140px] rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                <div className="mx-auto h-12 w-12 rounded-full bg-gray-200" />
-                <div className="mt-2 mx-auto h-3 w-16 rounded bg-gray-200" />
-                <div className="mt-1 mx-auto h-2 w-20 rounded bg-gray-100" />
-              </div>
-            ))}
-          </div>
+          <div className="h-24 rounded-2xl bg-gray-100" />
+          <div className="h-48 rounded-2xl bg-gray-50" />
         </div>
       )}
 
-      {/* ─── PEOPLE TO SEE ─── */}
-      {!dashboardLoading && friendsToSee.length > 0 && (
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-base">👋</span>
-            <h2 className="font-display text-sm font-semibold text-gray-900">People to See</h2>
-          </div>
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide" style={{ maxHeight: '160px' }}>
-            {friendsToSee.slice(0, 10).map((f) => {
-              const localTime = friendLocalTime(f.timezone);
-              const typeBadge = TYPE_BADGE[f.friendshipType] || TYPE_BADGE.local;
-              const isLongDistance = f.friendshipType === 'long_distance' || f.friendshipType === 'both';
-              return (
-                <Link
-                  key={f.id}
-                  to={`/friends?findTimes=${f.id}`}
-                  className="flex-shrink-0 w-[140px] rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 text-center"
-                >
-                  {f.photoUrl ? (
-                    <img src={f.photoUrl} alt="" className="mx-auto h-12 w-12 rounded-full ring-2 ring-white shadow-sm" />
-                  ) : (
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-lg font-semibold text-white shadow-sm">
-                      {f.displayName?.[0] ?? '?'}
-                    </div>
-                  )}
-                  <p className="mt-2 text-xs font-semibold text-gray-900 truncate">{f.displayName?.split(' ')[0]}</p>
-                  <p className="mt-0.5 text-[10px] text-gray-400">
-                    {f.lastHangout ? timeAgo(f.lastHangout) : "Haven't hung out"}
-                  </p>
-                  {isLongDistance && localTime && (
-                    <p className="text-[10px] text-gray-400">🕐 {localTime}</p>
-                  )}
-                  {isLongDistance && (
-                    <p className="mt-0.5 text-[9px] text-blue-500 font-medium">{typeBadge.emoji} {typeBadge.label}</p>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ─── ACTIVITY FEED ─── */}
-      {activities.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-base">✨</span>
-            <h2 className="font-display text-sm font-semibold text-gray-900">Activity</h2>
-          </div>
-          <div className="space-y-3">
-            {activities.map((activity, index) => {
-              const activityIcon = {
-                overdue_friends: "⏰",
-                recent_activity: "✨",
-                free_weekend: "📅",
-              }[activity.type] || "💬";
-
-              const activityKey = `${activity.type}-${activity.friendId}-${index}`;
-
-              return (
-                <div
-                  key={activityKey}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors relative group"
-                >
-                  {activity.friendPhoto ? (
-                    <img
-                      src={activity.friendPhoto}
-                      alt={activity.friendName}
-                      className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                      <span className="text-lg">{activityIcon}</span>
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900">{activity.message}</p>
-                    {activity.timestamp && (
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {timeAgo(activity.timestamp)}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    onClick={async () => {
-                      if (!user) return;
-                      setDismissingActivity(activityKey);
-                      // Optimistically remove from UI
-                      setActivities(prev => prev.filter((_, i) => i !== index));
-                      // Send to backend
-                      try {
-                        const token = await user.getIdToken();
-                        await fetch('/api/activity-feed/dismiss', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                          body: JSON.stringify({ activityType: activity.type, friendId: activity.friendId }),
-                        });
-                      } catch (err) {
-                        console.error('Failed to dismiss activity:', err);
-                        // Could restore the item here if needed
-                      } finally {
-                        setDismissingActivity(null);
-                      }
-                    }}
-                    disabled={dismissingActivity === activityKey}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-600 p-1"
-                    title="Dismiss"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ─── UPCOMING HANGOUTS ─── */}
+      {/* ─── UPCOMING HANGOUTS (moved to top — most actionable) ─── */}
       {upcoming.length > 0 && (
         <div className="mb-6 rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
@@ -644,8 +505,8 @@ export default function DashboardPage() {
                     className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
                     onClick={() => setExpandedMeetupId(isExpanded ? null : m.id)}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="flex -space-x-2">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="flex -space-x-2 shrink-0">
                         {others.slice(0, 3).map((p) => (
                           p.photoUrl ? (
                             <img key={p.userId} src={p.photoUrl} alt="" className="h-8 w-8 rounded-full ring-2 ring-white" />
@@ -656,15 +517,15 @@ export default function DashboardPage() {
                           )
                         ))}
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{m.title}</p>
-                        <p className="text-[11px] text-gray-400">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{m.title}</p>
+                        <p className="text-[11px] text-gray-400 truncate">
                           {others.map((p) => p.displayName).join(', ')} · {formatMeetupTime(m.start_time)}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium ${
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium ${
                         m.myRsvp === 'accepted'
                           ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
                           : m.myRsvp === 'pending'
@@ -999,7 +860,111 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ─── HANGOUT HISTORY + LOG ─── */}
+      {/* ─── PEOPLE TO SEE (compact avatar row) ─── */}
+      {!dashboardLoading && friendsToSee.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm">👋</span>
+            <h2 className="font-display text-sm font-semibold text-gray-900">Catch up with</h2>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {friendsToSee.slice(0, 12).map((f) => (
+              <Link
+                key={f.id}
+                to={`/friends?findTimes=${f.id}`}
+                className="flex-shrink-0 flex flex-col items-center gap-1 w-16 group"
+                title={`${f.displayName} — ${f.lastHangout ? timeAgo(f.lastHangout) : "Haven't hung out"}`}
+              >
+                {f.photoUrl ? (
+                  <img src={f.photoUrl} alt="" className="h-11 w-11 rounded-full ring-2 ring-white shadow-sm group-hover:ring-slotted-300 transition-all" />
+                ) : (
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white shadow-sm ring-2 ring-white group-hover:ring-slotted-300 transition-all">
+                    {f.displayName?.[0] ?? '?'}
+                  </div>
+                )}
+                <p className="text-[10px] font-medium text-gray-600 truncate w-full text-center group-hover:text-slotted-600 transition-colors">{f.displayName?.split(' ')[0]}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── ACTIVITY FEED ─── */}
+      {activities.length > 0 && (
+        <div className="mb-6 bg-white rounded-2xl shadow-sm border border-gray-200/60 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-sm">✨</span>
+            <h2 className="font-display text-sm font-semibold text-gray-900">Activity</h2>
+          </div>
+          <div className="space-y-2">
+            {activities.map((activity, index) => {
+              const activityIcon = {
+                overdue_friends: "⏰",
+                recent_activity: "✨",
+                free_weekend: "📅",
+              }[activity.type] || "💬";
+
+              const activityKey = `${activity.type}-${activity.friendId}-${index}`;
+
+              return (
+                <div
+                  key={activityKey}
+                  className="flex items-center gap-3 p-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors relative group"
+                >
+                  {activity.friendPhoto ? (
+                    <img
+                      src={activity.friendPhoto}
+                      alt={activity.friendName}
+                      className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                      <span className="text-base">{activityIcon}</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-gray-900">{activity.message}</p>
+                    {activity.timestamp && (
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {timeAgo(activity.timestamp)}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!user) return;
+                      setDismissingActivity(activityKey);
+                      setActivities(prev => prev.filter((_, i) => i !== index));
+                      try {
+                        const token = await user.getIdToken();
+                        await fetch('/api/activity-feed/dismiss', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                          body: JSON.stringify({ activityType: activity.type, friendId: activity.friendId }),
+                        });
+                      } catch (err) {
+                        console.error('Failed to dismiss activity:', err);
+                      } finally {
+                        setDismissingActivity(null);
+                      }
+                    }}
+                    disabled={dismissingActivity === activityKey}
+                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-600 p-2"
+                    title="Dismiss"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ─── HANGOUT HISTORY + LOG (hidden when empty) ─── */}
+      {(showLogForm || pastConfirmed.filter((m) => m.status !== 'didnt_happen').length > 0) && (
       <div id="log-section" className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1029,18 +994,18 @@ export default function DashboardPage() {
               return (
                 <div key={m.id} className="rounded-xl border border-gray-100 bg-gray-50/30 overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-base">✅</span>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{m.title}</p>
-                        <p className="text-[11px] text-gray-400">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <span className="text-base shrink-0">✅</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{m.title}</p>
+                        <p className="text-[11px] text-gray-400 truncate">
                           {others.map((p) => p.displayName).join(', ')} · {formatMeetupTime(m.start_time)}
                         </p>
                       </div>
                     </div>
                     <button
                       onClick={() => setDidntHappenId(isDidntHappen ? null : m.id)}
-                      className="text-[11px] font-medium text-gray-400 hover:text-red-500 transition-colors"
+                      className="shrink-0 ml-2 text-[11px] font-medium text-gray-400 hover:text-red-500 transition-colors"
                     >
                       {isDidntHappen ? 'Cancel' : "Didn't happen"}
                     </button>
@@ -1066,18 +1031,6 @@ export default function DashboardPage() {
               );
             })}
           </div>
-        )}
-
-        {/* Empty states */}
-        {calendarConnected && pastConfirmed.filter((m) => m.status !== 'didnt_happen').length === 0 && !showLogForm && (
-          <p className="mt-3 text-xs text-gray-400">
-            No hangouts detected yet.
-          </p>
-        )}
-        {!calendarConnected && !showLogForm && pastConfirmed.length === 0 && (
-          <p className="mt-3 text-xs text-gray-400">
-            Log hangouts to help Slotted learn your preferences.
-          </p>
         )}
 
         {/* Manual log button for calendar users */}
@@ -1113,12 +1066,12 @@ export default function DashboardPage() {
             </div>
             <div>
               <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Duration</label>
-              <div className="flex gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
                 {DURATION_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => setLogDuration(opt.value)}
-                    className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-all ${
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
                       logDuration === opt.value
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
                         : 'border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -1131,12 +1084,12 @@ export default function DashboardPage() {
             </div>
             <div>
               <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Time</label>
-              <div className="flex gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
                 {TIME_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => setLogTimeOfDay(opt.value)}
-                    className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-all ${
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
                       logTimeOfDay === opt.value
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
                         : 'border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -1193,6 +1146,7 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Connect calendar CTA (only if no calendar) */}
       {!calendarConnected && (

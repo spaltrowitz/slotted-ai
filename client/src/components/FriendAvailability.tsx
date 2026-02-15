@@ -96,9 +96,9 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
   return (
     <div className="rounded-2xl border border-gray-200/60 bg-white shadow-lg overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 bg-gradient-to-r from-slotted-50/30 to-purple-50/30">
-        <div>
-          <h3 className="font-display text-sm font-bold text-gray-900">
+      <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-5 py-4 bg-gradient-to-r from-slotted-50/30 to-purple-50/30">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-display text-sm font-bold text-gray-900 truncate">
             ✨ AI Suggestions with {friendName}
           </h3>
           <p className="mt-0.5 text-[11px] text-gray-400">
@@ -107,7 +107,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
         </div>
         <button
           onClick={onClose}
-          className="rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-all"
+          className="rounded-lg border border-gray-200 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-all"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -189,13 +189,13 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
                   <button
                     onClick={() => handleBook(slot)}
                     disabled={bookingSlot === slot.start}
-                    className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 ${
+                    className={`rounded-xl px-3 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 ${
                       booked === slot.start
                         ? 'bg-emerald-500 text-white'
                         : 'gradient-btn text-white'
                     }`}
                   >
-                    {bookingSlot === slot.start ? '...' : booked === slot.start ? 'Sent ✓' : 'Send request'}
+                    {bookingSlot === slot.start ? '...' : booked === slot.start ? 'Sent ✓' : 'Book'}
                   </button>
                 </div>
               </div>

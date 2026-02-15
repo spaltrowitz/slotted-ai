@@ -360,11 +360,11 @@ export default function FriendsPage() {
   const renderFriendCard = (f: FriendRecord, i: number, arr: FriendRecord[]) => (
     <div
       key={f.friendshipId}
-      className={`flex items-center justify-between px-5 py-4 transition-colors hover:bg-gray-50/50 ${
+      className={`flex items-center justify-between gap-3 px-4 py-4 transition-colors hover:bg-gray-50/50 ${
         i !== arr.length - 1 ? 'border-b border-gray-100' : ''
       }`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
         {f.friend.photoUrl ? (
           <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" />
         ) : (
@@ -372,8 +372,8 @@ export default function FriendsPage() {
             {f.friend.displayName?.[0] ?? '?'}
           </div>
         )}
-        <div>
-          <p className="text-sm font-medium text-gray-900">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-900 truncate">
             {f.friend.displayName}
             {f.friend.socialBattery && (
               <span className="ml-1.5 relative group cursor-default">
@@ -384,7 +384,7 @@ export default function FriendsPage() {
               </span>
             )}
           </p>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-400 truncate">
             {f.friend.email}
             <span className={`ml-2 inline-flex items-center gap-0.5 ${f.friend.calendarConnected ? 'text-green-500' : 'text-gray-300'}`}>
               {f.friend.calendarConnected ? '📅' : '📅'}
@@ -411,7 +411,7 @@ export default function FriendsPage() {
       </div>
       <button
         onClick={() => handleFindTimes(f.friend.id, f.friend.displayName)}
-        className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
+        className={`shrink-0 rounded-xl px-3 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
           selectedFriendId === f.friend.id
             ? 'bg-slotted-500 text-white'
             : 'gradient-btn text-white'
@@ -531,17 +531,17 @@ export default function FriendsPage() {
         {groups.length > 0 && (
           <div className="space-y-2 mb-3">
             {groups.map(group => (
-              <div key={group.id} className="flex items-center justify-between rounded-2xl border border-purple-100 bg-gradient-to-r from-purple-50/30 to-fuchsia-50/20 px-5 py-3 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">👥</span>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{group.name}</p>
-                    <p className="text-[11px] text-gray-400">
+              <div key={group.id} className="flex items-center justify-between gap-3 rounded-2xl border border-purple-100 bg-gradient-to-r from-purple-50/30 to-fuchsia-50/20 px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="text-lg shrink-0">👥</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{group.name}</p>
+                    <p className="text-[11px] text-gray-400 truncate">
                       {group.members.map(m => m.displayName.split(' ')[0]).join(', ')}
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                   <button
                     onClick={() => handleGroupFindTimes(group)}
                     className="rounded-lg bg-gradient-to-r from-purple-500 to-fuchsia-500 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:shadow-md shadow-sm"
@@ -636,11 +636,11 @@ export default function FriendsPage() {
             {incomingInvites.map((f, i) => (
               <div
                 key={f.friendshipId}
-                className={`flex items-center justify-between px-5 py-4 ${
+                className={`flex items-center justify-between gap-3 px-4 py-4 ${
                   i !== incomingInvites.length - 1 ? 'border-b border-amber-100' : ''
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   {f.friend.photoUrl ? (
                     <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-amber-100" />
                   ) : (
@@ -653,7 +653,7 @@ export default function FriendsPage() {
                     <p className="text-xs text-gray-400">{f.friend.email}</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                   <button
                     onClick={() => handleFriendAction(f.friendshipId, 'accept')}
                     className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm"
@@ -681,11 +681,11 @@ export default function FriendsPage() {
             {outgoingInvites.map((f, i) => (
               <div
                 key={f.friendshipId}
-                className={`flex items-center justify-between px-5 py-4 ${
+                className={`flex items-center justify-between gap-3 px-4 py-4 ${
                   i !== outgoingInvites.length - 1 ? 'border-b border-gray-100' : ''
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   {f.friend.photoUrl ? (
                     <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-gray-100" />
                   ) : (

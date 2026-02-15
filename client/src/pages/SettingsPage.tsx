@@ -45,6 +45,10 @@ export default function SettingsPage() {
   const [eventInterests, setEventInterests] = useState<string[]>([]);
   const [eventCity, setEventCity] = useState('');
 
+  // Display name / nickname
+  const [displayName, setDisplayName] = useState(user?.displayName || '');
+  const [editingName, setEditingName] = useState(false);
+
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -73,6 +77,7 @@ export default function SettingsPage() {
           if (me.office_schedule_varies !== undefined) setOfficeVaries(me.office_schedule_varies);
           if (me.event_interests) setEventInterests(me.event_interests);
           if (me.event_city) setEventCity(me.event_city);
+          if (me.display_name) setDisplayName(me.display_name);
         }
       } catch {
         // silently fail
@@ -111,6 +116,7 @@ export default function SettingsPage() {
           callWindows,
           eventInterests,
           eventCity,
+          displayName: displayName.trim() || undefined,
         }),
       });
       if (!response.ok) {
@@ -183,7 +189,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="space-y-4 pl-10">
+          <div className="space-y-4 pl-4 sm:pl-10">
             {/* Profile & Calendar card */}
             <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
               {/* Profile row */}
@@ -196,7 +202,38 @@ export default function SettingsPage() {
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{user?.displayName}</p>
+                  {editingName ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingName(false); }}
+                        className="w-full rounded-lg border border-slotted-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-slotted-200"
+                        placeholder="Your display name"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => setEditingName(false)}
+                        className="rounded-lg bg-slotted-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slotted-600 transition-colors"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900">{displayName || user?.displayName}</p>
+                      <button
+                        onClick={() => setEditingName(true)}
+                        className="rounded-md p-1 text-gray-400 hover:text-slotted-500 hover:bg-slotted-50 transition-all"
+                        title="Edit display name"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
                   <p className="text-xs text-gray-400 truncate">{user?.email}</p>
                 </div>
               </div>
@@ -445,12 +482,12 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="space-y-4 pl-10">
+          <div className="space-y-4 pl-4 sm:pl-10">
             <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
               <p className="text-xs text-gray-500 mb-4">
                 Are you more of a planner or spontaneous person? This tells the AI how far in advance to suggest hangouts.
               </p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[
                   { value: 'spontaneous', emoji: '\u26A1', label: 'Spontaneous', desc: 'Same-day & next-day plans, "are you free tonight?" nudges' },
                   { value: 'flexible', emoji: '\uD83D\uDD04', label: 'Flexible', desc: 'Adapts per friendship \u2014 books ahead with planners, last-minute with spontaneous friends' },
@@ -487,7 +524,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="space-y-4 pl-10">
+          <div className="space-y-4 pl-4 sm:pl-10">
             <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
               <p className="text-xs text-gray-500 mb-3">
                 How often do you want to hang out with <span className="font-semibold text-gray-700">anyone</span> — all friends combined, not per person?
@@ -584,7 +621,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="pl-10 grid grid-cols-1 lg:grid-cols-2 gap-5 mt-4">
+          <div className="pl-4 sm:pl-10 grid grid-cols-1 lg:grid-cols-2 gap-5 mt-4">
 
             {/* ─── IN-PERSON HANGOUTS CARD (teal) ─── */}
             <div className="rounded-2xl border-2 border-teal-200 bg-gradient-to-b from-teal-50/60 to-white p-5 shadow-sm">
@@ -638,7 +675,7 @@ export default function SettingsPage() {
                             key={day}
                             onClick={() => { if (!officeVaries) toggleOfficeDay(fullDay); }}
                             disabled={officeVaries}
-                            className={`h-8 w-8 rounded-lg border text-[11px] font-bold transition-all ${
+                            className={`h-10 w-10 rounded-lg border text-[11px] font-bold transition-all ${
                               officeVaries
                                 ? 'border-gray-100 text-gray-300 cursor-not-allowed'
                                 : isSelected
@@ -856,7 +893,7 @@ export default function SettingsPage() {
                       ))}
                     </div>
                   </div>
-                  <div className="flex items-end gap-2">
+                  <div className="flex flex-wrap items-end gap-2">
                     <div>
                       <label className="block text-[10px] text-gray-400 mb-0.5">Start</label>
                       <input
@@ -875,7 +912,7 @@ export default function SettingsPage() {
                         className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-violet-400 focus:outline-none"
                       />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-[120px]">
                       <label className="block text-[10px] text-gray-400 mb-0.5">Label (optional)</label>
                       <input
                         type="text"
@@ -929,7 +966,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="space-y-4 pl-10">
+          <div className="space-y-4 pl-4 sm:pl-10">
             <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
               {/* Event types */}
               <div>
@@ -1005,7 +1042,7 @@ export default function SettingsPage() {
         </section>
 
         {/* Feedback */}
-        <div className="pl-10">
+        <div className="pl-4 sm:pl-10">
           <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-50 to-fuchsia-50 text-base">

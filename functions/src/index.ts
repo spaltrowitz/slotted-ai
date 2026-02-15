@@ -469,10 +469,11 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
       socialBattery, rechargingDays, planningStyle,
       neighborhood, workNeighborhood, officeDays,
       callWindows, tripBufferBefore, tripBufferAfter, shareHangouts, officeScheduleVaries,
-      eventInterests, eventCity,
+      eventInterests, eventCity, displayName,
     } = req.body;
 
     const updates: Record<string, any> = {};
+    if (displayName !== undefined) updates.display_name = displayName;
     if (socialFrequency !== undefined) updates.social_frequency = socialFrequency;
     if (preferredTimes !== undefined) updates.preferred_times = preferredTimes;
     if (travelBuffer !== undefined) updates.travel_buffer_min = parseInt(travelBuffer, 10);
@@ -515,7 +516,7 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
 /** POST /users/me/onboarding — save onboarding answers */
 app.post("/users/me/onboarding", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { socialFrequency, preferredTimes, travelBuffer, socialBattery, rechargingDays } =
+    const { socialFrequency, preferredTimes, travelBuffer, socialBattery, rechargingDays, socialGoal, preferredDuration } =
       req.body;
 
     const { data, error } = await getSupabase()
@@ -526,6 +527,8 @@ app.post("/users/me/onboarding", requireAuth, async (req: AuthRequest, res: Resp
         travel_buffer_min: travelBuffer ? parseInt(travelBuffer, 10) : 30,
         social_battery: socialBattery || "open",
         recharging_days: rechargingDays || [],
+        social_goal: socialGoal || null,
+        preferred_duration: preferredDuration || null,
         onboarded: true,
       })
       .eq("firebase_uid", req.uid!)
@@ -3150,10 +3153,13 @@ app.post("/activity-feed/dismiss", requireAuth, async (req: AuthRequest, res: Re
 
 const SEATGEEK_CLIENT_ID = process.env.SEATGEEK_CLIENT_ID || "";
 const TICKETMASTER_API_KEY = process.env.TICKETMASTER_API_KEY || "";
+const EVENTBRITE_API_KEY = process.env.EVENTBRITE_API_KEY || "";
+const MEETUP_API_KEY = process.env.MEETUP_API_KEY || "";
+const NYC_OPEN_DATA_APP_TOKEN = process.env.NYC_OPEN_DATA_APP_TOKEN || "";
 
 interface ExternalEvent {
   id: string;
-  source: "seatgeek" | "ticketmaster";
+  source: "seatgeek" | "ticketmaster" | "eventbrite" | "meetup" | "nyc_open_data";
   title: string;
   type: string;
   venue: string;
@@ -3315,6 +3321,505 @@ async function searchTicketmaster(params: {
   }
 }
 
+/** Search Eventbrite for events */
+async function searchEventbrite(params: {
+  q: string;
+  city?: string;
+  type?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  perPage?: number;
+}): Promise<ExternalEvent[]> {
+  if (!EVENTBRITE_API_KEY) return [];
+  try {
+    const url = new URL("https://www.eventbriteapi.com/v3/events/search/");
+    url.searchParams.set("token", EVENTBRITE_API_KEY);
+    url.searchParams.set("q", params.q);
+    url.searchParams.set("page_size", String(params.perPage || 25));
+    url.searchParams.set("sort_by", "best");
+    url.searchParams.set("expand", "venue,ticket_availability");
+
+    if (params.city) {
+      url.searchParams.set("location.address", params.city);
+      url.searchParams.set("location.within", "30mi");
+    }
+    if (params.type) {
+      const catMap: Record<string, string> = {
+        theater: "105",    // Performing & Visual Arts
+        concert: "103",    // Music
+        sports: "108",     // Sports & Fitness
+        comedy: "105",     // Performing & Visual Arts
+        festivals: "103",  // Music
+        dance: "105",      // Performing & Visual Arts
+        opera: "105",      // Performing & Visual Arts
+        family: "115",     // Family & Education
+        food: "110",       // Food & Drink
+        networking: "101", // Business
+        community: "113",  // Community & Culture
+      };
+      const cat = catMap[params.type];
+      if (cat) url.searchParams.set("categories", cat);
+    }
+    if (params.dateFrom) {
+      url.searchParams.set("start_date.range_start", new Date(params.dateFrom).toISOString().replace(".000Z", "Z"));
+    }
+    if (params.dateTo) {
+      url.searchParams.set("start_date.range_end", new Date(params.dateTo + "T23:59:59").toISOString().replace(".000Z", "Z"));
+    }
+
+    const resp = await fetch(url.toString());
+    if (!resp.ok) {
+      console.error("Eventbrite API error:", resp.status, await resp.text());
+      return [];
+    }
+    const data = await resp.json();
+    return (data.events || []).map((ev: any) => {
+      const venue = ev.venue;
+      const isFree = ev.is_free || ev.ticket_availability?.minimum_ticket_price?.major_value === "0";
+      return {
+        id: `eb-${ev.id}`,
+        source: "eventbrite" as const,
+        title: ev.name?.text || ev.name?.html || "",
+        type: ev.category?.short_name?.toLowerCase() || "event",
+        venue: venue?.name || "",
+        city: venue?.address?.city || "",
+        datetime: ev.start?.utc || "",
+        datetimeLocal: ev.start?.local || ev.start?.utc || "",
+        url: ev.url || "",
+        imageUrl: ev.logo?.url || ev.logo?.original?.url || "",
+        priceMin: isFree ? 0 : (ev.ticket_availability?.minimum_ticket_price?.major_value ? parseFloat(ev.ticket_availability.minimum_ticket_price.major_value) : undefined),
+        priceMax: ev.ticket_availability?.maximum_ticket_price?.major_value ? parseFloat(ev.ticket_availability.maximum_ticket_price.major_value) : undefined,
+        performers: [],
+      };
+    });
+  } catch (err) {
+    console.error("Eventbrite search error:", err);
+    return [];
+  }
+}
+
+/** Search Meetup via GraphQL API for events */
+async function searchMeetup(params: {
+  q: string;
+  city?: string;
+  type?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  perPage?: number;
+}): Promise<ExternalEvent[]> {
+  if (!MEETUP_API_KEY) return [];
+  try {
+    // Meetup uses a GraphQL API (pro network or open events endpoint)
+    const url = new URL("https://api.meetup.com/find/upcoming_events");
+    url.searchParams.set("key", MEETUP_API_KEY);
+    url.searchParams.set("text", params.q);
+    url.searchParams.set("page", String(params.perPage || 25));
+    url.searchParams.set("order", "time");
+
+    if (params.city) {
+      // Meetup uses lon/lat but also supports text-based location
+      url.searchParams.set("lon", "");
+      url.searchParams.set("lat", "");
+      // Fallback: set the "location" param for text-based city search
+      url.searchParams.delete("lon");
+      url.searchParams.delete("lat");
+      // Use the self_groups endpoint with location or just rely on topic_category + city
+      url.searchParams.set("lon", "");
+      url.searchParams.delete("lon");
+    }
+
+    if (params.type) {
+      const topicMap: Record<string, string> = {
+        theater: "arts-culture",
+        concert: "music",
+        sports: "sports-fitness",
+        comedy: "arts-culture",
+        festivals: "music",
+        dance: "dancing",
+        food: "food-drink",
+        networking: "career-business",
+        community: "socializing",
+        outdoors: "outdoors-adventure",
+        tech: "tech",
+      };
+      const topic = topicMap[params.type];
+      if (topic) url.searchParams.set("topic_category", topic);
+    }
+
+    if (params.dateFrom) {
+      url.searchParams.set("start_date_range", new Date(params.dateFrom).toISOString());
+    }
+    if (params.dateTo) {
+      url.searchParams.set("end_date_range", new Date(params.dateTo + "T23:59:59").toISOString());
+    }
+
+    // Use the open events endpoint as an alternative
+    const openUrl = new URL("https://api.meetup.com/find/upcoming_events");
+    openUrl.searchParams.set("photo-host", "public");
+    openUrl.searchParams.set("page", String(params.perPage || 25));
+    openUrl.searchParams.set("text", params.q);
+    openUrl.searchParams.set("key", MEETUP_API_KEY);
+
+    const resp = await fetch(openUrl.toString());
+    if (!resp.ok) {
+      console.error("Meetup API error:", resp.status, await resp.text());
+      return [];
+    }
+    const data = await resp.json();
+    const events = data.events || [];
+    return events.map((ev: any) => {
+      const venue = ev.venue;
+      return {
+        id: `mu-${ev.id}`,
+        source: "meetup" as const,
+        title: ev.name || "",
+        type: ev.group?.category?.shortname?.toLowerCase() || "meetup",
+        venue: venue?.name || ev.group?.name || "",
+        city: venue?.city || "",
+        datetime: ev.time ? new Date(ev.time).toISOString() : "",
+        datetimeLocal: ev.local_date
+          ? `${ev.local_date}T${ev.local_time || "19:00:00"}`
+          : (ev.time ? new Date(ev.time).toISOString() : ""),
+        url: ev.link || ev.event_url || "",
+        imageUrl: ev.group?.group_photo?.photo_link || ev.group?.key_photo?.photo_link || "",
+        priceMin: ev.fee ? ev.fee.amount : 0,
+        priceMax: ev.fee ? ev.fee.amount : undefined,
+        performers: ev.group?.name ? [ev.group.name] : [],
+      };
+    });
+  } catch (err) {
+    console.error("Meetup search error:", err);
+    return [];
+  }
+}
+
+/** Search NYC Open Data for free city events (parks, libraries, cultural) */
+async function searchNYCOpenData(params: {
+  q: string;
+  city?: string;
+  type?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  perPage?: number;
+}): Promise<ExternalEvent[]> {
+  // NYC Open Data is free; an app token just raises rate limits
+  // Only search if the city is NYC-related or no city filter set
+  const nycCities = ["new york", "nyc", "brooklyn", "queens", "bronx", "manhattan", "staten island"];
+  if (params.city && !nycCities.some((c) => params.city!.toLowerCase().includes(c))) {
+    return []; // Not NYC — skip
+  }
+
+  try {
+    // NYC Parks Events dataset (Socrata SODA API)
+    // Dataset ID: 8x4p-aji6 (NYC Parks Events Listing)
+    const url = new URL("https://data.cityofnewyork.us/resource/8x4p-aji6.json");
+    if (NYC_OPEN_DATA_APP_TOKEN) {
+      url.searchParams.set("$$app_token", NYC_OPEN_DATA_APP_TOKEN);
+    }
+    url.searchParams.set("$limit", String(params.perPage || 25));
+    url.searchParams.set("$order", "startdatetime ASC");
+
+    // Build WHERE clause for filtering
+    const where: string[] = [];
+
+    if (params.q) {
+      // Full-text search on title and description
+      const safeQ = params.q.replace(/'/g, "''");
+      where.push(`(upper(title) LIKE '%${safeQ.toUpperCase()}%' OR upper(description) LIKE '%${safeQ.toUpperCase()}%')`);
+    }
+
+    const dateFrom = params.dateFrom || new Date().toISOString().split("T")[0];
+    where.push(`startdatetime >= '${dateFrom}T00:00:00'`);
+
+    if (params.dateTo) {
+      where.push(`startdatetime <= '${params.dateTo}T23:59:59'`);
+    }
+
+    if (where.length > 0) {
+      url.searchParams.set("$where", where.join(" AND "));
+    }
+
+    const resp = await fetch(url.toString());
+    if (!resp.ok) {
+      console.error("NYC Open Data API error:", resp.status, await resp.text());
+      // Try alternative dataset: NYC events from libraries, cultural orgs
+      return await searchNYCOpenDataAlt(params);
+    }
+
+    const data = await resp.json();
+    const events: ExternalEvent[] = (data || []).map((ev: any) => ({
+      id: `nyc-${ev.uid || ev._id || Math.random().toString(36).slice(2)}`,
+      source: "nyc_open_data" as const,
+      title: ev.title || ev.name || "",
+      type: ev.category?.toLowerCase() || ev.subcategory?.toLowerCase() || "free event",
+      venue: ev.location || ev.parknames || "",
+      city: ev.borough || "New York",
+      datetime: ev.startdatetime || ev.start_date_time || "",
+      datetimeLocal: ev.startdatetime || ev.start_date_time || "",
+      url: ev.link || ev.url || `https://www.nycgovparks.org/events/${ev.uid || ""}`,
+      imageUrl: ev.image || "",
+      priceMin: 0, // NYC Open Data events are free
+      priceMax: 0,
+      performers: [],
+    }));
+    return events;
+  } catch (err) {
+    console.error("NYC Open Data search error:", err);
+    return [];
+  }
+}
+
+/** Alternative NYC Open Data dataset — cultural events, library events */
+async function searchNYCOpenDataAlt(params: {
+  q: string;
+  city?: string;
+  type?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  perPage?: number;
+}): Promise<ExternalEvent[]> {
+  try {
+    // DOHMH Community Events dataset: bkfu-528j
+    const url = new URL("https://data.cityofnewyork.us/resource/bkfu-528j.json");
+    if (NYC_OPEN_DATA_APP_TOKEN) {
+      url.searchParams.set("$$app_token", NYC_OPEN_DATA_APP_TOKEN);
+    }
+    url.searchParams.set("$limit", String(params.perPage || 25));
+
+    const where: string[] = [];
+    if (params.q) {
+      const safeQ = params.q.replace(/'/g, "''");
+      where.push(`(upper(event_name) LIKE '%${safeQ.toUpperCase()}%')`);
+    }
+    const dateFrom = params.dateFrom || new Date().toISOString().split("T")[0];
+    where.push(`start_date_time >= '${dateFrom}T00:00:00'`);
+    if (params.dateTo) {
+      where.push(`start_date_time <= '${params.dateTo}T23:59:59'`);
+    }
+    if (where.length > 0) {
+      url.searchParams.set("$where", where.join(" AND "));
+    }
+
+    const resp = await fetch(url.toString());
+    if (!resp.ok) return [];
+
+    const data = await resp.json();
+    return (data || []).map((ev: any) => ({
+      id: `nyc-${ev.event_id || Math.random().toString(36).slice(2)}`,
+      source: "nyc_open_data" as const,
+      title: ev.event_name || ev.name || "",
+      type: ev.event_type?.toLowerCase() || "community event",
+      venue: ev.event_location || "",
+      city: ev.borough || "New York",
+      datetime: ev.start_date_time || "",
+      datetimeLocal: ev.start_date_time || "",
+      url: ev.event_url || "",
+      imageUrl: "",
+      priceMin: 0,
+      priceMax: 0,
+      performers: [],
+    }));
+  } catch (err) {
+    console.error("NYC Open Data alt search error:", err);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Event autocomplete — fires as user types
+// ---------------------------------------------------------------------------
+interface SuggestionItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  type: "event" | "performer" | "venue";
+  imageUrl?: string;
+  source: "seatgeek" | "ticketmaster";
+}
+
+async function suggestSeatGeek(q: string, city?: string): Promise<SuggestionItem[]> {
+  if (!SEATGEEK_CLIENT_ID || !q) return [];
+  try {
+    const url = new URL("https://api.seatgeek.com/2/events");
+    url.searchParams.set("client_id", SEATGEEK_CLIENT_ID);
+    url.searchParams.set("q", q);
+    url.searchParams.set("per_page", "8");
+    if (city) url.searchParams.set("venue.city", city);
+    const resp = await fetch(url.toString());
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return (data.events || []).map((ev: any) => ({
+      id: `sg-${ev.id}`,
+      title: ev.short_title || ev.title || "",
+      subtitle: ev.venue?.name
+        ? `${ev.venue.name}${ev.venue.city ? ` · ${ev.venue.city}` : ""}`
+        : ev.datetime_local
+          ? new Date(ev.datetime_local).toLocaleDateString()
+          : undefined,
+      type: "event" as const,
+      imageUrl: ev.performers?.[0]?.image || undefined,
+      source: "seatgeek" as const,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function suggestTicketmaster(q: string, city?: string): Promise<SuggestionItem[]> {
+  if (!TICKETMASTER_API_KEY || !q) return [];
+  try {
+    const url = new URL("https://app.ticketmaster.com/discovery/v2/suggest");
+    url.searchParams.set("apikey", TICKETMASTER_API_KEY);
+    url.searchParams.set("keyword", q);
+    if (city) url.searchParams.set("city", city);
+    const resp = await fetch(url.toString());
+    if (!resp.ok) return [];
+    const data = await resp.json();
+
+    const items: SuggestionItem[] = [];
+
+    // Attractions (performers / shows)
+    const attractions = data._embedded?.attractions || [];
+    for (const a of attractions.slice(0, 4)) {
+      items.push({
+        id: `tm-attr-${a.id}`,
+        title: a.name,
+        subtitle: a.classifications?.[0]?.genre?.name || "Event",
+        type: "performer",
+        imageUrl: a.images?.[0]?.url,
+        source: "ticketmaster",
+      });
+    }
+
+    // Events
+    const events = data._embedded?.events || [];
+    for (const ev of events.slice(0, 4)) {
+      const venue = ev._embedded?.venues?.[0];
+      items.push({
+        id: `tm-${ev.id}`,
+        title: ev.name,
+        subtitle: venue?.name
+          ? `${venue.name}${venue.city?.name ? ` · ${venue.city.name}` : ""}`
+          : undefined,
+        type: "event",
+        imageUrl: ev.images?.[0]?.url,
+        source: "ticketmaster",
+      });
+    }
+
+    return items;
+  } catch {
+    return [];
+  }
+}
+
+/** GET /events/suggest — autocomplete suggestions as user types */
+app.get("/events/suggest", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const q = (req.query.q as string || "").trim();
+    const city = req.query.city as string || undefined;
+    if (q.length < 2) {
+      res.json({ suggestions: [] });
+      return;
+    }
+
+    const [sgItems, tmItems] = await Promise.all([
+      suggestSeatGeek(q, city),
+      suggestTicketmaster(q, city),
+    ]);
+
+    // Merge and deduplicate by title similarity
+    const seen = new Set<string>();
+    const merged: SuggestionItem[] = [];
+    for (const item of [...sgItems, ...tmItems]) {
+      const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 30);
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(item);
+      }
+    }
+
+    res.json({ suggestions: merged.slice(0, 10) });
+  } catch (err: any) {
+    console.error("Event suggest error:", err);
+    res.json({ suggestions: [] });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Event discover — browse local events by category
+// ---------------------------------------------------------------------------
+
+/** GET /events/discover — browse local popular events by category */
+app.get("/events/discover", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const city = req.query.city as string || "";
+    const type = req.query.type as string || "";
+    const page = parseInt(req.query.page as string || "1", 10);
+    const perPage = Math.min(parseInt(req.query.perPage as string || "20", 10), 50);
+
+    if (!city) {
+      // Try to get city from user profile
+      const me = await getDbUser(req.uid!);
+      const userCity = me?.event_city || me?.neighborhood || "";
+      if (!userCity) {
+        res.json({ events: [], message: "Set your city in Settings to discover local events." });
+        return;
+      }
+      req.query.city = userCity;
+    }
+
+    const effectiveCity = (req.query.city as string) || city;
+
+    // Search all APIs for upcoming events in the city (no keyword required)
+    const dateFrom = new Date().toISOString().split("T")[0];
+    const dateTo = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]; // Next 30 days
+
+    const searchParams = { q: type || effectiveCity, city: effectiveCity, type, dateFrom, dateTo, perPage };
+    const [sgEvents, tmEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
+      searchSeatGeek(searchParams),
+      searchTicketmaster(searchParams),
+      searchEventbrite(searchParams),
+      searchMeetup(searchParams),
+      searchNYCOpenData(searchParams),
+    ]);
+
+    const allEvents = [...sgEvents, ...tmEvents, ...ebEvents, ...muEvents, ...nycEvents];
+    allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+
+    // Deduplicate by title+date
+    const seen = new Set<string>();
+    const unique = allEvents.filter((ev) => {
+      const key = `${ev.title.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 30)}-${ev.datetime.slice(0, 10)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Paginate
+    const start = (page - 1) * perPage;
+    const paginated = unique.slice(start, start + perPage);
+
+    res.json({
+      events: paginated,
+      total: unique.length,
+      page,
+      perPage,
+      city: effectiveCity,
+      sources: {
+        seatgeek: sgEvents.length,
+        ticketmaster: tmEvents.length,
+        eventbrite: ebEvents.length,
+        meetup: muEvents.length,
+        nyc_open_data: nycEvents.length,
+      },
+    });
+  } catch (err: any) {
+    console.error("Event discover error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** GET /events/search — search external event APIs */
 app.get("/events/search", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
@@ -3324,14 +3829,17 @@ app.get("/events/search", requireAuth, async (req: AuthRequest, res: Response) =
       return;
     }
 
-    // Search both APIs in parallel
-    const [sgEvents, tmEvents] = await Promise.all([
+    // Search all APIs in parallel
+    const [sgEvents, tmEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
       searchSeatGeek({ q, city, type, dateFrom, dateTo }),
       searchTicketmaster({ q, city, type, dateFrom, dateTo }),
+      searchEventbrite({ q, city, type, dateFrom, dateTo }),
+      searchMeetup({ q, city, type, dateFrom, dateTo }),
+      searchNYCOpenData({ q, city, type, dateFrom, dateTo }),
     ]);
 
     // Merge and deduplicate (by title + date similarity)
-    const allEvents = [...sgEvents, ...tmEvents];
+    const allEvents = [...sgEvents, ...tmEvents, ...ebEvents, ...muEvents, ...nycEvents];
     allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
     res.json({
@@ -3339,6 +3847,9 @@ app.get("/events/search", requireAuth, async (req: AuthRequest, res: Response) =
       sources: {
         seatgeek: sgEvents.length,
         ticketmaster: tmEvents.length,
+        eventbrite: ebEvents.length,
+        meetup: muEvents.length,
+        nyc_open_data: nycEvents.length,
       },
     });
   } catch (err: any) {
@@ -3363,12 +3874,15 @@ app.post("/events/match", requireAuth, async (req: AuthRequest, res: Response) =
     const me = await getDbUser(req.uid!);
     if (!me) { res.status(404).json({ error: "User not found" }); return; }
 
-    // 1. Search events
-    const [sgEvents, tmEvents] = await Promise.all([
+    // 1. Search events from all sources
+    const [sgEvents, tmEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
       searchSeatGeek({ q, city, type, dateFrom, dateTo }),
       searchTicketmaster({ q, city, type, dateFrom, dateTo }),
+      searchEventbrite({ q, city, type, dateFrom, dateTo }),
+      searchMeetup({ q, city, type, dateFrom, dateTo }),
+      searchNYCOpenData({ q, city, type, dateFrom, dateTo }),
     ]);
-    const allEvents = [...sgEvents, ...tmEvents];
+    const allEvents = [...sgEvents, ...tmEvents, ...ebEvents, ...muEvents, ...nycEvents];
     allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
     // 2. Sync calendars for all participants
@@ -4004,20 +4518,39 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
 
     const dbUser = await getDbUser(state);
     if (dbUser) {
-      const rows = calendars.map((cal) => ({
-        user_id: dbUser.id,
-        calendar_id: cal.id!,
-        calendar_name: cal.summary || cal.id!,
-        calendar_color: cal.backgroundColor || null,
-        is_selected: cal.accessRole === "owner", // default-select owned calendars
-        access_role: cal.accessRole || null,
-        source: "google",
-      }));
-
-      if (rows.length) {
-        await getSupabase()
+      for (const cal of calendars) {
+        const { data: existing } = await getSupabase()
           .from("user_calendars")
-          .upsert(rows, { onConflict: "user_id,calendar_id" });
+          .select("calendar_id")
+          .eq("user_id", dbUser.id)
+          .eq("calendar_id", cal.id!)
+          .single();
+
+        if (existing) {
+          // Calendar already known — update metadata only, keep is_selected
+          await getSupabase()
+            .from("user_calendars")
+            .update({
+              calendar_name: cal.summary || cal.id!,
+              calendar_color: cal.backgroundColor || null,
+              access_role: cal.accessRole || null,
+            })
+            .eq("user_id", dbUser.id)
+            .eq("calendar_id", cal.id!);
+        } else {
+          // New calendar — insert with default selection
+          await getSupabase()
+            .from("user_calendars")
+            .insert({
+              user_id: dbUser.id,
+              calendar_id: cal.id!,
+              calendar_name: cal.summary || cal.id!,
+              calendar_color: cal.backgroundColor || null,
+              is_selected: cal.accessRole === "owner",
+              access_role: cal.accessRole || null,
+              source: "google",
+            });
+        }
       }
     }
 
@@ -4808,20 +5341,45 @@ app.get("/calendar/list", requireAuth, async (req: AuthRequest, res: Response) =
       return;
     }
 
-    // Upsert fresh calendar metadata
-    const rows = calendars.map((cal) => ({
-      user_id: dbUser.id,
-      calendar_id: cal.id!,
-      calendar_name: cal.summary || cal.id!,
-      calendar_color: cal.backgroundColor || null,
-      access_role: cal.accessRole || null,
-      source: "google",
-    }));
+    // Upsert fresh calendar metadata — preserve is_selected for existing rows
+    for (const cal of calendars) {
+      const row = {
+        user_id: dbUser.id,
+        calendar_id: cal.id!,
+        calendar_name: cal.summary || cal.id!,
+        calendar_color: cal.backgroundColor || null,
+        access_role: cal.accessRole || null,
+        source: "google" as const,
+      };
 
-    if (rows.length) {
-      await getSupabase()
+      // Check if calendar already exists
+      const { data: existing } = await getSupabase()
         .from("user_calendars")
-        .upsert(rows, { onConflict: "user_id,calendar_id" });
+        .select("calendar_id")
+        .eq("user_id", dbUser.id)
+        .eq("calendar_id", cal.id!)
+        .single();
+
+      if (existing) {
+        // Update metadata only — do NOT touch is_selected
+        await getSupabase()
+          .from("user_calendars")
+          .update({
+            calendar_name: row.calendar_name,
+            calendar_color: row.calendar_color,
+            access_role: row.access_role,
+          })
+          .eq("user_id", dbUser.id)
+          .eq("calendar_id", cal.id!);
+      } else {
+        // New calendar — insert with default is_selected based on ownership
+        await getSupabase()
+          .from("user_calendars")
+          .insert({
+            ...row,
+            is_selected: cal.accessRole === "owner",
+          });
+      }
     }
 
     // Return stored rows (which include is_selected) — Google calendars only

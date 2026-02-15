@@ -4,7 +4,9 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface OnboardingData {
   socialFrequency: string;
+  socialGoal: string;
   preferredTimes: string[];
+  preferredDuration: string;
   personalTimeMode: string;
   tripBuffer: string;
   calendarConnected: boolean;
@@ -12,7 +14,9 @@ interface OnboardingData {
 
 const steps = [
   'frequency',
+  'social-goal',
   'times',
+  'hangout-duration',
   'personal-time',
   'trip-buffer',
   'calendar',
@@ -24,7 +28,9 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<OnboardingData>({
     socialFrequency: '',
+    socialGoal: '',
     preferredTimes: [],
+    preferredDuration: '',
     personalTimeMode: '',
     tripBuffer: '',
     calendarConnected: false,
@@ -53,7 +59,7 @@ export default function OnboardingPage() {
     if (step > 0) setStep(step - 1);
   };
 
-  const stepEmojis = ['🗓️', '🌅', '�️', '✈️', '📅'];
+  const stepEmojis = ['🗓️', '�', '🌅', '⏱️', '🛡️', '✈️', '📅'];
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white relative overflow-hidden">
@@ -116,7 +122,40 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Q2: Preferred Times */}
+        {/* Q2: Social Goal */}
+        {currentStep === 'social-goal' && (
+          <div className="space-y-4">
+            <h2 className="font-display text-xl font-bold text-gray-900">
+              What's your social goal right now?
+            </h2>
+            <p className="text-sm text-gray-500">
+              This helps us calibrate how aggressively we suggest meetups
+            </p>
+            <div className="space-y-2">
+              {[
+                { value: 'increase', label: '📈 I want to see people more often' },
+                { value: 'maintain', label: '⚖️ I\'m happy with my current pace' },
+                { value: 'decrease', label: '📉 I want a bit more downtime' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() =>
+                    setData({ ...data, socialGoal: opt.value })
+                  }
+                  className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                    data.socialGoal === opt.value
+                      ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
+                      : 'border-gray-200 text-gray-700 hover:border-slotted-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Q3: Preferred Times */}
         {currentStep === 'times' && (
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
@@ -158,7 +197,41 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Q3: Protect Personal Time */}
+        {/* Q4: Hangout Duration */}
+        {currentStep === 'hangout-duration' && (
+          <div className="space-y-4">
+            <h2 className="font-display text-xl font-bold text-gray-900">
+              How long do your hangouts usually last?
+            </h2>
+            <p className="text-sm text-gray-500">
+              We'll look for windows that fit your style
+            </p>
+            <div className="space-y-2">
+              {[
+                { value: 'quick', label: '⚡ Quick catch-up (30–60 min)' },
+                { value: 'medium', label: '☕ A couple hours (1–2 hrs)' },
+                { value: 'long', label: '🍽️ A good stretch (2–4 hrs)' },
+                { value: 'half-day', label: '🎉 Half-day or more (4+ hrs)' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() =>
+                    setData({ ...data, preferredDuration: opt.value })
+                  }
+                  className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                    data.preferredDuration === opt.value
+                      ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
+                      : 'border-gray-200 text-gray-700 hover:border-slotted-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Q5: Protect Personal Time */}
         {currentStep === 'personal-time' && (
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
@@ -191,7 +264,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Q4: Trip Buffers */}
+        {/* Q6: Trip Buffers */}
         {currentStep === 'trip-buffer' && (
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
@@ -225,7 +298,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Q4: Calendar connect */}
+        {/* Q7: Calendar connect */}
         {currentStep === 'calendar' && (
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
