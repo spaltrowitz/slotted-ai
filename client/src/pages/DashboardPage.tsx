@@ -144,6 +144,10 @@ export default function DashboardPage() {
   const [logRating, setLogRating] = useState(0);
   const [logSaving, setLogSaving] = useState(false);
   const [logSaved, setLogSaved] = useState(false);
+  const [logDate, setLogDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [logFriendId, setLogFriendId] = useState<string>('');
+  const [logFriendName, setLogFriendName] = useState('');
+  const [allFriends, setAllFriends] = useState<{ id: string; displayName: string; photoUrl: string | null }[]>([]);
 
   const today = new Date();
   const greeting =
@@ -167,11 +171,16 @@ export default function DashboardPage() {
       api.get('/dashboard'),
       api.get('/activity-feed'),
       api.get('/meetups'),
-    ]).then(([dashRes, activityRes, meetupsRes]) => {
+      api.get('/friends'),
+    ]).then(([dashRes, activityRes, meetupsRes, friendsRes]) => {
       if (!active) return;
       if (dashRes.status === 'fulfilled') setFriendsToSee(dashRes.value.data.friendsToSee || []);
       if (activityRes.status === 'fulfilled') setActivities(activityRes.value.data.activities || []);
       if (meetupsRes.status === 'fulfilled') setMeetups(meetupsRes.value.data.meetups || []);
+      if (friendsRes.status === 'fulfilled') {
+        const accepted = (friendsRes.value.data.friends || []).filter((f: any) => f.status === 'accepted');
+        setAllFriends(accepted.map((f: any) => ({ id: f.friend.id, displayName: f.friend.displayName, photoUrl: f.friend.photoUrl || null })));
+      }
       setDashboardLoading(false);
     });
 
@@ -1041,6 +1050,52 @@ export default function DashboardPage() {
         {/* Manual log form */}
         {showLogForm && (
           <div className="mt-4 space-y-4">
+            {/* Date */}
+            <div>
+              <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Date</label>
+              <input
+                type="date"
+                value={logDate}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setLogDate(e.target.value)}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-900 shadow-sm focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100 transition-all w-full"
+              />
+            </div>
+            {/* Who */}
+            <div>
+              <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Who did you hang out with?</label>
+              {allFriends.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {allFriends.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => { setLogFriendId(logFriendId === f.id ? '' : f.id); setLogFriendName(''); }}
+                      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                        logFriendId === f.id
+                          ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {f.photoUrl ? (
+                        <img src={f.photoUrl} alt="" className="w-4 h-4 rounded-full object-cover" />
+                      ) : (
+                        <span className="w-4 h-4 rounded-full bg-gradient-to-br from-slotted-400 to-purple-400 flex items-center justify-center text-[8px] text-white font-bold">{f.displayName[0]}</span>
+                      )}
+                      {f.displayName.split(' ')[0]}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input
+                type="text"
+                value={logFriendId ? '' : logFriendName}
+                disabled={!!logFriendId}
+                onChange={(e) => { setLogFriendName(e.target.value); setLogFriendId(''); }}
+                placeholder={logFriendId ? allFriends.find(f => f.id === logFriendId)?.displayName || 'Selected' : 'Or type a name (not on Slotted)...'}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100 transition-all w-full disabled:opacity-50 disabled:bg-gray-50"
+              />
+            </div>
+            {/* Activity */}
             <div>
               <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Activity</label>
               <div className="flex flex-wrap gap-1.5">
@@ -1116,15 +1171,19 @@ export default function DashboardPage() {
                 onClick={async () => {
                   setLogSaving(true);
                   try {
+                    const hangoutDate = new Date(logDate + 'T12:00:00');
                     await api.post('/meetup-logs', {
                       activity_type: logActivity,
                       duration_min: logDuration,
-                      day_of_week: new Date().getDay(),
+                      day_of_week: hangoutDate.getDay(),
                       time_of_day: logTimeOfDay,
                       rating: logRating || null,
+                      hangout_date: logDate,
+                      friend_id: logFriendId || null,
+                      friend_name: (!logFriendId && logFriendName.trim()) ? logFriendName.trim() : null,
                     });
                     setLogSaved(true);
-                    setTimeout(() => { setLogSaved(false); setShowLogForm(false); }, 2000);
+                    setTimeout(() => { setLogSaved(false); setShowLogForm(false); setLogFriendId(''); setLogFriendName(''); setLogDate(new Date().toISOString().slice(0, 10)); }, 2000);
                   } catch { /* silent */ }
                   finally { setLogSaving(false); }
                 }}

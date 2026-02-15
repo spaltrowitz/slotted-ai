@@ -225,10 +225,7 @@ export default function FriendsPage() {
   };
 
   const handleEmail = () => {
-    window.open(
-      `mailto:?subject=${encodeURIComponent("Let's hang — try Slotted!")}&body=${encodeURIComponent(message)}`,
-      '_blank'
-    );
+    window.location.href = `mailto:?subject=${encodeURIComponent("Let's hang — try Slotted!")}&body=${encodeURIComponent(message)}`;
   };
 
   const handleCopy = async () => {

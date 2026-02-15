@@ -393,7 +393,7 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
     if (data && !existing) {
       await createNotification({
         userId: data.id,
-        type: "friend_request" as any,
+        type: "calendar_match",
         title: "Welcome to Slotted! 👋",
         body: "Get started in 3 quick steps: 1️⃣ Go to Settings to connect your calendar and set your preferences. 2️⃣ Head to the Friends tab to invite friends. 3️⃣ Check the Events tab to discover local shows, concerts & more!",
       });
@@ -4601,13 +4601,15 @@ app.post("/meetup-logs", requireAuth, async (req: AuthRequest, res: Response) =>
       return;
     }
 
-    const { friend_id, activity_type, duration_min, day_of_week, time_of_day, notice_days, was_spontaneous, rating } = req.body;
+    const { friend_id, friend_name, hangout_date, activity_type, duration_min, day_of_week, time_of_day, notice_days, was_spontaneous, rating } = req.body;
 
     const { data, error } = await getSupabase()
       .from("meetup_logs")
       .insert({
         user_id: dbUser.id,
         friend_id: friend_id || null,
+        friend_name: friend_name || null,
+        hangout_date: hangout_date || new Date().toISOString().slice(0, 10),
         activity_type: activity_type || "other",
         duration_min: duration_min || null,
         day_of_week: day_of_week ?? new Date().getDay(),
