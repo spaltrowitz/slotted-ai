@@ -10,6 +10,10 @@ interface FriendRecord {
   status: string;
   invitedBy: string;
   friendshipType?: string; // "local" | "long_distance"
+  lastHangoutDate?: string;
+  daysSinceLastHangout?: number;
+  avgCadenceDays?: number;
+  totalHangouts?: number;
   friend: {
     id: string;
     displayName: string;
@@ -402,6 +406,33 @@ export default function FriendsPage() {
                 })}
               </div>
             ) : null;
+          })()}
+          {/* Hangout cadence */}
+          {f.lastHangoutDate && (() => {
+            const days = f.daysSinceLastHangout ?? 0;
+            const cadence = f.avgCadenceDays;
+            const isOverdue = cadence && days > cadence;
+            const firstName = f.friend.displayName.split(' ')[0];
+            return (
+              <div className={`mt-1.5 flex items-center gap-1.5 text-[11px] leading-tight ${
+                isOverdue ? 'text-amber-600' : 'text-gray-400'
+              }`}>
+                <span>{isOverdue ? '⏰' : '📅'}</span>
+                <span>
+                  {days === 0
+                    ? 'Hung out today'
+                    : days === 1
+                      ? 'Hung out yesterday'
+                      : `Last hung out ${days}d ago`}
+                  {cadence ? (
+                    <span className="text-gray-400"> · typically every {cadence}d</span>
+                  ) : null}
+                  {isOverdue ? (
+                    <span className="font-medium text-amber-600"> — time to catch up with {firstName}!</span>
+                  ) : null}
+                </span>
+              </div>
+            );
           })()}
         </div>
       </div>

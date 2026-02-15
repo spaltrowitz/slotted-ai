@@ -172,6 +172,10 @@ Being clear about who the product isn't for prevents feature creep and sharpens 
   - Weekly check-ins with most active users
 - **Key question to answer:** Do beta users invite their own friends organically, or does growth require pushing?
 
+### Landing page checkpoint (before Phase 3):
+
+Before expanding beyond friends-and-family, validate that the landing page communicates what Slotted does **within 5 seconds** of loading. The current landing page exists but hasn't been tested with strangers. Run a simple test: show the page to 5 people who've never heard of the app and ask "what does this do?" If they can't answer clearly, the page needs rework before any public marketing channel will convert. A confusing landing page turns every Reddit post, Product Hunt launch, and word-of-mouth referral into wasted traffic.
+
 ### Phase 2: User Research Survey (Alongside Beta)
 
 - Send a structured survey to beta testers (friends/family) covering:
@@ -216,6 +220,10 @@ No monetization during beta. The priority is validating product-market fit and b
 | **Network-based pricing** | Free for individuals, paid for "power coordinators" who schedule for groups frequently | Aligns cost with value — the people who use it most pay. |
 | **Affiliate revenue** | Commission on restaurant reservations, event tickets, or activity bookings made through Slotted | Low-friction monetization that adds value rather than restricting features. |
 | **SMS/notification tier** | Free: push notifications. Pro: SMS reminders for friends not on the app | SMS has real costs (~$0.01/message). Passing this to power users is fair. |
+
+### Free tier design principle:
+
+The free tier must deliver the **complete "aha moment"** before any limit is hit. A free user needs to: connect their calendar → add a friend → see mutual availability → schedule a hangout. If the 5-friend cap kicks in before that loop completes even once, conversion to paid dies. The paywall should feel like "I love this and want more," not "I can't even try this." Gate *scale* (more friends, groups, analytics), never gate *core value*.
 
 ### What we will NOT do:
 

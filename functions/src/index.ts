@@ -695,6 +695,54 @@ app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
       };
     });
 
+    // Enrich with hangout cadence data from meetup_logs
+    const acceptedFriendIds = friends
+      .filter((f: any) => f.status === "accepted")
+      .map((f: any) => f.friend.id);
+
+    if (acceptedFriendIds.length > 0) {
+      const { data: logs } = await getSupabase()
+        .from("meetup_logs")
+        .select("friend_id, hangout_date, created_at")
+        .eq("user_id", me.id)
+        .in("friend_id", acceptedFriendIds)
+        .order("hangout_date", { ascending: true, nullsFirst: false });
+
+      if (logs && logs.length > 0) {
+        // Group logs by friend_id
+        const logsByFriend = new Map<string, string[]>();
+        for (const log of logs) {
+          const fid = log.friend_id;
+          const date = log.hangout_date || log.created_at;
+          if (!fid || !date) continue;
+          if (!logsByFriend.has(fid)) logsByFriend.set(fid, []);
+          logsByFriend.get(fid)!.push(date);
+        }
+
+        // Compute cadence per friend
+        for (const f of friends as any[]) {
+          const dates = logsByFriend.get(f.friend.id);
+          if (!dates || dates.length === 0) continue;
+
+          // Sort dates ascending
+          const sorted = dates.map((d: string) => new Date(d).getTime()).sort((a: number, b: number) => a - b);
+          const lastDate = new Date(sorted[sorted.length - 1]);
+          f.lastHangoutDate = lastDate.toISOString();
+          f.daysSinceLastHangout = Math.floor((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+          f.totalHangouts = sorted.length;
+
+          // Compute average cadence (days between hangouts) if 2+ hangouts
+          if (sorted.length >= 2) {
+            const intervals: number[] = [];
+            for (let i = 1; i < sorted.length; i++) {
+              intervals.push((sorted[i] - sorted[i - 1]) / (1000 * 60 * 60 * 24));
+            }
+            f.avgCadenceDays = Math.round(intervals.reduce((a: number, b: number) => a + b, 0) / intervals.length);
+          }
+        }
+      }
+    }
+
     res.json({ friends });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -4550,6 +4598,172 @@ app.patch("/events/invites/:id", requireAuth, async (req: AuthRequest, res: Resp
     if (error) { res.status(500).json({ error: error.message }); return; }
     res.json(data);
   } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /events/suggestions — smart event suggestions based on shared interests + availability
+// Returns events that match shared interests between you and your friends,
+// filtered by when everyone is free. Like "You and Sarah both like theater — Hamilton this Sat?"
+// ---------------------------------------------------------------------------
+app.get("/events/suggestions", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const myInterests: string[] = me.event_interests || [];
+    const myCity = me.event_city || me.neighborhood || "";
+    if (!myCity) {
+      res.json({ suggestions: [], message: "Set your city in Settings to get event suggestions." });
+      return;
+    }
+
+    const sb = getSupabase();
+
+    // 1. Get all accepted friendships
+    const { data: friendshipsA } = await sb.from("friendships")
+      .select("user_b_id").eq("user_a_id", me.id).eq("status", "accepted");
+    const { data: friendshipsB } = await sb.from("friendships")
+      .select("user_a_id").eq("user_b_id", me.id).eq("status", "accepted");
+
+    const friendIds = [
+      ...(friendshipsA || []).map((f: any) => f.user_b_id),
+      ...(friendshipsB || []).map((f: any) => f.user_a_id),
+    ];
+
+    if (friendIds.length === 0) {
+      res.json({ suggestions: [], message: "Add friends to get personalized event suggestions!" });
+      return;
+    }
+
+    // 2. Load friend profiles to find shared interests
+    const { data: friendProfiles } = await sb.from("users")
+      .select("id, display_name, photo_url, event_interests, event_city, neighborhood")
+      .in("id", friendIds);
+
+    // 3. Build friend-interest pairs: which friends share which interests
+    const friendPairs: { friendId: string; friendName: string; friendPhoto?: string; sharedInterests: string[] }[] = [];
+    for (const friend of (friendProfiles || [])) {
+      const friendInterests: string[] = friend.event_interests || [];
+      const shared = myInterests.filter((i: string) => friendInterests.includes(i));
+      if (shared.length > 0) {
+        friendPairs.push({
+          friendId: friend.id,
+          friendName: friend.display_name?.split(" ")[0] || "Friend",
+          friendPhoto: friend.photo_url || undefined,
+          sharedInterests: shared,
+        });
+      }
+    }
+
+    // If no shared interests, use your own interests with all friends
+    const interestsToSearch = friendPairs.length > 0
+      ? [...new Set(friendPairs.flatMap((p) => p.sharedInterests))]
+      : myInterests.length > 0
+        ? myInterests
+        : ["concert", "theater"]; // default fallback
+
+    // 4. Search for events matching shared interests
+    const dateFrom = new Date().toISOString().split("T")[0];
+    const dateTo = new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0]; // next 2 weeks
+
+    const allEventSets = await Promise.all(
+      interestsToSearch.slice(0, 3).map(async (interest) => {
+        const searchParams = { q: interest, city: myCity, type: interest, dateFrom, dateTo, perPage: 10 };
+        const [sg, tm] = await Promise.all([
+          searchSeatGeek(searchParams),
+          searchTicketmaster(searchParams),
+        ]);
+        return [...sg, ...tm];
+      }),
+    );
+    const allEvents = deduplicateEvents(allEventSets.flat());
+    if (allEvents.length === 0) {
+      res.json({ suggestions: [], message: `No upcoming events matching your interests in ${myCity}.` });
+      return;
+    }
+
+    // 5. Check availability for you + friends with shared interests
+    const now = new Date().toISOString();
+    const mySlots = await sb.from("availability")
+      .select("start_time, end_time").eq("user_id", me.id).eq("status", "free").gte("end_time", now)
+      .then((r) => applyTravelBuffer(r.data || [], me.travel_buffer_min || 0));
+
+    // For each event, find which friends are free and share that interest
+    const suggestions: any[] = [];
+
+    for (const ev of allEvents.slice(0, 20)) {
+      if (!ev.datetime) continue;
+      const eventStart = new Date(ev.datetime);
+      const eventEnd = new Date(eventStart.getTime() + 3 * 3600000); // ~3h event
+
+      // Check if I'm free
+      const imFree = mySlots.some((slot: any) => {
+        const s = new Date(slot.start_time).getTime();
+        const e = new Date(slot.end_time).getTime();
+        return Math.min(eventEnd.getTime(), e) - Math.max(eventStart.getTime(), s) >= 2 * 3600000;
+      });
+      if (!imFree) continue;
+
+      // Find friends who share the interest for this event type AND are free
+      const evType = ev.type?.toLowerCase() || "";
+      const matchingFriends: { id: string; name: string; photo?: string }[] = [];
+
+      for (const pair of friendPairs) {
+        const hasInterest = pair.sharedInterests.some((i) =>
+          evType.includes(i) || i.includes(evType) || ev.title.toLowerCase().includes(i),
+        );
+        if (!hasInterest && friendPairs.length > 0) continue;
+
+        // Check friend's availability
+        const { data: friendSlots } = await sb.from("availability")
+          .select("start_time, end_time").eq("user_id", pair.friendId).eq("status", "free").gte("end_time", now);
+
+        const friendFree = (friendSlots || []).some((slot: any) => {
+          const s = new Date(slot.start_time).getTime();
+          const e = new Date(slot.end_time).getTime();
+          return Math.min(eventEnd.getTime(), e) - Math.max(eventStart.getTime(), s) >= 2 * 3600000;
+        });
+
+        if (friendFree) {
+          matchingFriends.push({ id: pair.friendId, name: pair.friendName, photo: pair.friendPhoto });
+        }
+      }
+
+      if (matchingFriends.length > 0) {
+        const friendNames = matchingFriends.map((f) => f.name);
+        const interestLabel = interestsToSearch.find((i) =>
+          evType.includes(i) || i.includes(evType),
+        ) || interestsToSearch[0];
+
+        suggestions.push({
+          ...ev,
+          matchingFriends,
+          sharedInterest: interestLabel,
+          reason: matchingFriends.length === 1
+            ? `You and ${friendNames[0]} both like ${interestLabel} — and you're both free!`
+            : `${friendNames.join(", ")} are all free and love ${interestLabel}!`,
+          score: matchingFriends.length * 30 + (imFree ? 40 : 0) + (ev.priceMin === 0 ? 10 : 0),
+        });
+      }
+    }
+
+    // Sort by score
+    suggestions.sort((a, b) => b.score - a.score);
+
+    res.json({
+      suggestions: suggestions.slice(0, 8),
+      friendPairs: friendPairs.map((p) => ({
+        friendId: p.friendId,
+        friendName: p.friendName,
+        friendPhoto: p.friendPhoto,
+        sharedInterests: p.sharedInterests,
+      })),
+      interestsSearched: interestsToSearch,
+    });
+  } catch (err: any) {
+    console.error("Event suggestions error:", err);
     res.status(500).json({ error: err.message });
   }
 });
