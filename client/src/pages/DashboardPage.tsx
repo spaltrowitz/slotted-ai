@@ -146,75 +146,63 @@ export default function DashboardPage() {
 
   /* ─── data fetching ─── */
   const [dashboardLoading, setDashboardLoading] = useState(true);
-  const [dashboardLoaded, setDashboardLoaded] = useState(false);
-  const [calSynced, setCalSynced] = useState(false);
+
+  // Stable user UID ref to avoid re-running effects when user object changes
+  const userUid = user?.uid;
 
   // Load core dashboard data once when user is available
   useEffect(() => {
-    if (!user || dashboardLoaded) return;
-    let cancelled = false;
+    if (!userUid) return;
+    let active = true;
     setDashboardLoading(true);
 
-    (async () => {
-      try {
-        const [dashRes, activityRes, meetupsRes] = await Promise.allSettled([
-          api.get('/dashboard'),
-          api.get('/activity-feed'),
-          api.get('/meetups'),
-        ]);
+    Promise.allSettled([
+      api.get('/dashboard'),
+      api.get('/activity-feed'),
+      api.get('/meetups'),
+    ]).then(([dashRes, activityRes, meetupsRes]) => {
+      if (!active) return;
+      if (dashRes.status === 'fulfilled') setFriendsToSee(dashRes.value.data.friendsToSee || []);
+      if (activityRes.status === 'fulfilled') setActivities(activityRes.value.data.activities || []);
+      if (meetupsRes.status === 'fulfilled') setMeetups(meetupsRes.value.data.meetups || []);
+      setDashboardLoading(false);
+    });
 
-        if (cancelled) return;
-        if (dashRes.status === 'fulfilled') setFriendsToSee(dashRes.value.data.friendsToSee || []);
-        if (activityRes.status === 'fulfilled') setActivities(activityRes.value.data.activities || []);
-        if (meetupsRes.status === 'fulfilled') setMeetups(meetupsRes.value.data.meetups || []);
-        setDashboardLoaded(true);
-      } catch { /* network error */ }
-      finally { if (!cancelled) setDashboardLoading(false); }
-    })();
+    return () => { active = false; };
+  }, [userUid]); // only depends on UID string, not the mutable User object
 
-    return () => { cancelled = true; };
-  }, [user, dashboardLoaded]);
-
-  // Calendar: sync once, then fetch events
+  // Calendar: sync once on mount
   useEffect(() => {
-    if (!user || !calendarConnected) return;
-    if (calSynced) return; // only sync once per session
-    let cancelled = false;
+    if (!userUid || !calendarConnected) return;
+    api.post('/calendar/sync').catch(() => {});
+  }, [userUid]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    (async () => {
-      try {
-        await api.post('/calendar/sync').catch(() => {});
-        if (!cancelled) setCalSynced(true);
-      } catch { /* silent */ }
-    })();
-
-    return () => { cancelled = true; };
-  }, [user, calendarConnected, calSynced]);
-
-  // Fetch calendar events (depends on view/offset, re-runs when those change)
+  // Fetch calendar events
   useEffect(() => {
-    if (!user || !calendarConnected) return;
-    let cancelled = false;
+    if (!userUid || !calendarConnected) return;
+    let active = true;
+    setCalEventsLoading(true);
 
-    (async () => {
-      setCalEventsLoading(true);
-      try {
-        let fetchDays = 14;
-        if (calView === 'month') {
-          const ref = new Date();
-          ref.setMonth(ref.getMonth() + monthOffset);
-          const monthEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, 6);
-          fetchDays = Math.ceil((monthEnd.getTime() - new Date().getTime()) / 86400000);
-          if (fetchDays < 1) fetchDays = 1;
-        }
-        const { data } = await api.get(`/calendar/events?days=${fetchDays}`);
-        if (!cancelled) setCalEvents(data.events || []);
-      } catch { /* silent */ }
-      finally { if (!cancelled) setCalEventsLoading(false); }
-    })();
+    let fetchDays = 14;
+    if (calView === 'month') {
+      const ref = new Date();
+      ref.setMonth(ref.getMonth() + monthOffset);
+      const monthEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, 6);
+      fetchDays = Math.ceil((monthEnd.getTime() - new Date().getTime()) / 86400000);
+      if (fetchDays < 1) fetchDays = 1;
+    }
 
-    return () => { cancelled = true; };
-  }, [user, calendarConnected, calView, monthOffset]);
+    api.get(`/calendar/events?days=${fetchDays}`).then(({ data }) => {
+      if (active) {
+        setCalEvents(data.events || []);
+        setCalEventsLoading(false);
+      }
+    }).catch(() => {
+      if (active) setCalEventsLoading(false);
+    });
+
+    return () => { active = false; };
+  }, [userUid, calendarConnected, calView, monthOffset]);
 
   /* ─── derived ─── */
   const now = useMemo(() => new Date(), []);
@@ -425,7 +413,7 @@ export default function DashboardPage() {
   /* ─── should show history section? ─── */
   // const hasHistory = pastConfirmed.filter((m) => m.status !== 'didnt_happen').length > 0;
 
-  console.log('[Dashboard render]', { dashboardLoading, dashboardLoaded, calSynced, calEventsLoading, friendsToSee: friendsToSee.length, calEvents: calEvents.length, meetups: meetups.length });
+  console.log('[Dashboard render]', { dashboardLoading, calEventsLoading, friendsToSee: friendsToSee.length, calEvents: calEvents.length, meetups: meetups.length });
 
   return (
     <AppShell>
@@ -465,7 +453,7 @@ export default function DashboardPage() {
       )}
 
       {/* Calendar connected but no events — nudge to select calendars */}
-      {calendarConnected && calSynced && !calEventsLoading && calEvents.length === 0 && !calendarJustConnected && (
+      {calendarConnected && !calEventsLoading && calEvents.length === 0 && !calendarJustConnected && (
         <div className="mb-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <span className="text-lg">📅</span>
           <p className="text-sm text-amber-800">

@@ -112,6 +112,53 @@ const typeEmoji = (t: string) =>
     : t === 'food' || t === 'food & drink' ? '🍷'
     : '🎟️';
 
+/** Extract major city name from a neighborhood string like "West Village, NYC" → "New York" */
+function extractMajorCity(input: string): string {
+  if (!input) return '';
+  // Common abbreviation → full city name mapping
+  const cityAliases: Record<string, string> = {
+    'nyc': 'New York',
+    'ny': 'New York',
+    'new york city': 'New York',
+    'manhattan': 'New York',
+    'brooklyn': 'New York',
+    'queens': 'New York',
+    'bronx': 'New York',
+    'staten island': 'New York',
+    'la': 'Los Angeles',
+    'sf': 'San Francisco',
+    'san fran': 'San Francisco',
+    'chi': 'Chicago',
+    'philly': 'Philadelphia',
+    'dc': 'Washington',
+    'bos': 'Boston',
+    'atl': 'Atlanta',
+    'sea': 'Seattle',
+    'pdx': 'Portland',
+    'den': 'Denver',
+    'dfw': 'Dallas',
+    'hou': 'Houston',
+    'nola': 'New Orleans',
+    'mpls': 'Minneapolis',
+    'mia': 'Miami',
+    'dtw': 'Detroit',
+  };
+  // If it contains a comma ("West Village, NYC"), try the part after the comma
+  const parts = input.split(',').map(p => p.trim());
+  // Check each part against known aliases
+  for (const part of [...parts].reverse()) {
+    const lower = part.toLowerCase();
+    if (cityAliases[lower]) return cityAliases[lower];
+  }
+  // If the whole string matches an alias
+  const whole = input.toLowerCase().trim();
+  if (cityAliases[whole]) return cityAliases[whole];
+  // If there's a comma, return the last part (likely the city)
+  if (parts.length > 1) return parts[parts.length - 1];
+  // Otherwise return as-is
+  return input.trim();
+}
+
 export default function EventsPage() {
   const { user } = useAuth();
 
@@ -170,12 +217,12 @@ export default function EventsPage() {
           .map((f: any) => f.friend);
         setFriends(accepted);
         const me = meRes.data;
-        if (me.event_city) {
-          setDefaultCity(me.event_city);
-          if (!city) setCity(me.event_city);
-        } else if (me.neighborhood) {
-          setDefaultCity(me.neighborhood);
-          if (!city) setCity(me.neighborhood);
+        // Extract major city name (e.g. "Hudson Yards, NYC" → "New York")
+        const rawCity = me.event_city || me.neighborhood || '';
+        const majorCity = extractMajorCity(rawCity);
+        if (majorCity) {
+          setDefaultCity(majorCity);
+          if (!city) setCity(majorCity);
         }
       } catch { /* ignore */ }
     })();

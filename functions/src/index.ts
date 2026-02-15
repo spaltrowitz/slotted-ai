@@ -3191,6 +3191,9 @@ const EVENTBRITE_API_KEY = process.env.EVENTBRITE_API_KEY || "";
 const MEETUP_API_KEY = process.env.MEETUP_API_KEY || "";
 const NYC_OPEN_DATA_APP_TOKEN = process.env.NYC_OPEN_DATA_APP_TOKEN || "";
 
+// Log which APIs are configured at cold-start
+console.log(`Event APIs configured — SeatGeek: ${!!SEATGEEK_CLIENT_ID}, Ticketmaster: ${!!TICKETMASTER_API_KEY}, Eventbrite: ${!!EVENTBRITE_API_KEY}`);
+
 interface ExternalEvent {
   id: string;
   source: "seatgeek" | "ticketmaster" | "eventbrite" | "meetup" | "nyc_open_data";

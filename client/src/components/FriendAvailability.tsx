@@ -1,5 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
+import AddToCalendarModal from './AddToCalendarModal';
+
+type HangoutMode = 'in_person' | 'phone' | 'video';
+
+const MODE_CONFIG: Record<HangoutMode, { emoji: string; label: string; shortLabel: string }> = {
+  in_person: { emoji: '🤝', label: 'In person', shortLabel: 'Meet up' },
+  phone: { emoji: '📞', label: 'Phone call', shortLabel: 'Call' },
+  video: { emoji: '💻', label: 'Video call', shortLabel: 'Video' },
+};
 
 
 interface ScoredSlot {
@@ -36,7 +45,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get(`/availability/overlap/${friendId}`);
+      const { data } = await api.get(`/availability/overlap/${friendId}?mode=${hangoutMode}`);
       setSuggestions(data.suggestions || []);
       setOverlaps(data.overlaps || []);
       setSyncStatus(data.syncStatus || null);
@@ -45,7 +54,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
     } finally {
       setLoading(false);
     }
-  }, [friendId]);
+  }, [friendId, hangoutMode]);
 
   useEffect(() => {
     fetchOverlaps();
@@ -53,9 +62,13 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
 
   const handleBook = async (slot: ScoredSlot) => {
     setBookingSlot(slot.start);
+    const modeLabel = MODE_CONFIG[hangoutMode].shortLabel;
+    const bookingTitle = hangoutMode === 'in_person'
+      ? `Hangout with ${friendName}`
+      : `${modeLabel} with ${friendName}`;
     try {
       const { data } = await api.post('/meetups', {
-        title: `Hangout with ${friendName}`,
+        title: bookingTitle,
         friendId,
         startTime: slot.start,
         endTime: slot.end,

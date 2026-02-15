@@ -136,7 +136,7 @@ export default function LoginPage() {
             <div className="flex items-center gap-3 mb-4">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white shadow-sm text-2xl">🌎</div>
               <div>
-                <h3 className="font-display text-base font-bold text-gray-900">Long-Distance Loved Ones</h3>
+                <h3 className="font-display text-base font-bold text-gray-900">Long-Distance Friends & Family</h3>
                 <p className="text-xs text-violet-600 font-medium">Stay close even when far apart</p>
               </div>
             </div>
