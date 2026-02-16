@@ -141,6 +141,7 @@ export default function DashboardPage() {
 
   // Smart event suggestions
   const [eventSuggestions, setEventSuggestions] = useState<any[]>([]);
+  const [savedEvents, setSavedEvents] = useState<any[]>([]);
 
   // Meetups
   const [meetups, setMeetups] = useState<Meetup[]>([]);
@@ -204,6 +205,11 @@ export default function DashboardPage() {
     // Load smart event suggestions (non-blocking)
     api.get('/events/suggestions').then((r) => {
       setEventSuggestions(r.data.suggestions || []);
+    }).catch(() => {});
+
+    // Load saved/hearted events (non-blocking)
+    api.get('/events/saved').then((r) => {
+      setSavedEvents((r.data.events || r.data || []).slice(0, 5));
     }).catch(() => {});
 
     return () => { active = false; };
@@ -1310,6 +1316,48 @@ export default function DashboardPage() {
                   ))}
                 </div>
               </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── SAVED EVENTS ─── */}
+      {savedEvents.length > 0 && (
+        <div className="mb-6 bg-white rounded-2xl shadow-sm border border-gray-200/60 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">❤️</span>
+              <h2 className="font-display text-sm font-semibold text-gray-900">Saved Events</h2>
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">{savedEvents.length}</span>
+            </div>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {savedEvents.map((ev: any) => (
+              <a
+                key={ev.id}
+                href={ev.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-gray-50/50"
+              >
+                {ev.image_url ? (
+                  <img src={ev.image_url} alt="" className="h-11 w-11 rounded-xl object-cover shrink-0 shadow-sm" />
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 text-lg">
+                    🎟️
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{ev.title}</p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {ev.datetime_local ? new Date(ev.datetime_local.replace(' ', 'T')).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ev.datetime_utc ? new Date(ev.datetime_utc).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''}
+                    {ev.venue ? ` · ${ev.venue}` : ''}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-lg border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-500 hover:text-slotted-600 hover:border-slotted-200 transition-colors">
+                  🎟️ Tickets
+                </span>
+              </a>
             ))}
           </div>
         </div>

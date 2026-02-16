@@ -137,6 +137,10 @@ export default function FriendsPage() {
   const [addFriendStatus, setAddFriendStatus] = useState<'idle' | 'sending' | 'sent' | 'pending' | 'error'>('idle');
   const [addFriendMessage, setAddFriendMessage] = useState('');
 
+  // Add member to group state
+  const [addMemberGroupId, setAddMemberGroupId] = useState<string | null>(null);
+  const [addingMemberIds, setAddingMemberIds] = useState<Set<string>>(new Set());
+
   const inviteUrl = `https://slotted-ai.web.app?ref=${user?.uid ?? ''}`;
   const message = `Let's schedule time to hang :) This app syncs our calendars and finds the best time to meet up. ${inviteUrl}`;
 
@@ -376,6 +380,18 @@ export default function FriendsPage() {
     }
   };
 
+  const handleAddMemberToGroup = async (groupId: string, memberId: string) => {
+    setAddingMemberIds((prev) => new Set(prev).add(memberId));
+    try {
+      await api.post(`/groups/${groupId}/members`, { memberIds: [memberId] });
+      fetchGroups(); // refresh to show updated member list
+    } catch (err) {
+      console.error('Failed to add member to group:', err);
+    } finally {
+      setAddingMemberIds((prev) => { const next = new Set(prev); next.delete(memberId); return next; });
+    }
+  };
+
   const toggleCreateGroupFriend = (id: string) => {
     setCreateGroupSelectedIds(prev => {
       const next = new Set(prev);
@@ -394,6 +410,26 @@ export default function FriendsPage() {
   const acceptedFriends = friends.filter((f) => f.status === 'accepted');
   const localFriends = acceptedFriends.filter((f) => (f.friendshipType || 'local') === 'local');
   const longDistanceFriends = acceptedFriends.filter((f) => f.friendshipType === 'long_distance');
+
+  // Track all friend IDs (accepted + pending) so we know who we're already connected/pending with
+  const connectedOrPendingIds = new Set(friends.map((f) => f.friend.id));
+
+  // State for group member friend requests in progress
+  const [groupFriendRequesting, setGroupFriendRequesting] = useState<Set<string>>(new Set());
+  const [groupFriendRequested, setGroupFriendRequested] = useState<Set<string>>(new Set());
+
+  const handleGroupMemberFriendRequest = async (memberId: string) => {
+    setGroupFriendRequesting((prev) => new Set(prev).add(memberId));
+    try {
+      await api.post('/friends/invite', { userId: memberId });
+      setGroupFriendRequested((prev) => new Set(prev).add(memberId));
+      fetchFriends(); // refresh friend list
+    } catch (err) {
+      console.error('Failed to send friend request:', err);
+    } finally {
+      setGroupFriendRequesting((prev) => { const next = new Set(prev); next.delete(memberId); return next; });
+    }
+  };
 
   const batteryEmoji = (battery?: string) => {
     if (battery === 'open') return '🟢';
@@ -500,6 +536,14 @@ export default function FriendsPage() {
         >
           {selectedFriendId === f.friend.id ? '✨ Viewing' : '✨ Find times'}
         </button>
+        <a
+          href={`/events?friend=${f.friend.id}&name=${encodeURIComponent(f.friend.displayName?.split(' ')[0] || '')}`}
+          onClick={(e) => e.stopPropagation()}
+          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-slotted-200 hover:text-slotted-600"
+          title="Find an event to go to together"
+        >
+          �️ Go together
+        </a>
         <button
           onClick={() => setRemovingFriend(f)}
           className="rounded-lg p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
@@ -617,36 +661,123 @@ export default function FriendsPage() {
 
         {groups.length > 0 && (
           <div className="space-y-2 mb-3">
-            {groups.map(group => (
-              <div key={group.id} className="flex items-center justify-between gap-3 rounded-2xl border border-purple-100 bg-gradient-to-r from-purple-50/30 to-fuchsia-50/20 px-4 py-3 shadow-sm">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <span className="text-lg shrink-0">👥</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{group.name}</p>
-                    <p className="text-[11px] text-gray-400 truncate">
-                      {[
-                        ...group.members.map(m => m.displayName.split(' ')[0]),
-                        ...(group.pendingEmails || []).map(e => `${e} ⏳`),
-                      ].join(', ')}
-                    </p>
+            {groups.map(group => {
+              const nonFriendMembers = group.members.filter(m => !connectedOrPendingIds.has(m.id));
+              return (
+                <div key={group.id} className="rounded-2xl border border-purple-100 bg-gradient-to-r from-purple-50/30 to-fuchsia-50/20 px-4 py-3 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <span className="text-lg shrink-0">👥</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{group.name}</p>
+                        <p className="text-[11px] text-gray-400 truncate">
+                          {[
+                            ...group.members.map(m => m.displayName.split(' ')[0]),
+                            ...(group.pendingEmails || []).map(e => `${e} ⏳`),
+                          ].join(', ')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        onClick={() => handleGroupFindTimes(group)}
+                        className="rounded-lg bg-gradient-to-r from-purple-500 to-fuchsia-500 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:shadow-md shadow-sm"
+                      >
+                        ✨ Find times
+                      </button>
+                      <button
+                        onClick={() => setAddMemberGroupId(addMemberGroupId === group.id ? null : group.id)}
+                        className={`rounded-lg border px-2 py-1.5 text-xs font-semibold transition-all ${
+                          addMemberGroupId === group.id
+                            ? 'border-purple-300 bg-purple-100 text-purple-700'
+                            : 'border-gray-200 text-gray-400 hover:text-purple-600 hover:border-purple-200'
+                        }`}
+                        title="Add a friend to this group"
+                      >
+                        +
+                      </button>
+                      <button
+                        onClick={() => handleDeleteGroup(group.id)}
+                        className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-400 hover:text-red-500 hover:border-red-200 transition-all"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
+                  {/* Show non-friend group members with "Add friend" option */}
+                  {nonFriendMembers.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-purple-100/50">
+                      <p className="text-[10px] text-gray-400 mb-1.5">Not yet connected:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {nonFriendMembers.map(m => {
+                          const requested = groupFriendRequested.has(m.id);
+                          const requesting = groupFriendRequesting.has(m.id);
+                          return (
+                            <button
+                              key={m.id}
+                              onClick={() => !requested && !requesting && handleGroupMemberFriendRequest(m.id)}
+                              disabled={requested || requesting}
+                              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-all ${
+                                requested
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                  : 'border-purple-200 bg-white text-purple-700 hover:bg-purple-50 hover:border-purple-300'
+                              }`}
+                            >
+                              {m.photoUrl ? (
+                                <img src={m.photoUrl} alt="" className="h-4 w-4 rounded-full" />
+                              ) : (
+                                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-fuchsia-500 text-[8px] font-bold text-white">
+                                  {m.displayName?.[0] ?? '?'}
+                                </span>
+                              )}
+                              {m.displayName.split(' ')[0]}
+                              {requesting ? ' …' : requested ? ' ✓ Sent' : ' + Add'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {/* Add member to group panel */}
+                  {addMemberGroupId === group.id && (() => {
+                    const memberIds = new Set(group.members.map(m => m.id));
+                    const addableFriends = acceptedFriends.filter(f => !memberIds.has(f.friend.id));
+                    return (
+                      <div className="mt-2 pt-2 border-t border-purple-100/50">
+                        <p className="text-[10px] font-semibold text-gray-500 mb-2">Add a friend to this group:</p>
+                        {addableFriends.length === 0 ? (
+                          <p className="text-[11px] text-gray-400">All your friends are already in this group!</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {addableFriends.map(f => {
+                              const adding = addingMemberIds.has(f.friend.id);
+                              return (
+                                <button
+                                  key={f.friend.id}
+                                  onClick={() => !adding && handleAddMemberToGroup(group.id, f.friend.id)}
+                                  disabled={adding}
+                                  className="flex items-center gap-1.5 rounded-full border border-purple-200 bg-white px-3 py-1 text-[11px] font-medium text-purple-700 transition-all hover:bg-purple-50 hover:border-purple-300 disabled:opacity-50"
+                                >
+                                  {f.friend.photoUrl ? (
+                                    <img src={f.friend.photoUrl} alt="" className="h-4 w-4 rounded-full" />
+                                  ) : (
+                                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-fuchsia-500 text-[8px] font-bold text-white">
+                                      {f.friend.displayName?.[0] ?? '?'}
+                                    </span>
+                                  )}
+                                  {f.friend.displayName.split(' ')[0]}
+                                  {adding ? ' …' : ' +'}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
-                <div className="flex gap-2 shrink-0">
-                  <button
-                    onClick={() => handleGroupFindTimes(group)}
-                    className="rounded-lg bg-gradient-to-r from-purple-500 to-fuchsia-500 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:shadow-md shadow-sm"
-                  >
-                    ✨ Find times
-                  </button>
-                  <button
-                    onClick={() => handleDeleteGroup(group.id)}
-                    className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-400 hover:text-red-500 hover:border-red-200 transition-all"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

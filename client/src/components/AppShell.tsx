@@ -21,15 +21,6 @@ const navItems = [
     ),
   },
   {
-    path: '/events',
-    label: 'Events',
-    icon: (
-      <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.75 4.875c0-.621.504-1.125 1.125-1.125h14.25c.621 0 1.125.504 1.125 1.125v14.25c0 .621-.504 1.125-1.125 1.125H4.875a1.125 1.125 0 01-1.125-1.125V4.875zM16.5 4.875v14.25" />
-      </svg>
-    ),
-  },
-  {
     path: '/notifications',
     label: 'Inbox',
     icon: (

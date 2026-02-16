@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
@@ -243,6 +244,9 @@ function extractMajorCity(input: string): string {
 // ---------------------------------------------------------------------------
 export default function EventsPage() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const friendIdParam = searchParams.get('friend');
+  const friendNameParam = searchParams.get('name');
 
   // Search state
   const [query, setQuery] = useState('');
@@ -339,6 +343,13 @@ export default function EventsPage() {
         // Load saved event IDs
         const savedIds = new Set<string>((savedRes.data.events || savedRes.data || []).map((e: any) => e.external_id as string));
         setSavedEventIds(savedIds);
+
+        // If navigated from Friends tab with a friend param, auto-enter match mode
+        if (friendIdParam) {
+          setMode('match');
+          setSelectedFriends(new Set([friendIdParam]));
+          setTab('search');
+        }
       } catch { /* ignore */ }
     })();
   }, [user]);
@@ -797,12 +808,18 @@ export default function EventsPage() {
       {/* Page Header */}
       <div className="mb-5">
         <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">
-          🎟️ Things to Do
+          {friendNameParam ? `🎟️ Find something to do with ${friendNameParam}` : '🎟️ Things to Do'}
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Find events, match with friends' schedules, and never miss a great show
-          {city ? ` in ${city}` : ''}
+          {friendNameParam
+            ? `Search for events and find times when you're both free${city ? ` in ${city}` : ''}`
+            : `Find events, match with friends' schedules, and never miss a great show${city ? ` in ${city}` : ''}`}
         </p>
+        {friendNameParam && (
+          <a href="/friends" className="mt-2 inline-flex items-center gap-1 text-xs text-slotted-600 hover:text-slotted-700 transition-colors">
+            ← Back to Friends
+          </a>
+        )}
       </div>
 
       {/* ─── Smart Picks: Events matched to you + friends ─── */}

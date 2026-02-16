@@ -84,6 +84,15 @@ export default function NotificationsPage() {
     }
   };
 
+  const dismissNotification = async (id: string) => {
+    try {
+      await api.delete(`/notifications/${id}`);
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    } catch {
+      // silently fail
+    }
+  };
+
   const handleRsvp = async (notificationId: string, meetupId: string, rsvp: 'accepted' | 'declined' | 'maybe') => {
     setRsvpLoading(notificationId);
     try {
@@ -340,6 +349,15 @@ export default function NotificationsPage() {
                       })()}
                     </div>
                     <span className="shrink-0 text-xs text-gray-400">{timeAgo(notification.created_at)}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); dismissNotification(notification.id); }}
+                      className="shrink-0 rounded-full p-1 text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-all ml-1"
+                      title="Dismiss"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
 
                   {/* Friend request accept/decline buttons */}

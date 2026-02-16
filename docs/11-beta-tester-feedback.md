@@ -9,8 +9,8 @@ Ongoing feedback log from beta testers. Updated as new sessions happen.
 ### Tamer — "Show me *why* before you ask me *what*"
 Tamer's feedback is about **onboarding clarity and purpose**. He was willing to answer questions but needed to understand the payoff upfront. Users will tolerate setup friction if the value exchange is obvious — but a long questionnaire with no framing feels like a quiz, not a setup flow.
 
-### Darren — "This is more than just friends hanging out"
-Darren's feedback is about **broader use cases and personalization**. He immediately saw applications beyond casual socializing (taped interviews, professional scheduling) and wanted more nuanced preference controls. He represents the power user who wants Slotted to feel tailored to *his* life — not just a generic social tool. He also signals that the market may be bigger than "friends" if the positioning is right.
+### Darren — "Let me tell you who I am so you can help me better"
+Darren's feedback is about **personalization and inclusive language**. He wanted more nuanced preference controls (social goal direction, hangout lengths) and suggested broadening from "friends" to "friends and family." He also mentioned using it for taped interviews, but that's out of scope — Slotted is for people you want to *recurringly* see, not one-off scheduling (that's Calendly's lane).
 
 ### Emma — "I love the idea, but my calendar is a mess"
 Emma's feedback is about the **cold start problem for non-calendar-native users**. She doesn't maintain accurate calendar data, so the core value prop (finding overlapping free time) breaks down for her. But the concept still resonates — especially for **group coordination** where the pain of texting back and forth is high enough to justify a tool. She's the user who needs Slotted to work *without* perfect calendar hygiene.
@@ -36,8 +36,7 @@ Emma's feedback is about the **cold start problem for non-calendar-native users*
 - Suggested adding 1–2 more onboarding questions for customization: "Are you trying to increase, decrease, or maintain your current social activity?" and preferred hangout lengths.
 - Suggested making language more inclusive — "friends and family" not just "friends."
 - Loves the concept. Sees scale potential: sponsorships, integrated advertising from entertainment, food, and partnerships.
-- Personal use case beyond socializing: would use it to schedule his taped interviews. Common pattern: "Wanna talk with ___?" → "Sure" → "When are you free?" → digging through calendar to email slots. Calendly is similar but "not social like this is intended to be."
-- Key insight: There's a professional/semi-professional scheduling use case (interviews, podcast bookings) that's more social than Calendly but more structured than texting back and forth.
+- Also mentioned wanting to use it for taped interviews — but that's a one-off scheduling problem (Calendly territory), not Slotted's focus. Slotted is for people you want to *recurringly* see.
 
 **Actions taken:**
 - Added social goal (increase/maintain/decrease) to Settings

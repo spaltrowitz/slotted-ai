@@ -174,16 +174,9 @@ export default function LoginPage() {
         </div>
       </section>
 
-      {/* Bottom CTA */}
+      {/* Bottom CTA — only show for logged-out users */}
       <section className="relative z-10 mx-auto max-w-xl px-6 pb-10 text-center">
-        {user ? (
-          <Link
-            to="/dashboard"
-            className="inline-flex items-center justify-center gap-3 rounded-2xl gradient-btn px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
-          >
-            Go to Dashboard →
-          </Link>
-        ) : (
+        {user ? null : (
           <button
             onClick={signInWithGoogle}
             className="inline-flex items-center justify-center gap-3 rounded-2xl gradient-btn px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"

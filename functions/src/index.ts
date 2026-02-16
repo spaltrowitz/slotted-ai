@@ -224,11 +224,11 @@ app.get("/notifications", requireAuth, async (req: AuthRequest, res: Response) =
 
     if (error) { res.status(500).json({ error: error.message }); return; }
 
-    // For meetup_request notifications, look up the user's current RSVP status
-    // so the frontend can show the correct state after a page refresh
+    // For meetup-related notifications, look up the user's current RSVP status
+    // and the meetup's current status so we can hide stale notifications
     const notifications = data || [];
     const meetupNotifications = notifications.filter(
-      (n: any) => n.type === "meetup_request" && n.related_id,
+      (n: any) => ["meetup_request", "meetup_confirmed", "meetup_reminder"].includes(n.type) && n.related_id,
     );
     if (meetupNotifications.length > 0) {
       const meetupIds = [...new Set(meetupNotifications.map((n: any) => n.related_id))];
@@ -238,15 +238,39 @@ app.get("/notifications", requireAuth, async (req: AuthRequest, res: Response) =
         .eq("user_id", me.id)
         .in("meetup_id", meetupIds);
 
+      // Also fetch meetup statuses to filter out cancelled/didnt_happen meetups
+      const { data: meetups } = await getSupabase()
+        .from("meetups")
+        .select("id, status")
+        .in("id", meetupIds);
+
       const rsvpMap = new Map((myRsvps || []).map((r: any) => [r.meetup_id, r.rsvp]));
+      const meetupStatusMap = new Map((meetups || []).map((m: any) => [m.id, m.status]));
+
       for (const n of notifications) {
         if (n.type === "meetup_request" && n.related_id) {
           (n as any).my_rsvp = rsvpMap.get(n.related_id) || "pending";
         }
+        if (n.related_id && meetupStatusMap.has(n.related_id)) {
+          (n as any).meetup_status = meetupStatusMap.get(n.related_id);
+        }
       }
     }
 
-    res.json(notifications);
+    // Filter out notifications for meetups that have been cancelled/didnt_happen
+    // and hide meetup_request notifications when a meetup_confirmed exists for the same meetup
+    const confirmedMeetupIds = new Set(
+      notifications.filter((n: any) => n.type === "meetup_confirmed" && n.related_id).map((n: any) => n.related_id),
+    );
+    const filtered = notifications.filter((n: any) => {
+      // Hide notifications for cancelled meetups
+      if ((n as any).meetup_status === "didnt_happen") return false;
+      // Hide meetup_request if a meetup_confirmed notification exists for the same meetup
+      if (n.type === "meetup_request" && n.related_id && confirmedMeetupIds.has(n.related_id)) return false;
+      return true;
+    });
+
+    res.json(filtered);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -301,6 +325,25 @@ app.post("/notifications/mark-all-read", requireAuth, async (req: AuthRequest, r
       .update({ read: true })
       .eq("user_id", me.id)
       .eq("read", false);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /notifications/:id — dismiss/delete a notification */
+app.delete("/notifications/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { error } = await getSupabase()
+      .from("notifications")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("user_id", me.id);
 
     if (error) { res.status(500).json({ error: error.message }); return; }
     res.json({ success: true });
@@ -466,7 +509,7 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
           user_id: data.id,
           type: "calendar_match",
           title: "Welcome to Slotted! 👋",
-          body: "Get started in 3 quick steps: 1️⃣ Go to Settings to connect your calendar and set your preferences. 2️⃣ Head to the Friends tab to invite friends. 3️⃣ Check the Events tab to discover local shows, concerts & more!",
+          body: "Get started in 2 quick steps: 1️⃣ Go to Settings to connect your calendar and set your preferences. 2️⃣ Head to the Friends tab to invite friends — Slotted will find the best times for you to hang out!",
           read: true,
         });
       }
@@ -826,11 +869,11 @@ app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-/** POST /friends/invite — send a friend invite by email */
+/** POST /friends/invite — send a friend invite by email or userId */
 app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response) => {
-  const { email, hangoutPref } = req.body;
-  if (!email) {
-    res.status(400).json({ error: "Email is required" });
+  const { email, userId, hangoutPref } = req.body;
+  if (!email && !userId) {
+    res.status(400).json({ error: "Email or userId is required" });
     return;
   }
   const validPrefs = ["both", "one_on_one", "group"];
@@ -842,14 +885,33 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
       return;
     }
 
-    // Find the invitee
-    const { data: invitee } = await getSupabase()
-      .from("users")
-      .select("id, neighborhood")
-      .eq("email", email)
-      .single();
+    // Find the invitee — by userId or email
+    let invitee: any = null;
+    if (userId) {
+      const { data } = await getSupabase()
+        .from("users")
+        .select("id, neighborhood, display_name, email")
+        .eq("id", userId)
+        .single();
+      invitee = data;
+      if (!invitee) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+    } else {
+      const { data } = await getSupabase()
+        .from("users")
+        .select("id, neighborhood")
+        .eq("email", email)
+        .single();
+      invitee = data;
+    }
 
     if (!invitee) {
+      if (!email) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
       // Store a pending invite so we auto-connect when they sign up
       await getSupabase()
         .from("pending_invites")
@@ -2524,6 +2586,79 @@ app.put("/groups/:id", requireAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
+/** POST /groups/:id/members — add members to a group (any current member can do this) */
+app.post("/groups/:id/members", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const sb = getSupabase();
+    const groupId = req.params.id;
+    const { memberIds } = req.body;
+
+    if (!Array.isArray(memberIds) || memberIds.length === 0) {
+      res.status(400).json({ error: "memberIds must be a non-empty array" });
+      return;
+    }
+
+    // Verify the requester is a member of this group
+    const { data: membership } = await sb
+      .from("friend_group_members")
+      .select("user_id")
+      .eq("group_id", groupId)
+      .eq("user_id", me.id)
+      .single();
+
+    if (!membership) {
+      res.status(403).json({ error: "You must be a member of this group to add people" });
+      return;
+    }
+
+    // Get existing members to avoid duplicates
+    const { data: existingMembers } = await sb
+      .from("friend_group_members")
+      .select("user_id")
+      .eq("group_id", groupId);
+
+    const existingIds = new Set((existingMembers || []).map((m: any) => m.user_id));
+    const newIds = memberIds.filter((id: string) => !existingIds.has(id));
+
+    if (newIds.length === 0) {
+      res.json({ added: 0, message: "All selected members are already in the group" });
+      return;
+    }
+
+    const rows = newIds.map((uid: string) => ({ group_id: groupId, user_id: uid }));
+    const { error } = await sb.from("friend_group_members").insert(rows);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+
+    // Get group name for the notification
+    const { data: group } = await sb
+      .from("friend_groups")
+      .select("name")
+      .eq("id", groupId)
+      .single();
+
+    // Notify newly added members
+    for (const uid of newIds) {
+      try {
+        await createNotification({
+          userId: uid,
+          type: "friend_accepted",
+          title: `Added to "${group?.name || 'a group'}"`,
+          body: `${me.display_name || "Someone"} added you to the group "${group?.name || ''}" on Slotted`,
+          relatedUserId: me.id,
+        });
+      } catch { /* ignore notification errors */ }
+    }
+
+    res.json({ added: newIds.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** DELETE /groups/:id — delete a group */
 app.delete("/groups/:id", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
@@ -2803,6 +2938,13 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
           .eq("id", meetupId);
         meetupConfirmed = true;
 
+        // Mark all old meetup_request notifications for this meetup as read
+        await getSupabase()
+          .from("notifications")
+          .update({ read: true })
+          .eq("related_id", meetupId)
+          .in("type", ["meetup_request"]);
+
         // Notify ALL participants that the hangout is confirmed
         for (const p of allParticipants) {
           await createNotification({
@@ -2975,6 +3117,14 @@ app.patch("/meetups/:meetupId/didnt-happen", requireAuth, async (req: AuthReques
       res.status(500).json({ error: error.message });
       return;
     }
+
+    // Mark all notifications related to this meetup as read so they disappear
+    await getSupabase()
+      .from("notifications")
+      .update({ read: true })
+      .eq("related_id", meetupId)
+      .in("type", ["meetup_request", "meetup_confirmed", "meetup_reminder"]);
+
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
