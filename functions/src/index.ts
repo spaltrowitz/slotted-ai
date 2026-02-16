@@ -263,8 +263,8 @@ app.get("/notifications", requireAuth, async (req: AuthRequest, res: Response) =
       notifications.filter((n: any) => n.type === "meetup_confirmed" && n.related_id).map((n: any) => n.related_id),
     );
     const filtered = notifications.filter((n: any) => {
-      // Hide notifications for cancelled meetups
-      if ((n as any).meetup_status === "didnt_happen") return false;
+      // Hide notifications for cancelled/didnt_happen meetups
+      if (["didnt_happen", "cancelled"].includes((n as any).meetup_status)) return false;
       // Hide meetup_request if a meetup_confirmed notification exists for the same meetup
       if (n.type === "meetup_request" && n.related_id && confirmedMeetupIds.has(n.related_id)) return false;
       return true;
@@ -2951,15 +2951,31 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
             userId: p.user_id,
             type: "meetup_confirmed",
             title: "🎉 Hangout confirmed!",
-            body: `Everyone accepted — ${meetup.title || "Hangout"} is locked in! Add it to your calendar.`,
+            body: `Everyone accepted — ${meetup.title || "Hangout"} is locked in!`,
             relatedId: meetupId,
           });
         }
       }
     }
 
-    // If someone declined, notify other participants
+    // If someone declined, cancel the meetup (for 1-on-1) or notify others
     if (rsvp === "declined" && meetup && allParticipants) {
+      // For 2-person meetups, auto-cancel the whole meetup
+      if (allParticipants.length <= 2) {
+        await getSupabase()
+          .from("meetups")
+          .update({ status: "cancelled" })
+          .eq("id", meetupId);
+      }
+
+      // Mark all existing notifications for this meetup as read
+      await getSupabase()
+        .from("notifications")
+        .update({ read: true })
+        .eq("related_id", meetupId)
+        .in("type", ["meetup_request", "meetup_confirmed", "meetup_reminder"]);
+
+      // Notify other participants
       for (const p of allParticipants) {
         if (p.user_id !== me.id) {
           await createNotification({
