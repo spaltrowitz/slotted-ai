@@ -612,7 +612,7 @@ export default function FriendsPage() {
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Add a friend</h3>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
-          Enter their email to send a friend request. If they're already on Slotted, they'll get a notification. If not, they'll be auto-connected when they join.
+          Enter the email your friend uses on Slotted. If they're already here, they'll get an in-app friend request. If not, they'll be auto-connected when they join — share your invite link to get them on board!
         </p>
         <div className="flex gap-2">
           <input

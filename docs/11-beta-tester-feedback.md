@@ -22,10 +22,12 @@ Emma's feedback is about the **cold start problem for non-calendar-native users*
 **Date:** February 2026
 
 - The onboarding flow felt too long and he didn't know where it was going with all the questions initially. He realized it was to set default meeting times, but the purpose wasn't clear upfront.
+- Follow-up: When asked if a single question + settings would be better, he suggested adding a short blurb explaining *why* each question is being asked. E.g. "We'll use this to prioritize your availability" for preferred times, or "This will be the default time for your meeting slots" for duration. The issue wasn't the number of questions per se — it was the lack of context for each one.
 
 **Actions taken:**
 - Trimmed onboarding from 8 steps → 2 steps (calendar connect + preferred times)
 - Moved social frequency, social goal, hangout/call duration, personal time, and trip buffer to Settings
+- Added explanatory subtitle on the preferred times step ("this helps Slotted suggest the best times")
 
 ---
 
