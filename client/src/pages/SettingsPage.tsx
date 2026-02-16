@@ -42,6 +42,11 @@ export default function SettingsPage() {
   const [customCallLabel, setCustomCallLabel] = useState('');
   const [videoPlatforms, setVideoPlatforms] = useState<string[]>([]);
 
+  // Scheduling preferences (moved from onboarding)
+  const [socialGoal, setSocialGoal] = useState('');
+  const [preferredDuration, setPreferredDuration] = useState('');
+  const [preferredCallDuration, setPreferredCallDuration] = useState('');
+
   // Event interest preferences
   const [eventInterests, setEventInterests] = useState<string[]>([]);
   const [eventCity, setEventCity] = useState('');
@@ -77,6 +82,9 @@ export default function SettingsPage() {
             setOfficeDays(me.office_days.map((d: number) => dayMap[d]).filter(Boolean));
           }
           if (me.office_schedule_varies !== undefined) setOfficeVaries(me.office_schedule_varies);
+          if (me.social_goal) setSocialGoal(me.social_goal);
+          if (me.preferred_duration) setPreferredDuration(me.preferred_duration);
+          if (me.preferred_call_duration) setPreferredCallDuration(me.preferred_call_duration);
           if (me.event_interests) setEventInterests(me.event_interests);
           if (me.event_city) setEventCity(me.event_city);
           if (me.display_name) setDisplayName(me.display_name);
@@ -117,6 +125,9 @@ export default function SettingsPage() {
           officeScheduleVaries: officeVaries,
           callWindows,
           videoPlatforms,
+          socialGoal: socialGoal || undefined,
+          preferredDuration: preferredDuration || undefined,
+          preferredCallDuration: preferredCallDuration || undefined,
           eventInterests,
           eventCity,
           displayName: displayName.trim() || undefined,
@@ -613,6 +624,34 @@ export default function SettingsPage() {
                           : '💡 Slotted will be very selective, only suggesting the best opportunities.'}
                 </p>
               </div>
+
+              {/* Social goal */}
+              <div className="mt-4 border-t border-gray-100 pt-4">
+                <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
+                  Social goal
+                </label>
+                <p className="mt-0.5 text-[10px] text-gray-400">What direction do you want to move in?</p>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'increase', emoji: '📈', label: 'See people more' },
+                    { value: 'maintain', emoji: '⚖️', label: 'Stay the same' },
+                    { value: 'decrease', emoji: '📉', label: 'More downtime' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setSocialGoal(opt.value)}
+                      className={`rounded-lg border px-3 py-2 text-center text-xs transition-all ${
+                        socialGoal === opt.value
+                          ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm font-semibold'
+                          : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="text-base">{opt.emoji}</span>
+                      <p className="mt-1 text-[10px] leading-tight">{opt.label}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -765,6 +804,32 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
+                {/* Default hangout duration */}
+                <div className="border-t border-teal-100 pt-3">
+                  <label className="block text-[11px] font-semibold text-gray-700">Default hangout length</label>
+                  <p className="text-[10px] text-gray-400 mb-2">How long are your in-person hangouts?</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { value: 'quick', emoji: '⚡', label: '30–60 min' },
+                      { value: 'medium', emoji: '☕', label: '1–2 hrs' },
+                      { value: 'long', emoji: '🍽️', label: '2–4 hrs' },
+                      { value: 'half-day', emoji: '🎉', label: '4+ hrs' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setPreferredDuration(opt.value)}
+                        className={`rounded-lg border px-3 py-2 text-[11px] transition-all ${
+                          preferredDuration === opt.value
+                            ? 'border-teal-400 bg-teal-50 text-teal-700 shadow-sm font-semibold'
+                            : 'border-gray-200 text-gray-500 hover:border-teal-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        {opt.emoji} {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Travel buffer */}
                 <div className="border-t border-teal-100 pt-3">
                   <label className="block text-[11px] font-semibold text-gray-700">Travel buffer</label>
@@ -800,6 +865,31 @@ export default function SettingsPage() {
               <p className="text-xs text-gray-500 mb-3">
                 Set recurring windows when you're available for phone or video calls. These help Slotted match you with long-distance friends.
               </p>
+
+              {/* Default call duration */}
+              <div className="mb-4">
+                <label className="block text-[11px] font-semibold text-violet-700 mb-2">Default call length</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { value: 'quick', emoji: '💬', label: '10–20 min' },
+                    { value: 'medium', emoji: '📱', label: '30–60 min' },
+                    { value: 'long', emoji: '📞', label: '1–2 hrs' },
+                    { value: 'none', emoji: '🙅', label: "I don't do calls" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setPreferredCallDuration(opt.value)}
+                      className={`rounded-lg border px-3 py-2 text-[11px] transition-all ${
+                        preferredCallDuration === opt.value
+                          ? 'border-violet-400 bg-violet-50 text-violet-700 shadow-sm font-semibold'
+                          : 'border-gray-200 text-gray-500 hover:border-violet-200 hover:bg-violet-50/50'
+                      }`}
+                    >
+                      {opt.emoji} {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* Preferred video platforms */}
               <div className="mb-4">

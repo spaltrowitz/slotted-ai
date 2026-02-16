@@ -542,6 +542,7 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
       neighborhood, workNeighborhood, officeDays,
       callWindows, tripBufferBefore, tripBufferAfter, shareHangouts, officeScheduleVaries,
       eventInterests, eventCity, displayName, videoPlatforms,
+      socialGoal, preferredDuration, preferredCallDuration,
     } = req.body;
 
     const updates: Record<string, any> = {};
@@ -563,6 +564,9 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
     if (shareHangouts !== undefined) updates.share_hangouts = shareHangouts;
     if (eventInterests !== undefined) updates.event_interests = eventInterests;
     if (eventCity !== undefined) updates.event_city = eventCity;
+    if (socialGoal !== undefined) updates.social_goal = socialGoal;
+    if (preferredDuration !== undefined) updates.preferred_duration = preferredDuration;
+    if (preferredCallDuration !== undefined) updates.preferred_call_duration = preferredCallDuration;
 
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ error: "No fields to update" });
@@ -1315,7 +1319,8 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
     }
   }
 
-  // Generate free blocks: invert busy within 8am–10pm each day (user's timezone)
+  // Generate free blocks: invert busy within 8am–9pm each day (user's timezone)
+  // Note: 9pm (21:00) not 10pm — most people don't want social plans at 10pm
   const tz = dbUser.timezone || "America/New_York";
   const freeBlocks: { start: string; end: string }[] = [];
 
@@ -1323,14 +1328,14 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
     const dayStart = new Date(now);
     dayStart.setDate(dayStart.getDate() + d);
 
-    // Calculate 8am and 10pm in the user's timezone
+    // Calculate 8am and 9pm in the user's timezone
     const dayStr = dayStart.toLocaleDateString("en-CA", { timeZone: tz }); // YYYY-MM-DD
     const dayOpen = new Date(`${dayStr}T08:00:00`);
-    const dayClose = new Date(`${dayStr}T22:00:00`);
+    const dayClose = new Date(`${dayStr}T21:00:00`);
 
     // Convert to UTC using timezone offset estimation
     const utcOpen = zonedToUtc(dayStr, "08:00", tz);
-    const utcClose = zonedToUtc(dayStr, "22:00", tz);
+    const utcClose = zonedToUtc(dayStr, "21:00", tz);
 
     if (utcOpen >= windowEnd || utcClose <= now) continue;
 
@@ -1618,7 +1623,7 @@ function timeSlotToHourRange(slot: string): { start: number; end: number } | nul
     case "morning":   return { start: 8, end: 12 };
     case "afternoon": return { start: 12, end: 17 };
     case "evening":   return { start: 17, end: 21 };
-    case "night":     return { start: 21, end: 23 };
+    case "night":     return { start: 20, end: 21 }; // narrow: sync engine caps at 9pm
     default:          return null;
   }
 }
@@ -2408,25 +2413,6 @@ app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
 
     if (mErr) { res.status(500).json({ error: mErr.message }); return; }
 
-    // Auto-friend all group members with each other (accepted status since creator vouches)
-    if (allIds.length > 1) {
-      for (let i = 0; i < allIds.length; i++) {
-        for (let j = i + 1; j < allIds.length; j++) {
-          const [userA, userB] = allIds[i] < allIds[j] ? [allIds[i], allIds[j]] : [allIds[j], allIds[i]];
-          try {
-            await sb.from("friendships")
-              .upsert(
-                { user_a_id: userA, user_b_id: userB, invited_by: me.id, status: "accepted" },
-                { onConflict: "user_a_id,user_b_id", ignoreDuplicates: false },
-              );
-          } catch (friendErr) {
-            console.error(`Failed to auto-friend ${userA} <-> ${userB}:`, friendErr);
-          }
-        }
-      }
-      console.log(`👥 Auto-friended ${allIds.length} group members with each other`);
-    }
-
     // Handle invited emails — create pending invites with group_id
     const pendingResults: string[] = [];
     if (hasInvitedEmails) {
@@ -2507,22 +2493,6 @@ app.put("/groups/:id", requireAuth, async (req: AuthRequest, res: Response) => {
       const allIds = [me.id, ...memberIds.filter((id: string) => id !== me.id)];
       const rows = allIds.map((uid: string) => ({ group_id: groupId, user_id: uid }));
       await sb.from("friend_group_members").insert(rows);
-
-      // Auto-friend all group members with each other
-      if (allIds.length > 1) {
-        for (let i = 0; i < allIds.length; i++) {
-          for (let j = i + 1; j < allIds.length; j++) {
-            const [userA, userB] = allIds[i] < allIds[j] ? [allIds[i], allIds[j]] : [allIds[j], allIds[i]];
-            try {
-              await sb.from("friendships")
-                .upsert(
-                  { user_a_id: userA, user_b_id: userB, invited_by: me.id, status: "accepted" },
-                  { onConflict: "user_a_id,user_b_id", ignoreDuplicates: false },
-                );
-            } catch { /* ignore */ }
-          }
-        }
-      }
     }
 
     res.json({ success: true });
@@ -5600,13 +5570,13 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
       }
     }
 
-    // Redirect back to the frontend settings page
+    // Redirect back to the frontend dashboard (not settings — avoids overwhelming new users)
     const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
-    res.redirect(`${frontendUrl}/settings?calendar=connected`);
+    res.redirect(`${frontendUrl}/dashboard?calendar=connected`);
   } catch (err: any) {
     console.error("Calendar OAuth callback error:", err);
     const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
-    res.redirect(`${frontendUrl}/settings?calendar=error`);
+    res.redirect(`${frontendUrl}/dashboard?calendar=error`);
   }
 });
 

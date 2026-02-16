@@ -124,12 +124,15 @@
 
 #### 8. Calendar Write Access (Event Creation)
 
-- **Description:** Automatically create calendar events when meetup is confirmed
-- **User Value:** One less manual step (currently users add to calendar themselves)
+- **Description:** Automatically create calendar events when meetup is confirmed, using incremental Google OAuth scopes
+- **User Value:** One less manual step (currently users use a deep link or .ics download). Truly seamless — event appears silently on their calendar after one-time consent.
 - **Requirements:**
-  - Request elevated OAuth permissions (write access)
-  - Create event with title, time, location, attendees
-  - Handle calendar conflicts gracefully
+  - Implement incremental Google OAuth: request read-only at signup, prompt for `calendar.events` write scope only when user first tries to add an event
+  - Store upgraded token alongside existing read-only token
+  - Create event via Google Calendar API silently after first consent
+  - Handle Apple Calendar via .ics download fallback (no reliable web API exists)
+  - Include attendee emails in event so it sends Google Calendar invites to participants
+- **Note:** Google will show a scarier permission screen for write access ("manage your calendar events"). Using incremental scopes avoids showing this at signup, preserving low-friction onboarding.
 - **Effort:** 2 weeks
 - **RICE Score:** (600 users × 5 impact × 70% confidence) / 2 = **1050**
 
