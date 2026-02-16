@@ -2658,6 +2658,26 @@ app.post("/groups/:id/members", requireAuth, async (req: AuthRequest, res: Respo
       } catch { /* ignore notification errors */ }
     }
 
+    // Notify existing group members that someone new was added
+    const newMemberNames: string[] = [];
+    for (const uid of newIds) {
+      const u = await getDbUserById(uid);
+      if (u?.display_name) newMemberNames.push(u.display_name.split(" ")[0]);
+    }
+    const namesStr = newMemberNames.join(", ") || "someone";
+    const existingMemberIds = [...existingIds].filter((id) => id !== me.id);
+    for (const existingId of existingMemberIds) {
+      try {
+        await createNotification({
+          userId: existingId as string,
+          type: "friend_accepted",
+          title: `${namesStr} joined "${group?.name || 'your group'}"`,
+          body: `${me.display_name || "Someone"} added ${namesStr} to the group "${group?.name || ''}"`,
+          relatedUserId: me.id,
+        });
+      } catch { /* ignore */ }
+    }
+
     res.json({ added: newIds.length });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

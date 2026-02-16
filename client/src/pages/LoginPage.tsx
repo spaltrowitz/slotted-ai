@@ -39,25 +39,21 @@ export default function LoginPage() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-btn text-sm font-bold text-white shadow-md">S</div>
           <span className="font-display text-xl font-bold tracking-tight text-gray-900">Slotted</span>
         </div>
-
       </nav>
 
       {/* Hero section */}
       <div className="relative z-10 mx-auto max-w-3xl px-6 pt-16 pb-10 text-center">
-        <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/80 px-3.5 py-1.5 text-xs font-medium text-gray-500 shadow-sm backdrop-blur-sm">
-          <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" />
-          Private beta — invite only
-        </div>
         <h1 className="font-display text-5xl font-extrabold tracking-tight text-gray-900 sm:text-6xl leading-[1.1]">
           Stop texting back and forth.{' '}
           <span className="gradient-text">Just hang out.</span>
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-gray-500">
-          Slotted connects to your calendar, finds when you and your friends are both free, and helps you make plans — without the group chat chaos. It even nudges you when it's been too long since you've seen someone.
+          Slotted connects to your calendar, finds when you and your friends are both free, and makes it ridiculously easy to actually make plans.
         </p>
-        <p className="mx-auto mt-2 text-sm text-gray-400">
-          Built for busy people who'd rather hang out than plan to hang out.
-        </p>
+        <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/80 px-3.5 py-1.5 text-xs font-medium text-gray-400 shadow-sm backdrop-blur-sm">
+          <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" />
+          Private beta — invite only
+        </div>
 
         {/* CTA */}
         <div className="mt-8 flex flex-col items-center gap-3">
@@ -96,10 +92,6 @@ export default function LoginPage() {
               {authError}
             </div>
           )}
-
-          <p className="mt-1 text-xs text-gray-400">
-            🔒 We only see free/busy — never event names or details.
-          </p>
         </div>
       </div>
 
@@ -130,14 +122,14 @@ export default function LoginPage() {
               step: '3',
               emoji: '✨',
               title: 'Get suggestions',
-              desc: `AI picks the best times. Accept and it's on both calendars.`,
+              desc: `AI suggests times based on your preferences — accept and it's on both calendars.`,
               color: 'from-amber-50 to-orange-50',
               border: 'border-amber-100',
             },
           ].map((item) => (
             <div
               key={item.step}
-              className={`rounded-2xl border ${item.border} bg-gradient-to-br ${item.color} p-5 shadow-sm`}
+              className={`rounded-2xl border ${item.border} bg-gradient-to-br ${item.color} p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md`}
             >
               <div className="mb-3 flex items-center gap-2.5">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-gray-900 shadow-sm ring-1 ring-gray-200/60">
@@ -152,30 +144,29 @@ export default function LoginPage() {
         </div>
       </section>
 
-      {/* What you can do */}
-      <section className="relative z-10 mx-auto max-w-2xl px-6 pb-10">
-        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-6">
-          What you can do with Slotted
+      {/* Why it matters */}
+      <section className="relative z-10 mx-auto max-w-lg px-6 pb-6">
+        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
+          Why it matters
         </h2>
-        <div className="space-y-3">
+        <div className="flex flex-col items-center gap-2">
           {[
-            { emoji: '📅', text: 'Find mutual free time with any friend — AI handles the calendar math' },
-            { emoji: '👥', text: 'Schedule groups without the 47-message chat' },
-            { emoji: '🏙️', text: 'Plan in-person hangouts with nearby friends' },
-            { emoji: '🌎', text: 'Schedule calls across time zones with long-distance friends' },
-            { emoji: '🔋', text: 'Set your social battery so plans match your energy' },
-            { emoji: '🎫', text: 'Discover local events and share them as hangout ideas' },
+            { emoji: '📅', text: 'Hang out on your terms. Slotted finds times that work.' },
+            { emoji: '💬', text: 'Turn "let\'s catch up soon" into a real plan, fast.' },
+            { emoji: '🔔', text: 'Get a nudge when it\'s been too long since you hung out.' },
+            { emoji: '🎫', text: 'Find something fun to do together, not just a time.' },
+            { emoji: '🔒', text: 'Your calendar stays private. We only see free or busy.' },
           ].map((item, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white/60 px-4 py-3 shadow-sm backdrop-blur-sm">
-              <span className="text-lg shrink-0">{item.emoji}</span>
-              <span className="text-sm text-gray-600 leading-relaxed">{item.text}</span>
+            <div key={i} className="inline-flex items-center gap-2.5 rounded-lg border border-gray-100 bg-white/60 px-3 py-2.5 shadow-sm backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+              <span className="text-base shrink-0">{item.emoji}</span>
+              <span className="text-sm text-gray-600">{item.text}</span>
             </div>
           ))}
         </div>
       </section>
 
       {/* Bottom CTA — only show for logged-out users */}
-      <section className="relative z-10 mx-auto max-w-xl px-6 pb-10 text-center">
+      <section className="relative z-10 mx-auto max-w-xl px-6 pb-6 text-center">
         {user ? null : (
           <button
             onClick={signInWithGoogle}
@@ -193,8 +184,8 @@ export default function LoginPage() {
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 pb-8 text-center text-xs text-gray-400">
-        Made with ❤️ for people who want to see their friends more
+      <footer className="relative z-10 pb-8 text-center">
+        <p className="text-xs text-gray-400">Built for busy people who'd rather hang out than plan to hang out.</p>
       </footer>
     </div>
   );

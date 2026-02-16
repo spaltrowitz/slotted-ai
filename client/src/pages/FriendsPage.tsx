@@ -350,11 +350,16 @@ export default function FriendsPage() {
     }
   };
 
+  const [addedMemberIds, setAddedMemberIds] = useState<Set<string>>(new Set());
+
   const handleAddMemberToGroup = async (groupId: string, memberId: string) => {
     setAddingMemberIds((prev) => new Set(prev).add(memberId));
     try {
       await api.post(`/groups/${groupId}/members`, { memberIds: [memberId] });
+      setAddedMemberIds((prev) => new Set(prev).add(memberId));
       fetchGroups(); // refresh to show updated member list
+      // Clear the success state after 2 seconds
+      setTimeout(() => setAddedMemberIds((prev) => { const next = new Set(prev); next.delete(memberId); return next; }), 2000);
     } catch (err) {
       console.error('Failed to add member to group:', err);
     } finally {
@@ -683,12 +688,17 @@ export default function FriendsPage() {
                           <div className="flex flex-wrap gap-1.5">
                             {addableFriends.map(f => {
                               const adding = addingMemberIds.has(f.friend.id);
+                              const added = addedMemberIds.has(f.friend.id);
                               return (
                                 <button
                                   key={f.friend.id}
-                                  onClick={() => !adding && handleAddMemberToGroup(group.id, f.friend.id)}
-                                  disabled={adding}
-                                  className="flex items-center gap-1.5 rounded-full border border-purple-200 bg-white px-3 py-1 text-[11px] font-medium text-purple-700 transition-all hover:bg-purple-50 hover:border-purple-300 disabled:opacity-50"
+                                  onClick={() => !adding && !added && handleAddMemberToGroup(group.id, f.friend.id)}
+                                  disabled={adding || added}
+                                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-all disabled:opacity-70 ${
+                                    added
+                                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                                      : 'border-purple-200 bg-white text-purple-700 hover:bg-purple-50 hover:border-purple-300'
+                                  }`}
                                 >
                                   {f.friend.photoUrl ? (
                                     <img src={f.friend.photoUrl} alt="" className="h-4 w-4 rounded-full" />
@@ -698,7 +708,7 @@ export default function FriendsPage() {
                                     </span>
                                   )}
                                   {f.friend.displayName.split(' ')[0]}
-                                  {adding ? ' …' : ' +'}
+                                  {adding ? ' …' : added ? ' ✓' : ' +'}
                                 </button>
                               );
                             })}
