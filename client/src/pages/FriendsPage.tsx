@@ -132,10 +132,7 @@ export default function FriendsPage() {
   const [removingFriend, setRemovingFriend] = useState<FriendRecord | null>(null);
   const [removeLoading, setRemoveLoading] = useState(false);
 
-  // Add friend by email state
-  const [addFriendEmail, setAddFriendEmail] = useState('');
-  const [addFriendStatus, setAddFriendStatus] = useState<'idle' | 'sending' | 'sent' | 'pending' | 'error'>('idle');
-  const [addFriendMessage, setAddFriendMessage] = useState('');
+
 
   // Add member to group state
   const [addMemberGroupId, setAddMemberGroupId] = useState<string | null>(null);
@@ -223,34 +220,7 @@ export default function FriendsPage() {
     setSearchParams({});
   };
 
-  const handleAddFriendByEmail = async () => {
-    const email = addFriendEmail.trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
-    if (acceptedFriends.some(f => f.friend.email.toLowerCase() === email)) {
-      setAddFriendStatus('error');
-      setAddFriendMessage('Already friends!');
-      setTimeout(() => { setAddFriendStatus('idle'); setAddFriendMessage(''); }, 2000);
-      return;
-    }
-    setAddFriendStatus('sending');
-    try {
-      const res = await api.post('/friends/invite', { email });
-      if (res.data.pending) {
-        setAddFriendStatus('pending');
-        setAddFriendMessage(res.data.message || `${email} isn't on Slotted yet — they'll be connected when they join!`);
-      } else {
-        setAddFriendStatus('sent');
-        setAddFriendMessage('Friend request sent!');
-        fetchFriends();
-      }
-      setAddFriendEmail('');
-      setTimeout(() => { setAddFriendStatus('idle'); setAddFriendMessage(''); }, 4000);
-    } catch (err: any) {
-      setAddFriendStatus('error');
-      setAddFriendMessage(err?.response?.data?.error || 'Failed to send request');
-      setTimeout(() => { setAddFriendStatus('idle'); setAddFriendMessage(''); }, 3000);
-    }
-  };
+
 
   const handleFriendAction = async (friendshipId: string, action: 'accept' | 'decline') => {
     if (!user) return;
@@ -603,44 +573,6 @@ export default function FriendsPage() {
             {copied ? '✅ Copied!' : '📋 Copy link'}
           </button>
         </div>
-      </div>
-
-      {/* Add friend by email */}
-      <div className="mb-8 rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-sm">🔍</span>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Add a friend</h3>
-        </div>
-        <p className="text-[11px] text-gray-400 mb-3">
-          Enter the email your friend uses on Slotted. If they're already here, they'll get an in-app friend request. If not, they'll be auto-connected when they join — share your invite link to get them on board!
-        </p>
-        <div className="flex gap-2">
-          <input
-            type="email"
-            value={addFriendEmail}
-            onChange={(e) => setAddFriendEmail(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFriendByEmail(); } }}
-            placeholder="friend@email.com"
-            className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100 transition-all"
-          />
-          <button
-            onClick={handleAddFriendByEmail}
-            disabled={addFriendStatus === 'sending' || !addFriendEmail.trim()}
-            className="rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
-          >
-            {addFriendStatus === 'sending' ? '...' : '+ Add'}
-          </button>
-        </div>
-        {addFriendMessage && (
-          <p className={`mt-2 text-xs font-medium ${
-            addFriendStatus === 'sent' ? 'text-emerald-600'
-              : addFriendStatus === 'pending' ? 'text-amber-600'
-                : addFriendStatus === 'error' ? 'text-red-500'
-                  : 'text-gray-500'
-          }`}>
-            {addFriendStatus === 'sent' && '✅ '}{addFriendStatus === 'pending' && '📩 '}{addFriendStatus === 'error' && '❌ '}{addFriendMessage}
-          </p>
-        )}
       </div>
 
       {/* Groups Section — always visible */}

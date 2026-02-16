@@ -199,7 +199,7 @@ export default function SettingsPage() {
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">1</span>
             <div>
               <h2 className="text-sm font-bold text-gray-800">Account & Calendars</h2>
-              <p className="text-[11px] text-gray-400">Connect your calendars so Slotted knows when you're free</p>
+              <p className="text-[11px] text-gray-400">We use your calendar to find free windows — so we can suggest times that actually work for you and your friends</p>
             </div>
           </div>
 
@@ -497,7 +497,7 @@ export default function SettingsPage() {
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">2</span>
             <div>
               <h2 className="text-sm font-bold text-gray-800">Planning Style</h2>
-              <p className="text-[11px] text-gray-400">This shapes how Slotted suggests plans for every friendship</p>
+              <p className="text-[11px] text-gray-400">We use this to decide how far in advance to suggest plans — so Slotted matches your vibe</p>
             </div>
           </div>
 
@@ -539,7 +539,7 @@ export default function SettingsPage() {
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">3</span>
             <div>
               <h2 className="text-sm font-bold text-gray-800">Social Battery</h2>
-              <p className="text-[11px] text-gray-400">How much social time works for you across all friends?</p>
+              <p className="text-[11px] text-gray-400">We use this to limit how many plans we suggest per week — so you don't get overwhelmed</p>
             </div>
           </div>
 
@@ -630,7 +630,7 @@ export default function SettingsPage() {
                 <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
                   Social goal
                 </label>
-                <p className="mt-0.5 text-[10px] text-gray-400">What direction do you want to move in?</p>
+                <p className="mt-0.5 text-[10px] text-gray-400">We use this to adjust how proactively Slotted nudges you toward plans</p>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {[
                     { value: 'increase', emoji: '📈', label: 'See people more' },
@@ -664,7 +664,7 @@ export default function SettingsPage() {
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">4</span>
             <div>
               <h2 className="text-sm font-bold text-gray-800">How You Connect</h2>
-              <p className="text-[11px] text-gray-400">Set up your preferences for each type of hangout</p>
+              <p className="text-[11px] text-gray-400">We use these to tailor time suggestions — so in-person meetups and calls each get the right kind of slot</p>
             </div>
           </div>
 
@@ -751,7 +751,7 @@ export default function SettingsPage() {
                 {/* Preferred times for in-person */}
                 <div className="border-t border-teal-100 pt-3">
                   <label className="block text-[11px] font-semibold text-gray-700">When are you free to hang out?</label>
-                  <p className="text-[10px] text-gray-400 mb-2">Select all that apply</p>
+                  <p className="text-[10px] text-gray-400 mb-2">We'll prioritize suggesting times in these windows first</p>
                   <div className="grid grid-cols-2 gap-3">
                     {/* Weekdays */}
                     <div className="space-y-1.5">
@@ -807,7 +807,7 @@ export default function SettingsPage() {
                 {/* Default hangout duration */}
                 <div className="border-t border-teal-100 pt-3">
                   <label className="block text-[11px] font-semibold text-gray-700">Default hangout length</label>
-                  <p className="text-[10px] text-gray-400 mb-2">How long are your in-person hangouts?</p>
+                  <p className="text-[10px] text-gray-400 mb-2">We'll look for free windows that fit this length when suggesting meetups</p>
                   <div className="grid grid-cols-2 gap-1.5">
                     {[
                       { value: 'quick', emoji: '⚡', label: '30–60 min' },
@@ -833,7 +833,7 @@ export default function SettingsPage() {
                 {/* Travel buffer */}
                 <div className="border-t border-teal-100 pt-3">
                   <label className="block text-[11px] font-semibold text-gray-700">Travel buffer</label>
-                  <p className="text-[10px] text-gray-400 mb-2">Padding before/after each meetup for getting there</p>
+                  <p className="text-[10px] text-gray-400 mb-2">We add this padding around meetups so you have time to get there and back</p>
                   <div className="flex items-center gap-3">
                     <input
                       type="range"
@@ -1094,7 +1094,7 @@ export default function SettingsPage() {
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">5</span>
             <div>
               <h2 className="text-sm font-bold text-gray-800">Event Interests</h2>
-              <p className="text-[11px] text-gray-400">Tell us what types of events you enjoy — we'll help you find things to do with friends</p>
+              <p className="text-[11px] text-gray-400">We use these to surface shows, concerts, and events you'd actually want to go to with friends</p>
             </div>
           </div>
 
