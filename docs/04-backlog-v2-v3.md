@@ -130,6 +130,7 @@
   - Implement incremental Google OAuth: request read-only at signup, prompt for `calendar.events` write scope only when user first tries to add an event
   - Store upgraded token alongside existing read-only token
   - Create event via Google Calendar API silently after first consent
+  - **Include attendee emails** in the created event so Google sends calendar invites to all participants automatically
   - Handle Apple Calendar via .ics download fallback (no reliable web API exists)
   - Include attendee emails in event so it sends Google Calendar invites to participants
 - **Note:** Google will show a scarier permission screen for write access ("manage your calendar events"). Using incremental scopes avoids showing this at signup, preserving low-friction onboarding.

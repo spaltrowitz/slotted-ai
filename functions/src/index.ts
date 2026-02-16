@@ -223,7 +223,30 @@ app.get("/notifications", requireAuth, async (req: AuthRequest, res: Response) =
       .limit(50);
 
     if (error) { res.status(500).json({ error: error.message }); return; }
-    res.json(data || []);
+
+    // For meetup_request notifications, look up the user's current RSVP status
+    // so the frontend can show the correct state after a page refresh
+    const notifications = data || [];
+    const meetupNotifications = notifications.filter(
+      (n: any) => n.type === "meetup_request" && n.related_id,
+    );
+    if (meetupNotifications.length > 0) {
+      const meetupIds = [...new Set(meetupNotifications.map((n: any) => n.related_id))];
+      const { data: myRsvps } = await getSupabase()
+        .from("meetup_participants")
+        .select("meetup_id, rsvp")
+        .eq("user_id", me.id)
+        .in("meetup_id", meetupIds);
+
+      const rsvpMap = new Map((myRsvps || []).map((r: any) => [r.meetup_id, r.rsvp]));
+      for (const n of notifications) {
+        if (n.type === "meetup_request" && n.related_id) {
+          (n as any).my_rsvp = rsvpMap.get(n.related_id) || "pending";
+        }
+      }
+    }
+
+    res.json(notifications);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

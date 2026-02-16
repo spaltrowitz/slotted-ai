@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 import AddToCalendarModal from './AddToCalendarModal';
 
 type HangoutMode = 'in_person' | 'phone' | 'video';
@@ -43,6 +44,8 @@ interface FriendAvailabilityProps {
 }
 
 export default function FriendAvailability({ friendId, friendName, onClose, onBook }: FriendAvailabilityProps) {
+  const { user } = useAuth();
+  const myFirstName = user?.displayName?.split(' ')[0] || 'Me';
   const [loading, setLoading] = useState(true);
   const [suggestions, setSuggestions] = useState<ScoredSlot[]>([]);
   const [overlaps, setOverlaps] = useState<{ start: string; end: string }[]>([]);
@@ -85,11 +88,12 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
     const platformLabel = hangoutMode === 'video' && videoPlatform
       ? VIDEO_PLATFORMS.find(p => p.value === videoPlatform)?.label || ''
       : '';
+    const friendFirst = friendName.split(' ')[0];
     const bookingTitle = hangoutMode === 'in_person'
-      ? `Hangout with ${friendName}`
-      : platformLabel
-        ? `${platformLabel} call with ${friendName}`
-        : `${modeLabel} with ${friendName}`;
+      ? `${myFirstName} & ${friendFirst} hangout`
+      : hangoutMode === 'phone'
+        ? `${myFirstName} & ${friendFirst} phone call`
+        : `${myFirstName} & ${friendFirst} video call`;
     try {
       const { data } = await api.post('/meetups', {
         title: bookingTitle,

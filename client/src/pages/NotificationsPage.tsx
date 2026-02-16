@@ -19,6 +19,7 @@ interface Notification {
     display_name: string;
     photo_url: string | null;
   };
+  my_rsvp?: string; // from backend: current RSVP status for meetup_request notifications
 }
 
 export default function NotificationsPage() {
@@ -42,6 +43,16 @@ export default function NotificationsPage() {
     try {
       const res = await api.get('/notifications');
       setNotifications(res.data);
+      // Pre-populate RSVP state from backend so buttons don't reappear after refresh
+      const preRsvp: Record<string, string> = {};
+      for (const n of res.data) {
+        if (n.type === 'meetup_request' && n.my_rsvp && n.my_rsvp !== 'pending') {
+          preRsvp[n.id] = n.my_rsvp;
+        }
+      }
+      if (Object.keys(preRsvp).length > 0) {
+        setRsvpDone((prev) => ({ ...preRsvp, ...prev }));
+      }
     } catch {
       // silently fail
     } finally {
