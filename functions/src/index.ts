@@ -248,8 +248,11 @@ app.get("/notifications", requireAuth, async (req: AuthRequest, res: Response) =
       const meetupStatusMap = new Map((meetups || []).map((m: any) => [m.id, m.status]));
 
       for (const n of notifications) {
-        if (n.type === "meetup_request" && n.related_id) {
-          (n as any).my_rsvp = rsvpMap.get(n.related_id) || "pending";
+        if (n.related_id && rsvpMap.has(n.related_id)) {
+          (n as any).my_rsvp = rsvpMap.get(n.related_id);
+        }
+        if (n.type === "meetup_request" && n.related_id && !rsvpMap.has(n.related_id)) {
+          (n as any).my_rsvp = "pending";
         }
         if (n.related_id && meetupStatusMap.has(n.related_id)) {
           (n as any).meetup_status = meetupStatusMap.get(n.related_id);
@@ -265,6 +268,8 @@ app.get("/notifications", requireAuth, async (req: AuthRequest, res: Response) =
     const filtered = notifications.filter((n: any) => {
       // Hide notifications for cancelled/didnt_happen meetups
       if (["didnt_happen", "cancelled"].includes((n as any).meetup_status)) return false;
+      // Hide meetup notifications if I've declined the meetup
+      if ((n as any).my_rsvp === "declined" && ["meetup_confirmed", "meetup_request", "meetup_reminder"].includes(n.type)) return false;
       // Hide meetup_request if a meetup_confirmed notification exists for the same meetup
       if (n.type === "meetup_request" && n.related_id && confirmedMeetupIds.has(n.related_id)) return false;
       return true;
