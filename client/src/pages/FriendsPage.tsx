@@ -326,7 +326,7 @@ export default function FriendsPage() {
   };
 
   const handleCreateGroup = async () => {
-    if (!newGroupName.trim() || (createGroupSelectedIds.size === 0 && invitedEmails.length === 0) || !user) return;
+    if (!newGroupName.trim() || (createGroupSelectedIds.size + invitedEmails.length) < 2 || !user) return;
     // Nudge users creating a 2-person "group" toward 1:1 Find Times
     const totalMembers = createGroupSelectedIds.size + invitedEmails.length + 1; // +1 for creator
     if (totalMembers <= 2 && invitedEmails.length === 0) {
@@ -745,8 +745,8 @@ export default function FriendsPage() {
           <div className="flex gap-2">
             <button
               onClick={handleCreateGroup}
-              disabled={creatingGroup || !newGroupName.trim() || (createGroupSelectedIds.size === 0 && invitedEmails.length === 0)}
-              className="rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md disabled:opacity-50"
+              disabled={creatingGroup || !newGroupName.trim() || (createGroupSelectedIds.size + invitedEmails.length) < 2}
+              className="rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {creatingGroup ? 'Creating...' : 'Create Group'}
             </button>

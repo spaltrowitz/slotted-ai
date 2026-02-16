@@ -84,10 +84,6 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
 
   const handleBook = async (slot: ScoredSlot) => {
     setBookingSlot(slot.start);
-    const modeLabel = MODE_CONFIG[hangoutMode].shortLabel;
-    const platformLabel = hangoutMode === 'video' && videoPlatform
-      ? VIDEO_PLATFORMS.find(p => p.value === videoPlatform)?.label || ''
-      : '';
     const friendFirst = friendName.split(' ')[0];
     const bookingTitle = hangoutMode === 'in_person'
       ? `${myFirstName} & ${friendFirst} hangout`
