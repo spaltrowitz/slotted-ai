@@ -1,0 +1,5 @@
+# Test Agent Data
+.env
+service-account.json
+dist/
+node_modules/

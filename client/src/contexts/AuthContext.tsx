@@ -17,6 +17,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 import api from '../lib/api';
+import { trackSignUp, trackSignIn, trackCalendarConnected, trackOnboardingComplete, trackOnboardingSkipped } from '../lib/analytics';
 
 interface AuthContextType {
   user: User | null;
@@ -151,6 +152,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const additionalInfo = getAdditionalUserInfo(result);
       if (additionalInfo?.isNewUser) {
         setIsNewUser(true);
+        trackSignUp();
+      } else {
+        trackSignIn();
       }
       // Auto-connect with referrer after successful sign-in
       if (result.user) {
@@ -184,10 +188,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const completeOnboarding = () => {
     setOnboardingComplete(true);
     localStorage.setItem('slotted_onboarding_complete', 'true');
+    trackOnboardingComplete();
   };
 
   const skipOnboarding = () => {
     setIsNewUser(false);
+    trackOnboardingSkipped();
     // Don't mark complete — so the banner shows
   };
 
@@ -228,6 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCalendarConnected(true);
         localStorage.setItem('slotted_apple_calendar_connected', 'true');
         localStorage.setItem('slotted_calendar_connected', 'true');
+        trackCalendarConnected('apple');
         return { success: true, calendarsFound: data.calendarsFound };
       }
       return { success: false, error: 'Unknown error' };
@@ -307,6 +314,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('slotted_calendar_connected', 'true');
       localStorage.setItem('slotted_google_calendar_connected', 'true');
       setCalendarJustConnected(true);
+      trackCalendarConnected('google');
       setTimeout(() => setCalendarJustConnected(false), 3000);
       // Clean up the URL
       const url = new URL(window.location.href);

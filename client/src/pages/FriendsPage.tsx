@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import { useAuth } from '../contexts/AuthContext';
+import { trackFriendInvited, trackInviteLinkCopied, trackFriendAdded } from '../lib/analytics';
 import FriendAvailability from '../components/FriendAvailability';
 import GroupAvailability from '../components/GroupAvailability';
 import api from '../lib/api';
@@ -49,7 +50,7 @@ function HowItWorks() {
 
   const steps = [
     { emoji: '1️⃣', title: 'Invite a friend', desc: 'Share your invite link via text, email, or copy link. They\'ll get a friend request when they sign up.' },
-    { emoji: '2️⃣', title: 'Connect calendars', desc: 'Both you and your friend connect a Google or Apple calendar in Settings so Slotted can find free times.' },
+    { emoji: '2️⃣', title: 'Connect calendars', desc: 'Both you and your friend connect a Google or Apple calendar in Settings so Slotted can find free times. Tip: Ask your friends to connect their calendar too — Slotted works best when both sides are synced!' },
     { emoji: '3️⃣', title: 'Find times', desc: 'Tap "Find times" on a friend — then choose In Person, Phone Call, or Video Call. Slotted finds the best slots for each type (calls can be shorter and skip travel time).' },
     { emoji: '4️⃣', title: 'Book it', desc: 'Pick a time and hit "Book it." Your friend gets a notification in their inbox to accept or decline.' },
     { emoji: '5️⃣', title: 'Add to calendar', desc: 'After booking (or accepting), you\'ll both be prompted to save the event to a specific Google or Apple calendar.' },
@@ -84,11 +85,6 @@ function HowItWorks() {
               </div>
             </div>
           ))}
-          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 mt-2">
-            <p className="text-[11px] text-amber-700 leading-relaxed">
-              <span className="font-semibold">Tip:</span> Ask your friends to connect their calendar too — Slotted works best when both sides are synced!
-            </p>
-          </div>
           <div className="rounded-xl bg-slotted-50 border border-slotted-200 px-4 py-2.5">
             <p className="text-[11px] text-slotted-700 leading-relaxed">
               <span className="font-semibold">📲 Install the app:</span> Add Slotted to your home screen for the best experience. Go to{' '}
@@ -234,6 +230,7 @@ export default function FriendsPage() {
         },
         body: JSON.stringify({ action }),
       });
+      if (action === 'accept') trackFriendAdded();
       fetchFriends();
     } catch (err) {
       console.error('Failed to update friendship:', err);

@@ -182,7 +182,7 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
                         <span className="inline-flex items-center gap-0.5 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium">
                           <ShareIcon /> Share
                         </span>{' '}
-                        button at the bottom of Safari.
+                        button at the bottom of Safari (or top-right on iPad).
                       </>
                     }
                   />
@@ -205,6 +205,9 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
                 <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
                   <p className="text-xs text-amber-700">
                     <strong>Note:</strong> This must be done in Safari. If you're in Chrome or another browser, copy the link and open it in Safari first.
+                  </p>
+                  <p className="text-xs text-amber-700 mt-1.5">
+                    <strong>Heads up:</strong> You'll need to sign in once after installing. After that, you'll stay logged in.
                   </p>
                 </div>
               </div>

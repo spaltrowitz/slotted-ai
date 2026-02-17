@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
+import { trackMeetupScheduled } from '../lib/analytics';
 import { useAuth } from '../contexts/AuthContext';
 import AddToCalendarModal from './AddToCalendarModal';
 

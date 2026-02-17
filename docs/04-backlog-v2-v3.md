@@ -118,6 +118,46 @@
 - **Effort:** 3 weeks (linking flow, cached availability pipeline, UI for couple units)
 - **RICE Score:** (400 users × 8 impact × 70% confidence) / 3 = **747**
 
+#### 7c. Two-Way Calendar Sync (RSVP & Event Changes Flow Back to Slotted)
+
+- **Description:** When Slotted auto-adds a meetup to a user's Google or Apple calendar, changes made in the native calendar app (accept, decline, maybe, time change, deletion) should flow back into Slotted and trigger appropriate updates — status changes, notifications to other participants, and UI updates.
+- **User Value:** Eliminates the "two sources of truth" problem. Users can manage their social calendar from wherever they are (phone calendar, desktop, Slotted app) and everything stays in sync. Without this, declining in Google Calendar doesn't cancel the Slotted meetup, creating ghost plans.
+- **Origin:** Beta feedback from Tamer (Feb 2026) — after auto-add was implemented, he immediately asked "what happens if I change it in Google Calendar?"
+- **Technical Approach:**
+
+  **Google Calendar (near real-time via webhooks):**
+  - Use `calendar.events.watch()` to set up a push notification channel per user
+  - New endpoint: `POST /calendar/webhook` receives Google push notifications
+  - On notification: fetch changed events, match to Slotted meetups via `google_event_id`
+  - Map Google RSVP status → Slotted RSVP: `accepted` → accepted, `declined` → declined, `tentative` → maybe, event deleted → declined
+  - Detect time changes: if event start/end differs from meetup start/end → flag for counter-propose flow
+  - Watch channels expire after ~7 days — need a scheduled function to renew them
+  - Handle rate limits: Google sends a sync notification, then you must fetch the actual changes
+
+  **Apple Calendar (polling, delayed):**
+  - No webhook support — must poll CalDAV periodically (every 5-15 min via scheduled function)
+  - Use CalDAV REPORT to detect changes since last sync token
+  - Match events to Slotted meetups via the deterministic UID (`slotted-{meetupId}-{userId}@slotted-ai.web.app`)
+  - Parse VEVENT changes: PARTSTAT field for RSVP, DTSTART/DTEND for time changes, absence = deletion
+
+  **Conflict resolution rules:**
+  - Slotted is source of truth for multi-party state (who's invited, overall meetup status)
+  - Calendar is source of truth for individual RSVP and personal time changes
+  - If someone moves just their calendar event (not a counter-propose), only update their participant record — don't move the meetup for everyone
+  - If someone deletes the calendar event, treat as "declined" in Slotted
+
+- **Requirements:**
+  - `POST /calendar/webhook` endpoint for Google push notifications
+  - Watch channel creation on calendar connect + scheduled renewal (`sendMeetupReminders` or new function)
+  - Event change diffing: compare fetched event to stored meetup, update participant RSVP
+  - Notification dispatch: "Josh updated their RSVP to maybe for Saturday hangout"
+  - Apple: scheduled polling function (every 10 min) with CalDAV REPORT
+  - Edge cases: user disconnects calendar, event modified by someone else (shared calendar), Google API quota limits
+
+- **Effort:** 2-3 weeks (Google webhook: 1 week, Apple polling: 1 week, conflict resolution + edge cases: 3-5 days)
+- **RICE Score:** (500 users × 9 impact × 60% confidence) / 3 = **900**
+- **Dependencies:** Auto-add to calendar (already shipped), `google_event_id` stored on meetup_participants (already done)
+
 ---
 
 ### P2 (Nice-to-Have for V2)
@@ -367,6 +407,7 @@
 
 > Explore these if user research validates demand
 
+- **Post-meetup rating/log nudge:** After a confirmed meetup's end time passes, send a notification prompting users to rate the hangout and log activity details (type, duration, sentiment). This would feed the AI scoring engine with more data and improve future suggestions. Implement if user feedback indicates interest in tracking meetup quality.
 - **AI-powered conversation starters:** Suggest topics based on shared interests
 - **Expense splitting:** Built-in Venmo/PayPal for shared costs
 - **Photos & memories:** Add photos to past meetups (like a private social network)

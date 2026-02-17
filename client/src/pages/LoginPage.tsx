@@ -36,7 +36,11 @@ export default function LoginPage() {
       {/* Sticky nav */}
       <nav className="relative z-10 flex items-center justify-between px-8 py-5">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-btn text-sm font-bold text-white shadow-md">S</div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-btn text-sm font-bold text-white shadow-md">
+            <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
           <span className="font-display text-xl font-bold tracking-tight text-gray-900">Slotted</span>
         </div>
       </nav>
@@ -106,7 +110,7 @@ export default function LoginPage() {
               step: '1',
               emoji: '📅',
               title: 'Connect calendar',
-              desc: 'Sign in with Google. We only see free/busy, never event details.',
+              desc: 'Sign in with Google. We only see free/busy — never event titles or details. Your calendar stays private.',
               color: 'from-blue-50 to-cyan-50',
               border: 'border-blue-100',
             },

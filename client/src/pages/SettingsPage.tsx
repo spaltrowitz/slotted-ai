@@ -4,6 +4,7 @@ import CalendarPicker from '../components/CalendarPicker';
 import PushNotificationPrompt from '../components/PushNotificationPrompt';
 import InstallPrompt from '../components/InstallPrompt';
 import { useAuth } from '../contexts/AuthContext';
+import { trackSettingsSaved } from '../lib/analytics';
 
 export default function SettingsPage() {
   const { user, onboardingComplete, googleCalendarConnected, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, signInWithGoogle, signOut } = useAuth();
@@ -147,6 +148,7 @@ export default function SettingsPage() {
       completeOnboarding();
     }
     setSaved(true);
+    trackSettingsSaved();
     setTimeout(() => setSaved(false), 2000);
   };
 
@@ -317,6 +319,15 @@ export default function SettingsPage() {
                     </p>
                     <p className="text-[11px] text-amber-600 font-medium">
                       ⚠️ When Google asks for permissions, please select all 3 checkboxes so Slotted can work properly.
+                    </p>
+                  </div>
+                )}
+
+                {/* Calendar privacy note — shown when at least one calendar is connected */}
+                {(googleCalendarConnected || appleCalendarConnected) && (
+                  <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/40 px-3 py-2">
+                    <p className="text-[11px] text-blue-700 leading-relaxed">
+                      🔒 <strong>Your calendar is private.</strong> Friends only see when you're free or busy — never event titles, descriptions, or attendees. You choose exactly which calendars to share, and you can disconnect anytime.
                     </p>
                   </div>
                 )}
@@ -579,7 +590,7 @@ export default function SettingsPage() {
                   Always-recharge days
                 </label>
                 <p className="mt-0.5 text-[10px] text-gray-400">Select days you never want plans with anyone — Slotted won't suggest hangouts on these days</p>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-2 grid grid-cols-7 gap-1.5">
                   {[
                     { day: 0, label: 'Sun' },
                     { day: 1, label: 'Mon' },
@@ -596,14 +607,13 @@ export default function SettingsPage() {
                         onClick={() => setRechargingDays((prev) =>
                           prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
                         )}
-                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
+                        className={`flex items-center justify-center rounded-lg border py-2 text-xs font-medium transition-all ${
                           selected
                             ? 'border-red-300 bg-red-50 text-red-700'
                             : 'border-gray-200 text-gray-500 hover:border-red-200 hover:bg-red-50/50'
                         }`}
                       >
-                        {selected && <span>🔴</span>}
-                        {label}
+                        {selected ? '🔴 ' : ''}{label}
                       </button>
                     );
                   })}
@@ -902,7 +912,6 @@ export default function SettingsPage() {
                     { value: 'google_meet', emoji: '🌐', label: 'Google Meet' },
                     { value: 'teams', emoji: '💼', label: 'Teams' },
                     { value: 'whatsapp', emoji: '💬', label: 'WhatsApp' },
-                    { value: 'duo', emoji: '📞', label: 'Google Meet (Duo)' },
                   ].map((p) => {
                     const selected = videoPlatforms.includes(p.value);
                     return (
@@ -1165,8 +1174,7 @@ export default function SettingsPage() {
               {/* Info note */}
               <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3">
                 <p className="text-[11px] text-blue-700">
-                  💡 These preferences power the <strong>Events</strong> tab — we search SeatGeek & Ticketmaster for shows, concerts, and more,
-                  then match them with your friends' availability so you can find the perfect time to go together.
+                  💡 These preferences help Slotted find events you'd enjoy. Search for shows, concerts, and more from a friend's profile and plan a time to go together.
                 </p>
               </div>
             </div>

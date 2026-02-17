@@ -121,6 +121,162 @@ app.get("/health", (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// Auto-add meetup to user's calendar (Google + Apple, background, best-effort)
+// ---------------------------------------------------------------------------
+async function autoAddToCalendar(firebaseUid: string, meetup: {
+  id: string;
+  title?: string;
+  description?: string;
+  location?: string;
+  start_time: string;
+  end_time: string;
+}) {
+  try {
+    const dbUser = await getDbUser(firebaseUid);
+    if (!dbUser) return;
+
+    const sb = getSupabase();
+
+    // Check if already added (avoid duplicates)
+    const { data: existingPart } = await sb
+      .from("meetup_participants")
+      .select("google_event_id")
+      .eq("meetup_id", meetup.id)
+      .eq("user_id", dbUser.id)
+      .single();
+
+    if (existingPart?.google_event_id) return; // already on calendar
+
+    // Get participant info for the event description
+    const { data: parts } = await sb
+      .from("meetup_participants")
+      .select("user_id")
+      .eq("meetup_id", meetup.id);
+
+    const partUserIds = (parts || []).map((p: any) => p.user_id);
+    const { data: partUsers } = partUserIds.length > 0
+      ? await sb.from("users").select("display_name, email").in("id", partUserIds)
+      : { data: [] };
+
+    const attendees = (partUsers || [])
+      .filter((u: any) => u.email !== dbUser.email)
+      .map((u: any) => ({ email: u.email, displayName: u.display_name }));
+
+    const eventTitle = meetup.title || "Hangout";
+    const eventDescription = meetup.description || `Scheduled via Slotted with ${attendees.map((a: any) => a.displayName).join(", ")}`;
+
+    let addedEventId: string | null = null;
+
+    // ─── Try Google Calendar first ───
+    if (dbUser.google_refresh_token) {
+      try {
+        const oauth2 = await getAuthedCalendarClient(firebaseUid);
+        if (oauth2) {
+          const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+          const gcalEvent = await calendarApi.events.insert({
+            calendarId: "primary",
+            requestBody: {
+              summary: eventTitle,
+              description: eventDescription,
+              location: meetup.location || undefined,
+              start: {
+                dateTime: meetup.start_time,
+                timeZone: dbUser.timezone || "America/New_York",
+              },
+              end: {
+                dateTime: meetup.end_time,
+                timeZone: dbUser.timezone || "America/New_York",
+              },
+              reminders: {
+                useDefault: false,
+                overrides: [
+                  { method: "popup", minutes: 60 },
+                  { method: "popup", minutes: 15 },
+                ],
+              },
+            },
+          });
+          addedEventId = gcalEvent.data.id || null;
+          console.log(`📅 Auto-added meetup ${meetup.id} to ${dbUser.email}'s Google Calendar`);
+        }
+      } catch (err) {
+        console.error(`Google auto-add failed for ${dbUser.email}:`, err);
+      }
+    }
+
+    // ─── Try Apple Calendar if Google didn't work ───
+    if (!addedEventId && dbUser.apple_calendar_connected && dbUser.apple_caldav_username && dbUser.apple_caldav_password) {
+      try {
+        const uid = `slotted-${meetup.id}-${dbUser.id}@slotted-ai.web.app`;
+        const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+        const dtStart = new Date(meetup.start_time).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+        const dtEnd = new Date(meetup.end_time).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+
+        const icsContent = [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//Slotted//EN",
+          "BEGIN:VEVENT",
+          `UID:${uid}`,
+          `DTSTAMP:${now}`,
+          `DTSTART:${dtStart}`,
+          `DTEND:${dtEnd}`,
+          `SUMMARY:${eventTitle}`,
+          `DESCRIPTION:${eventDescription}`,
+          meetup.location ? `LOCATION:${meetup.location}` : "",
+          "BEGIN:VALARM",
+          "TRIGGER:-PT60M",
+          "ACTION:DISPLAY",
+          `DESCRIPTION:${eventTitle} in 1 hour`,
+          "END:VALARM",
+          "BEGIN:VALARM",
+          "TRIGGER:-PT15M",
+          "ACTION:DISPLAY",
+          `DESCRIPTION:${eventTitle} in 15 minutes`,
+          "END:VALARM",
+          "END:VEVENT",
+          "END:VCALENDAR",
+        ].filter(Boolean).join("\r\n");
+
+        const client = await createDAVClient({
+          serverUrl: "https://caldav.icloud.com",
+          credentials: {
+            username: dbUser.apple_caldav_username,
+            password: dbUser.apple_caldav_password,
+          },
+          authMethod: "Basic",
+          defaultAccountType: "caldav",
+        });
+
+        await client.createCalendarObject({
+          calendar: { url: `https://caldav.icloud.com/${dbUser.apple_caldav_username}/calendars/home/` } as DAVCalendar,
+          filename: `${uid}.ics`,
+          iCalString: icsContent,
+        });
+
+        addedEventId = uid;
+        console.log(`🍎 Auto-added meetup ${meetup.id} to ${dbUser.email}'s Apple Calendar`);
+      } catch (err) {
+        console.error(`Apple auto-add failed for ${dbUser.email}:`, err);
+      }
+    }
+
+    // Store the event ID on the participant row
+    if (addedEventId) {
+      try {
+        await sb
+          .from("meetup_participants")
+          .update({ google_event_id: addedEventId })
+          .eq("meetup_id", meetup.id)
+          .eq("user_id", dbUser.id);
+      } catch { /* column may not exist */ }
+    }
+  } catch (err) {
+    console.error(`Failed to auto-add meetup to calendar for ${firebaseUid}:`, err);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Notification helper
 // ---------------------------------------------------------------------------
 async function createNotification(opts: {
@@ -131,7 +287,58 @@ async function createNotification(opts: {
   relatedUserId?: string;
   relatedId?: string;
 }) {
-  const { error } = await getSupabase().from("notifications").insert({
+  // Deduplication: skip if a very similar notification exists within the dedup window.
+  // Uses a 5-minute window for relatedId matches (covers retries/double-fires),
+  // and a 10-minute window for relatedUserId-only matches (covers scheduled jobs).
+  const sb = getSupabase();
+
+  if (opts.relatedId) {
+    const cutoff = new Date(Date.now() - 5 * 60000).toISOString();
+    const { data: recent } = await sb
+      .from("notifications")
+      .select("id")
+      .eq("user_id", opts.userId)
+      .eq("type", opts.type)
+      .eq("related_id", opts.relatedId)
+      .gte("created_at", cutoff)
+      .limit(1);
+    if (recent && recent.length > 0) {
+      console.log(`Skipping duplicate notification: ${opts.type} for user ${opts.userId} (related_id=${opts.relatedId})`);
+      return;
+    }
+  } else if (opts.relatedUserId) {
+    // Fallback dedup for notifications without a relatedId (e.g. group changes, calendar matches)
+    const cutoff = new Date(Date.now() - 10 * 60000).toISOString();
+    const { data: recent } = await sb
+      .from("notifications")
+      .select("id")
+      .eq("user_id", opts.userId)
+      .eq("type", opts.type)
+      .eq("related_user_id", opts.relatedUserId)
+      .gte("created_at", cutoff)
+      .limit(1);
+    if (recent && recent.length > 0) {
+      console.log(`Skipping duplicate notification: ${opts.type} for user ${opts.userId} (related_user_id=${opts.relatedUserId})`);
+      return;
+    }
+  } else {
+    // No relatedId or relatedUserId — dedup by user+type+title within 10 minutes
+    const cutoff = new Date(Date.now() - 10 * 60000).toISOString();
+    const { data: recent } = await sb
+      .from("notifications")
+      .select("id")
+      .eq("user_id", opts.userId)
+      .eq("type", opts.type)
+      .eq("title", opts.title)
+      .gte("created_at", cutoff)
+      .limit(1);
+    if (recent && recent.length > 0) {
+      console.log(`Skipping duplicate notification: ${opts.type} for user ${opts.userId} (title match)`);
+      return;
+    }
+  }
+
+  const { error } = await sb.from("notifications").insert({
     user_id: opts.userId,
     type: opts.type,
     title: opts.title,
@@ -1815,6 +2022,56 @@ interface ScoredSlot {
 }
 
 /**
+ * Map preferred_duration setting to minutes.
+ * Returns { min, ideal, max } in minutes.
+ */
+function durationToMinutes(pref: string | null | undefined): { min: number; ideal: number; max: number } {
+  switch (pref) {
+    case "quick":    return { min: 30,  ideal: 45,  max: 60 };
+    case "medium":   return { min: 60,  ideal: 90,  max: 120 };
+    case "long":     return { min: 120, ideal: 180, max: 240 };
+    case "half-day": return { min: 240, ideal: 300, max: 480 };
+    default:         return { min: 60,  ideal: 90,  max: 120 }; // default = medium
+  }
+}
+
+/**
+ * Map preferred_call_duration setting to minutes.
+ */
+function callDurationToMinutes(pref: string | null | undefined): { min: number; ideal: number; max: number } {
+  switch (pref) {
+    case "quick":  return { min: 10,  ideal: 15,  max: 20 };
+    case "medium": return { min: 30,  ideal: 45,  max: 60 };
+    case "long":   return { min: 60,  ideal: 90,  max: 120 };
+    case "none":   return { min: 0,   ideal: 0,   max: 0 };
+    default:       return { min: 30,  ideal: 45,  max: 60 }; // default = medium
+  }
+}
+
+/**
+ * Resolve effective duration preference across multiple participants.
+ * If both set → use shorter. If one set → use theirs. If neither → default.
+ */
+function resolveGroupDuration(
+  profiles: (any | null | undefined)[],
+  isCallMode: boolean,
+): { min: number; ideal: number; max: number } {
+  const mapper = isCallMode ? callDurationToMinutes : durationToMinutes;
+  const field = isCallMode ? "preferred_call_duration" : "preferred_duration";
+
+  const prefs = profiles
+    .map((p) => p?.[field])
+    .filter((v): v is string => !!v && v !== "none");
+
+  if (prefs.length === 0) return mapper(undefined); // default
+
+  // Use the shortest preference (most conservative)
+  const durations = prefs.map((p) => mapper(p));
+  durations.sort((a, b) => a.ideal - b.ideal);
+  return durations[0];
+}
+
+/**
  * Score overlapping free slots based on user preferences.
  * Supports 1-to-1 (userId + friendId) or group (userId + friendIds[]).
  * Returns top-N suggestions sorted by score descending.
@@ -1859,6 +2116,13 @@ async function scoreGroupOverlaps(
   // Use the requesting user's timezone for all time computations
   const userTz = userProfile?.timezone || "America/New_York";
 
+  // Resolve preferred duration across all participants
+  const isCallModeGlobal = mode === "phone" || mode === "video";
+  const effectiveDuration = resolveGroupDuration(
+    [userProfile, ...friendProfiles],
+    isCallModeGlobal,
+  );
+
   /** Get hour and day-of-week in the user's timezone */
   const getLocalParts = (dt: Date) => {
     const parts = new Intl.DateTimeFormat("en-US", {
@@ -1886,47 +2150,57 @@ async function scoreGroupOverlaps(
     let score = 50; // base score
     const reasons: string[] = [];
 
-    // 1. Duration scoring — different for calls vs in-person
+    // 1. Duration scoring — uses participants' preferred duration settings
+    //    effectiveDuration = shortest preference among all participants (or default "medium")
     if (isCallMode) {
-      // For calls: 15-30 min is ideal, 30-60 is great, longer is fine but not as necessary
-      if (durationMin >= 30 && durationMin <= 60) {
+      if (effectiveDuration.ideal === 0) {
+        // Someone prefers no calls
+        score -= 20;
+        reasons.push("Someone doesn't do calls");
+      } else if (durationMin >= effectiveDuration.min && durationMin <= effectiveDuration.max) {
         score += 15;
         reasons.push("Perfect call length");
-      } else if (durationMin >= 15 && durationMin < 30) {
-        score += 10;
-        reasons.push("Quick catch-up window");
-      } else if (durationMin > 60) {
+      } else if (durationMin > effectiveDuration.max) {
         score += 8;
-        reasons.push("Plenty of time");
+        reasons.push("Plenty of time for a call");
+      } else if (durationMin >= effectiveDuration.min * 0.7) {
+        score += 5;
+        reasons.push("Quick catch-up window");
       }
     } else if (participantIds.length >= 2) {
-      // Group hangouts: 2-3 hour window is the sweet spot
-      if (durationMin >= 120 && durationMin <= 180) {
+      // Group hangouts: use preferred duration but with a group floor of 60 min
+      const groupIdeal = Math.max(effectiveDuration.ideal, 90);
+      const groupMin = Math.max(effectiveDuration.min, 60);
+      if (durationMin >= groupIdeal && durationMin <= groupIdeal * 1.5) {
         score += 25;
-        reasons.push("Ideal 2–3 hr group window");
-      } else if (durationMin > 180) {
+        reasons.push("Ideal group window");
+      } else if (durationMin > groupIdeal * 1.5) {
         score += 20;
-        reasons.push("3+ hour window");
-      } else if (durationMin >= 90) {
+        reasons.push("Lots of time");
+      } else if (durationMin >= groupMin) {
         score += 12;
-        reasons.push("1.5 hr window");
-      } else if (durationMin >= 60) {
+        reasons.push(`${Math.round(durationMin / 60 * 10) / 10} hr window`);
+      } else if (durationMin >= 45) {
         score += 5;
-        reasons.push("1 hour window — tight for a group");
-      } else if (durationMin < 60) {
+        reasons.push("Tight for a group");
+      } else {
         score -= 15;
-        reasons.push("Short for a group hangout");
+        reasons.push("Too short for a group hangout");
       }
     } else {
-      // 1-to-1 in-person: longer is better
-      if (durationMin >= 120) {
-        score += 15;
-        reasons.push("2+ hour window");
-      } else if (durationMin >= 60) {
-        score += 10;
-        reasons.push("1 hour window");
-      } else if (durationMin < 45) {
+      // 1-to-1 in-person: score based on preferred duration
+      if (durationMin >= effectiveDuration.min && durationMin <= effectiveDuration.max) {
+        score += 20;
+        reasons.push("Fits your preferred hangout length");
+      } else if (durationMin > effectiveDuration.max) {
+        score += 12;
+        reasons.push("More than enough time");
+      } else if (durationMin >= effectiveDuration.min * 0.7) {
+        score += 5;
+        reasons.push("A bit short but workable");
+      } else {
         score -= 10;
+        reasons.push("Shorter than preferred");
       }
     }
 
@@ -2192,7 +2466,9 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
     const friendBuffered = applyTravelBuffer(friendSlots.data || [], friendBuffer);
 
     // Compute overlaps (using buffered slots)
-    const minDurationMin = isCallMode ? 15 : 30;
+    // Use participants' preferred duration to set minimum overlap length
+    const durationPref = resolveGroupDuration([me, friendUser], isCallMode);
+    const minDurationMin = isCallMode ? Math.max(10, durationPref.min) : Math.max(30, Math.round(durationPref.min * 0.7));
     const rawOverlaps: { start: string; end: string }[] = [];
     for (const a of myBuffered) {
       for (const b of friendBuffered) {
@@ -2578,11 +2854,56 @@ app.put("/groups/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     }
 
     if (Array.isArray(memberIds)) {
+      // Fetch existing members BEFORE replacing, so we can detect removals
+      const { data: previousMembers } = await sb
+        .from("friend_group_members")
+        .select("user_id")
+        .eq("group_id", groupId);
+      const previousIds = new Set((previousMembers || []).map((m: any) => m.user_id));
+
       // Replace all members
       await sb.from("friend_group_members").delete().eq("group_id", groupId);
       const allIds = [me.id, ...memberIds.filter((id: string) => id !== me.id)];
       const rows = allIds.map((uid: string) => ({ group_id: groupId, user_id: uid }));
       await sb.from("friend_group_members").insert(rows);
+
+      const newIdSet = new Set(allIds);
+
+      // Detect removed members and notify them
+      const removedIds = [...previousIds].filter((id) => !newIdSet.has(id) && id !== me.id);
+      for (const removedId of removedIds) {
+        try {
+          await createNotification({
+            userId: removedId as string,
+            type: "friend_accepted",
+            title: `Removed from "${group.name || 'a group'}"`,
+            body: `You were removed from the group "${group.name || ''}" by ${me.display_name || "the group owner"}.`,
+            relatedUserId: me.id,
+          });
+        } catch { /* ignore notification errors */ }
+      }
+
+      // Notify remaining members (excluding the editor) about who was removed
+      if (removedIds.length > 0) {
+        const removedNames: string[] = [];
+        for (const rid of removedIds) {
+          const u = await getDbUserById(rid as string);
+          if (u?.display_name) removedNames.push(u.display_name.split(" ")[0]);
+        }
+        const namesStr = removedNames.join(", ") || "someone";
+        const remainingIds = allIds.filter((id: string) => id !== me.id);
+        for (const remainingId of remainingIds) {
+          try {
+            await createNotification({
+              userId: remainingId,
+              type: "friend_accepted",
+              title: `${namesStr} left "${group.name || 'your group'}"`,
+              body: `${namesStr} ${removedIds.length === 1 ? 'was' : 'were'} removed from "${group.name || ''}" by ${me.display_name || "the group owner"}.`,
+              relatedUserId: me.id,
+            });
+          } catch { /* ignore */ }
+        }
+      }
     }
 
     res.json({ success: true });
@@ -2790,6 +3111,9 @@ app.post("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Auto-add to the creator's Google Calendar (background, non-blocking)
+    autoAddToCalendar(req.uid!, meetup).catch(() => {});
+
     // Return meetup with quota warning if applicable
     const response: any = { ...meetup };
     if (quotaStatus.isOverLimit) {
@@ -2930,7 +3254,7 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
     // Fetch meetup info + all participant RSVPs
     const { data: meetup } = await getSupabase()
       .from("meetups")
-      .select("title, created_by, status")
+      .select("title, created_by, status, start_time, end_time, description, location")
       .eq("id", meetupId)
       .single();
 
@@ -2939,9 +3263,9 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
       .select("user_id, rsvp")
       .eq("meetup_id", meetupId);
 
-    // Notify the meetup creator about the RSVP
-    if (meetup && meetup.created_by !== me.id) {
-      const rsvpEmoji = rsvp === "accepted" ? "✅" : rsvp === "declined" ? "❌" : "🤔";
+    // Notify the meetup creator about the RSVP (skip for declines — handled separately below)
+    if (meetup && meetup.created_by !== me.id && rsvp !== "declined") {
+      const rsvpEmoji = rsvp === "accepted" ? "✅" : "🤔";
       await createNotification({
         userId: meetup.created_by,
         type: rsvp === "accepted" ? "meetup_confirmed" : "meetup_request",
@@ -2979,6 +3303,16 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
             body: `Everyone accepted — ${meetup.title || "Hangout"} is locked in!`,
             relatedId: meetupId,
           });
+        }
+
+        // Auto-add to all participants' Google Calendars (background)
+        const meetupData = { id: meetupId, title: meetup.title, description: meetup.description, location: meetup.location, start_time: meetup.start_time, end_time: meetup.end_time };
+        for (const p of allParticipants) {
+          // Look up firebase_uid for each participant
+          const { data: pUser } = await getSupabase().from("users").select("firebase_uid").eq("id", p.user_id).single();
+          if (pUser?.firebase_uid) {
+            autoAddToCalendar(pUser.firebase_uid, meetupData).catch(() => {});
+          }
         }
       }
     }
@@ -3921,6 +4255,7 @@ const NYC_OPEN_DATA_APP_TOKEN = process.env.NYC_OPEN_DATA_APP_TOKEN || "";
 
 // Log which APIs are configured at cold-start
 console.log(`Event APIs configured — SeatGeek: ${!!SEATGEEK_CLIENT_ID}, Ticketmaster: ${!!TICKETMASTER_API_KEY}, Eventbrite: ${!!EVENTBRITE_API_KEY}`);
+// v2.17.1 — duration-aware scoring
 
 interface ExternalEvent {
   id: string;
@@ -7073,6 +7408,110 @@ export const sendMeetupReminders = onSchedule("every 1 hours", async (event) => 
 });
 
 /**
+ * Scheduled function: Pending RSVP Nudge
+ * Runs every 4 hours. For meetups happening within 24-48 hours that are
+ * still in "proposed" status with pending RSVPs, it nudges:
+ *   - Outstanding invitees to respond
+ *   - The meetup creator that responses are still pending
+ * Each meetup is only nudged once (tracked via a dedicated notification per meetup per user).
+ */
+export const sendPendingRsvpNudges = onSchedule("every 4 hours", async (event) => {
+  const sb = getSupabase();
+  const now = new Date();
+  const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+  // Find proposed meetups happening in 24-48 hours
+  const { data: meetups } = await sb
+    .from("meetups")
+    .select(`
+      id,
+      title,
+      start_time,
+      created_by,
+      meetup_participants (
+        user_id,
+        rsvp
+      )
+    `)
+    .gte("start_time", in24h.toISOString())
+    .lte("start_time", in48h.toISOString())
+    .eq("status", "proposed");
+
+  if (!meetups || meetups.length === 0) {
+    console.log("No proposed meetups in 24-48h window needing RSVP nudges");
+    return;
+  }
+
+  for (const meetup of meetups) {
+    const pendingParticipants = (meetup.meetup_participants || [])
+      .filter((p: any) => p.rsvp === "pending");
+
+    if (pendingParticipants.length === 0) continue;
+
+    const startDt = new Date(meetup.start_time);
+    const timeStr = startDt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
+      " at " + startDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+    // Check if we already nudged for this meetup (dedup via relatedId in recent notifications)
+    const recentCutoff = new Date(now.getTime() - 12 * 60 * 60 * 1000).toISOString(); // 12h dedup window
+
+    // Nudge each pending invitee
+    for (const p of pendingParticipants) {
+      // Check dedup — skip if already nudged this invitee for this meetup recently
+      const { data: existing } = await sb
+        .from("notifications")
+        .select("id")
+        .eq("user_id", p.user_id)
+        .eq("related_id", meetup.id)
+        .eq("type", "meetup_reminder")
+        .gte("created_at", recentCutoff)
+        .limit(1);
+
+      if (existing && existing.length > 0) continue;
+
+      await createNotification({
+        userId: p.user_id,
+        type: "meetup_reminder",
+        title: "\u23F0 Still waiting on your RSVP",
+        body: `${meetup.title || "Hangout"} is coming up ${timeStr} — are you in?`,
+        relatedId: meetup.id,
+      });
+    }
+
+    // Nudge the creator that RSVPs are still pending
+    const pendingNames: string[] = [];
+    for (const p of pendingParticipants) {
+      const u = await getDbUserById(p.user_id);
+      if (u?.display_name) pendingNames.push(u.display_name.split(" ")[0]);
+    }
+    const namesStr = pendingNames.join(", ") || "your invitees";
+
+    // Dedup check for creator too
+    const { data: creatorExisting } = await sb
+      .from("notifications")
+      .select("id")
+      .eq("user_id", meetup.created_by)
+      .eq("related_id", meetup.id)
+      .eq("type", "meetup_reminder")
+      .gte("created_at", recentCutoff)
+      .limit(1);
+
+    if (!creatorExisting || creatorExisting.length === 0) {
+      await createNotification({
+        userId: meetup.created_by,
+        type: "meetup_reminder",
+        title: "\u23F3 Waiting on RSVPs",
+        body: `${namesStr} haven't responded to ${meetup.title || "your hangout"} (${timeStr}). Want to send a nudge?`,
+        relatedId: meetup.id,
+      });
+    }
+
+    console.log(`Sent RSVP nudge for meetup ${meetup.id} — ${pendingParticipants.length} pending`);
+  }
+});
+
+/**
  * Scheduled function: Behavior Divergence Detector + Calendar Matching
  * Runs daily at 9am to:
  * 1. Detect when users' actual social activity diverges from their settings
@@ -7209,6 +7648,384 @@ export const findCalendarMatches = onSchedule("every day 09:00", async (event) =
   }
 
   console.log(`Behavior divergence check complete for ${users.length} users`);
+
+  // ─── Proactive free-time matching: "You and X are both free this weekend" ───
+  try {
+    // Get all accepted friendships
+    const { data: friendships } = await sb
+      .from("friendships")
+      .select("user_a_id, user_b_id")
+      .eq("status", "accepted");
+
+    if (friendships && friendships.length > 0) {
+      // Determine the upcoming weekend window (Saturday + Sunday)
+      const today = new Date();
+      const dayOfWeek = today.getDay(); // 0=Sun, 6=Sat
+      const daysUntilSat = (6 - dayOfWeek + 7) % 7 || 7; // next Saturday
+      const satStart = new Date(today);
+      satStart.setDate(today.getDate() + daysUntilSat);
+      satStart.setHours(8, 0, 0, 0);
+      const sunEnd = new Date(satStart);
+      sunEnd.setDate(satStart.getDate() + 1);
+      sunEnd.setHours(22, 0, 0, 0);
+
+      // Only run if the weekend is 1-5 days away (avoid stale suggestions)
+      if (daysUntilSat >= 1 && daysUntilSat <= 5) {
+        // Collect unique user IDs from friendships
+        const userIdSet = new Set<string>();
+        for (const f of friendships) {
+          userIdSet.add(f.user_a_id);
+          userIdSet.add(f.user_b_id);
+        }
+
+        // Batch-fetch weekend free slots for all users
+        const userFreeSlots = new Map<string, any[]>();
+        for (const uid of userIdSet) {
+          const { data: slots } = await sb
+            .from("availability")
+            .select("start_time, end_time")
+            .eq("user_id", uid)
+            .eq("status", "free")
+            .gte("end_time", satStart.toISOString())
+            .lte("start_time", sunEnd.toISOString());
+          if (slots && slots.length > 0) {
+            userFreeSlots.set(uid, slots);
+          }
+        }
+
+        // Check each friendship pair for overlapping weekend free time
+        for (const f of friendships) {
+          const slotsA = userFreeSlots.get(f.user_a_id);
+          const slotsB = userFreeSlots.get(f.user_b_id);
+          if (!slotsA || !slotsB) continue;
+
+          // Find overlaps >= 1 hour
+          let bestOverlap: { start: string; end: string } | null = null;
+          for (const a of slotsA) {
+            for (const b of slotsB) {
+              const start = a.start_time > b.start_time ? a.start_time : b.start_time;
+              const end = a.end_time < b.end_time ? a.end_time : b.end_time;
+              const durMin = (new Date(end).getTime() - new Date(start).getTime()) / 60000;
+              if (durMin >= 60) {
+                if (!bestOverlap || durMin > (new Date(bestOverlap.end).getTime() - new Date(bestOverlap.start).getTime()) / 60000) {
+                  bestOverlap = { start, end };
+                }
+              }
+            }
+          }
+
+          if (!bestOverlap) continue;
+
+          // Throttle: skip if we already sent a calendar_match to either user about the other in the last 7 days
+          const throttleCutoff = new Date(now.getTime() - 7 * 86400000).toISOString();
+          for (const [userId, friendId] of [[f.user_a_id, f.user_b_id], [f.user_b_id, f.user_a_id]]) {
+            const { data: recentMatch } = await sb
+              .from("notifications")
+              .select("id")
+              .eq("user_id", userId)
+              .eq("type", "calendar_match")
+              .eq("related_user_id", friendId)
+              .gte("created_at", throttleCutoff)
+              .limit(1);
+
+            if (recentMatch && recentMatch.length > 0) continue;
+
+            // Check the friend's social battery — don't suggest if they're recharging
+            const friendUser = await getDbUserById(friendId);
+            const recipient = await getDbUserById(userId);
+            if (!friendUser || !recipient) continue;
+            if (friendUser.social_battery === "recharging") continue;
+
+            const overlapStart = new Date(bestOverlap.start);
+            const windowStr = overlapStart.toLocaleDateString("en-US", { weekday: "long" }) +
+              " " + overlapStart.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+            await createNotification({
+              userId: userId,
+              type: "calendar_match",
+              title: `📅 You and ${friendUser.display_name?.split(" ")[0] || "a friend"} are both free this weekend`,
+              body: `Looks like you're both available ${windowStr}. Want to make plans?`,
+              relatedUserId: friendId,
+            });
+          }
+        }
+      }
+    }
+    console.log("Proactive weekend calendar matching complete");
+  } catch (calMatchErr) {
+    console.error("Error in proactive calendar matching:", calMatchErr);
+  }
+});
+
+// ===========================================================================
+// ADMIN / STAGING ENDPOINTS
+// ===========================================================================
+// These endpoints let you inspect and manage any user's data for QA/staging
+// purposes. Protected by a shared secret sent via X-Admin-Secret header or
+// body.secret field.
+// ---------------------------------------------------------------------------
+
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "slotted-admin-2026";
+
+function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  const secret =
+    (req.headers["x-admin-secret"] as string) ||
+    req.body?.secret;
+  if (secret !== ADMIN_SECRET) {
+    res.status(403).json({ error: "Forbidden — invalid admin secret" });
+    return;
+  }
+  next();
+}
+
+// ---------------------------------------------------------------------------
+// GET /admin/users — list all users (id, email, display_name, onboarded, created_at)
+// ---------------------------------------------------------------------------
+app.get("/admin/users", requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("users")
+      .select("id, firebase_uid, email, display_name, photo_url, onboarded, social_battery, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/users/:id — full user profile (by Supabase UUID)
+// ---------------------------------------------------------------------------
+app.get("/admin/users/:id", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("users")
+      .select("*")
+      .eq("id", req.params.id)
+      .single();
+
+    if (error) { res.status(404).json({ error: "User not found" }); return; }
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/users/:id/notifications — view a user's notifications
+// ---------------------------------------------------------------------------
+app.get("/admin/users/:id/notifications", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("notifications")
+      .select("*, related_user:related_user_id(display_name, photo_url)")
+      .eq("user_id", req.params.id)
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /admin/users/:id/notifications — bulk delete all notifications for a user
+// Supports optional query params:
+//   ?type=meetup_request        — only delete notifications of this type
+//   ?olderThan=2026-01-01       — only delete notifications before this date
+// ---------------------------------------------------------------------------
+app.delete("/admin/users/:id/notifications", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+    let query = sb
+      .from("notifications")
+      .delete()
+      .eq("user_id", req.params.id);
+
+    if (req.query.type) {
+      query = query.eq("type", req.query.type as string);
+    }
+    if (req.query.olderThan) {
+      query = query.lt("created_at", req.query.olderThan as string);
+    }
+
+    const { error, count } = await query.select("id", { count: "exact", head: false });
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ deleted: count ?? 0, success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /admin/notifications/:id — delete a single notification by ID
+// ---------------------------------------------------------------------------
+app.delete("/admin/notifications/:id", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+    const { error } = await sb
+      .from("notifications")
+      .delete()
+      .eq("id", req.params.id);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /admin/users/:id/notifications/mark-all-read — mark all as read for a user
+// ---------------------------------------------------------------------------
+app.post("/admin/users/:id/notifications/mark-all-read", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+    const { error } = await sb
+      .from("notifications")
+      .update({ read: true })
+      .eq("user_id", req.params.id)
+      .eq("read", false);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/users/:id/fcm-tokens — view push notification tokens for debugging
+// ---------------------------------------------------------------------------
+app.get("/admin/users/:id/fcm-tokens", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("fcm_tokens")
+      .select("*")
+      .eq("user_id", req.params.id)
+      .order("updated_at", { ascending: false });
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /admin/users/:id/fcm-tokens — clear all FCM tokens for a user (forces re-registration)
+// ---------------------------------------------------------------------------
+app.delete("/admin/users/:id/fcm-tokens", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+    const { error } = await sb
+      .from("fcm_tokens")
+      .delete()
+      .eq("user_id", req.params.id);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ success: true, message: "FCM tokens cleared — user will re-register on next visit" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/users/:id/meetups — view a user's meetups and participation status
+// ---------------------------------------------------------------------------
+app.get("/admin/users/:id/meetups", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+
+    // Get meetup IDs this user is part of
+    const { data: participations, error: pErr } = await sb
+      .from("meetup_participants")
+      .select("meetup_id, rsvp, is_organizer")
+      .eq("user_id", req.params.id);
+
+    if (pErr) { res.status(500).json({ error: pErr.message }); return; }
+    if (!participations || participations.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const meetupIds = participations.map((p: any) => p.meetup_id);
+    const { data: meetups, error: mErr } = await sb
+      .from("meetups")
+      .select("id, title, status, start_time, end_time, location, created_at")
+      .in("id", meetupIds)
+      .order("start_time", { ascending: false })
+      .limit(50);
+
+    if (mErr) { res.status(500).json({ error: mErr.message }); return; }
+
+    // Merge RSVP info
+    const rsvpMap = new Map(participations.map((p: any) => [p.meetup_id, p]));
+    const enriched = (meetups || []).map((m: any) => ({
+      ...m,
+      my_rsvp: rsvpMap.get(m.id)?.rsvp,
+      is_organizer: rsvpMap.get(m.id)?.is_organizer,
+    }));
+
+    res.json(enriched);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/users/:id/friendships — view a user's friendships
+// ---------------------------------------------------------------------------
+app.get("/admin/users/:id/friendships", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+    const userId = req.params.id;
+
+    const { data, error } = await sb
+      .from("friendships")
+      .select("*, user_a:user_a_id(id, display_name, email), user_b:user_b_id(id, display_name, email)")
+      .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+      .order("created_at", { ascending: false });
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/stats — quick overview of the platform
+// ---------------------------------------------------------------------------
+app.get("/admin/stats", requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+
+    const [users, meetups, friendships, notifications] = await Promise.all([
+      sb.from("users").select("id", { count: "exact", head: true }),
+      sb.from("meetups").select("id", { count: "exact", head: true }),
+      sb.from("friendships").select("id", { count: "exact", head: true }),
+      sb.from("notifications").select("id", { count: "exact", head: true }),
+    ]);
+
+    res.json({
+      users: users.count ?? 0,
+      meetups: meetups.count ?? 0,
+      friendships: friendships.count ?? 0,
+      notifications: notifications.count ?? 0,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------------------------------------------------------------------------

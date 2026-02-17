@@ -617,6 +617,7 @@ export default function DashboardPage() {
       parts.push(`Next: ${nextEvent.title.length > 20 ? nextEvent.title.slice(0, 20) + '…' : nextEvent.title} at ${t}`);
     }
     if (parts.length === 0 && friendsToSee.length > 0) parts.push(`${friendsToSee.length} friend${friendsToSee.length !== 1 ? 's' : ''} to catch up with`);
+    if (parts.length === 0 && allFriends.length === 0) parts.push('Invite friends to get started!');
     return parts.join(' · ');
   })();
 
@@ -938,7 +939,7 @@ export default function DashboardPage() {
           {markBusyMode && (
             <div className="border-b border-amber-100 bg-amber-50/50 px-5 py-2">
               <p className="text-[11px] text-amber-700">
-                <span className="font-semibold">Click or drag</span> to mark hours as busy. Tap a <span className="font-semibold text-amber-800">yellow block</span> to remove it. Your friends will see these times as unavailable.
+                <span className="font-semibold">Tap</span> to mark hours as busy. <span className="font-semibold">Tap and drag</span> to select multiple. Tap a <span className="font-semibold text-amber-800">yellow block</span> to remove it.
                 {busyBlockSaving && <span className="ml-2 text-amber-500 animate-pulse">Saving…</span>}
               </p>
             </div>
@@ -1245,6 +1246,21 @@ export default function DashboardPage() {
       )}
 
       {/* ─── PEOPLE TO SEE (compact avatar row) ─── */}
+      {!dashboardLoading && friendsToSee.length === 0 && allFriends.length === 0 && (
+        <div className="mb-6 rounded-2xl border border-slotted-200/60 bg-gradient-to-br from-slotted-50/60 to-purple-50/40 p-6 shadow-sm text-center">
+          <span className="text-3xl">👋</span>
+          <h3 className="mt-3 font-display text-base font-bold text-gray-900">Welcome to Slotted!</h3>
+          <p className="mt-1.5 text-sm text-gray-500 leading-relaxed max-w-sm mx-auto">
+            Invite a friend to get started — once they connect, Slotted will find the best times for you to hang out.
+          </p>
+          <Link
+            to="/friends"
+            className="mt-4 inline-flex items-center gap-2 rounded-xl gradient-btn px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
+          >
+            👋 Invite a friend
+          </Link>
+        </div>
+      )}
       {!dashboardLoading && friendsToSee.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-2">

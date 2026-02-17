@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
+import { trackMeetupScheduled } from '../lib/analytics';
 import AddToCalendarModal from './AddToCalendarModal';
 
 interface ScoredSlot {

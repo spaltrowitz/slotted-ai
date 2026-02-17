@@ -101,8 +101,14 @@ export default function OnboardingPage() {
               Hey {user?.displayName?.split(' ')[0]}! 👋 Let's get Slotted working for you
             </h2>
             <p className="text-sm text-gray-500">
-              Connect your calendar so we can find the best times to hang out with friends. We only read busy/free — never event details.
+              Connect your calendar so we can find the best times to hang out with friends. We only read busy/free — never event titles or details.
             </p>
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 space-y-1.5">
+              <p className="text-xs font-medium text-blue-800">🔒 Your calendar is private</p>
+              <p className="text-[11px] text-blue-700 leading-relaxed">
+                Friends only see when you're <strong>free or busy</strong> — never what you're doing. You choose which calendars to share, and you can disconnect anytime.
+              </p>
+            </div>
             <p className="text-xs text-amber-600 font-medium">
               ⚠️ When Google asks for permissions, please make sure to select all 3 checkboxes so Slotted can work properly.
             </p>

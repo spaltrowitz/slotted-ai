@@ -1,0 +1,24 @@
+{
+  "name": "slotted-test-agents",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Automated QA agents that simulate real users interacting with Slotted",
+  "scripts": {
+    "build": "tsc",
+    "test": "tsx src/runner.ts",
+    "scenario:friends": "tsx src/runner.ts --scenario friends",
+    "scenario:meetups": "tsx src/runner.ts --scenario meetups",
+    "scenario:notifications": "tsx src/runner.ts --scenario notifications",
+    "scenario:all": "tsx src/runner.ts --scenario all",
+    "setup": "tsx src/setup.ts",
+    "teardown": "tsx src/teardown.ts"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}
