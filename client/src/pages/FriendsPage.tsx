@@ -514,7 +514,7 @@ export default function FriendsPage() {
           className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-slotted-200 hover:text-slotted-600"
           title="Find an event to go to together"
         >
-          �️ Go together
+          🎟️ Go together
         </a>
         <button
           onClick={() => setRemovingFriend(f)}

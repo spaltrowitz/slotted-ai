@@ -25,6 +25,9 @@ export default function PushNotificationPrompt() {
     window.matchMedia('(display-mode: standalone)').matches ||
     (window.navigator as any).standalone === true;
 
+  const isMobile = /iPad|iPhone|iPod|Android|Mobi/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
   // Truly working = permission granted AND we have an FCM token
   const isFullyEnabled = permission === 'granted' && !!fcmToken;
 
@@ -47,7 +50,7 @@ export default function PushNotificationPrompt() {
             <p className="text-xs text-emerald-600">
               You'll get notified when friends want to hang, accept your invites, or when Slotted finds a great time to meet up.
             </p>
-            {!isStandalone && (
+            {!isStandalone && isMobile && (
               <p className="mt-1.5 text-[10px] text-emerald-500/80">
                 💡 For the most reliable notifications, install Slotted as an app on your phone.
               </p>
@@ -68,7 +71,7 @@ export default function PushNotificationPrompt() {
             <p className="text-xs text-amber-700 mt-0.5">
               Browser permission is granted, but we couldn't register your device for push notifications. This can happen if the service worker isn't active or you're not using the installed app.
             </p>
-            {!isStandalone && (
+            {!isStandalone && isMobile && (
               <p className="mt-1.5 text-[10px] text-amber-600">
                 📲 Installing Slotted as an app (see above) gives the most reliable push notifications.
               </p>
@@ -119,7 +122,7 @@ export default function PushNotificationPrompt() {
           <p className="mt-1 text-xs text-gray-600 leading-relaxed">
             Get instant alerts when friends want to hang out, new matches are found, or someone accepts your invite.
           </p>
-          {!isStandalone && (
+          {!isStandalone && isMobile && (
             <p className="mt-1.5 text-[10px] text-gray-400">
               📲 For the best experience, install Slotted as an app first (see above), then enable notifications.
             </p>

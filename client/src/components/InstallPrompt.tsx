@@ -123,11 +123,13 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
                   onClick={handleInstall}
                   className="text-left underline decoration-slotted-300 underline-offset-2 hover:text-slotted-600 transition-colors cursor-pointer"
                 >
-                  Install Slotted as an app on your phone
+                  {isMobile ? 'Install Slotted as an app on your phone' : 'Add Slotted to your desktop'}
                 </button>
               </p>
               <p className="mt-0.5 text-xs text-gray-500">
-                Get the full app experience — quick access, notifications, and more.
+                {isMobile
+                  ? 'Get the full app experience — quick access, notifications, and more.'
+                  : 'Install as an app or bookmark for quick access. For the best experience, visit slotted-ai.web.app on your phone.'}
               </p>
               <div className="mt-3 flex items-center gap-2">
                 <button
