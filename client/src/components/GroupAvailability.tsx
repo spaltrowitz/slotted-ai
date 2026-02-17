@@ -77,6 +77,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
         startTime: slot.start,
         endTime: slot.end,
       });
+      trackMeetupScheduled();
       // Check for quota warning
       if (data.quotaWarning) {
         const proceed = window.confirm(data.quotaWarning.message);

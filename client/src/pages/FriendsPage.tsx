@@ -257,15 +257,18 @@ export default function FriendsPage() {
   };
 
   const handleText = () => {
+    trackFriendInvited('sms');
     window.open(`sms:?&body=${encodeURIComponent(message)}`, '_blank');
   };
 
   const handleEmail = () => {
+    trackFriendInvited('email');
     window.location.href = `mailto:?subject=${encodeURIComponent("Let's hang — try Slotted!")}&body=${encodeURIComponent(message)}`;
   };
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message);
+    trackInviteLinkCopied();
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

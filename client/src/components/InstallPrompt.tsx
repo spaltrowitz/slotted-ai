@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { trackAppInstalled } from '../lib/analytics';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -46,8 +47,15 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
+    const installedHandler = () => {
+      trackAppInstalled();
+    };
     window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', installedHandler);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', installedHandler);
+    };
   }, []);
 
   // Decide whether to show the banner
