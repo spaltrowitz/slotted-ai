@@ -35,7 +35,7 @@ VAPID keys are required for web push notifications to work.
 Add the VAPID key to your local `.env.local` file:
 
 ```bash
-# In /workspaces/social-scheduling/client/.env.local
+# In client/.env.local
 VITE_FIREBASE_VAPID_KEY=BAbC1234567890...your-vapid-key-here...
 ```
 

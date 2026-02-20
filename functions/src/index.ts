@@ -34,6 +34,8 @@ if (missingVars.length) {
   );
 }
 
+const GOOGLE_WEBHOOK_SECRET = process.env.GOOGLE_WEBHOOK_SECRET || "";
+
 const app = express();
 
 // CORS: restrict to known origins in production
@@ -57,6 +59,18 @@ app.use(
   }),
 );
 app.use(express.json());
+
+const inviteLookupHits = new Map<string, number[]>();
+function isInviteLookupRateLimited(clientKey: string): boolean {
+  const now = Date.now();
+  const windowMs = 60_000;
+  const maxHits = 30;
+  const hits = inviteLookupHits.get(clientKey) || [];
+  const recentHits = hits.filter((t) => now - t < windowMs);
+  recentHits.push(now);
+  inviteLookupHits.set(clientKey, recentHits);
+  return recentHits.length > maxHits;
+}
 
 // Strip /api prefix so routes work both directly and through Firebase Hosting rewrites
 app.use((req: Request, _res: Response, next: NextFunction) => {
@@ -111,6 +125,34 @@ async function getDbUserById(userId: string) {
     .eq("id", userId)
     .single();
   return data;
+}
+
+/** Helper: get all accepted friend user IDs for a user */
+async function getAcceptedFriendIdSet(userId: string): Promise<Set<string>> {
+  const { data, error } = await getSupabase()
+    .from("friendships")
+    .select("user_a_id, user_b_id")
+    .eq("status", "accepted")
+    .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`);
+
+  if (error || !data) return new Set<string>();
+
+  const ids = new Set<string>();
+  for (const f of data as Array<{ user_a_id: string; user_b_id: string }>) {
+    ids.add(f.user_a_id === userId ? f.user_b_id : f.user_a_id);
+  }
+  return ids;
+}
+
+/** Helper: true if user is a participant of the given meetup */
+async function isMeetupParticipant(meetupId: string, userId: string): Promise<boolean> {
+  const { data, error } = await getSupabase()
+    .from("meetup_participants")
+    .select("meetup_id")
+    .eq("meetup_id", meetupId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return !error && !!data;
 }
 
 // ---------------------------------------------------------------------------
@@ -769,11 +811,26 @@ app.get("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
 /** GET /users/invite/:code — look up a user by their invite code (public) */
 app.get("/users/invite/:code", async (req: Request, res: Response) => {
   try {
+    const forwardedFor = req.headers["x-forwarded-for"];
+    const clientKey = typeof forwardedFor === "string"
+      ? forwardedFor.split(",")[0].trim()
+      : req.ip || "unknown";
+    if (isInviteLookupRateLimited(clientKey)) {
+      res.status(429).json({ error: "Too many invite lookups. Please try again shortly." });
+      return;
+    }
+
     const { code } = req.params;
+    const normalizedCode = String(code || "").trim().toLowerCase();
+    if (!/^[a-z0-9]{3,32}$/.test(normalizedCode)) {
+      res.status(400).json({ error: "Invalid invite code format" });
+      return;
+    }
+
     const { data, error } = await getSupabase()
       .from("users")
-      .select("display_name, photo_url")
-      .eq("invite_code", (code as string).toLowerCase())
+      .select("firebase_uid, display_name, photo_url")
+      .eq("invite_code", normalizedCode)
       .single();
 
     if (error || !data) {
@@ -1386,14 +1443,25 @@ app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: R
     if (data && action === "accept") {
       const inviterId = data.invited_by;
       if (inviterId && inviterId !== me.id) {
-        await createNotification({
-          userId: inviterId,
-          type: "friend_accepted",
-          title: "Friend request accepted!",
-          body: `${me.display_name || me.email} accepted your friend invite. You can now see each other's availability!`,
-          relatedUserId: me.id,
-          relatedId: data.id,
-        });
+        const { data: existingNotif } = await getSupabase()
+          .from("notifications")
+          .select("id")
+          .eq("user_id", inviterId)
+          .eq("type", "friend_accepted")
+          .eq("related_user_id", me.id)
+          .eq("related_id", data.id)
+          .limit(1);
+
+        if (!existingNotif || existingNotif.length === 0) {
+          await createNotification({
+            userId: inviterId,
+            type: "friend_accepted",
+            title: "Friend request accepted!",
+            body: `${me.display_name || me.email} accepted your friend invite. You can now see each other's availability!`,
+            relatedUserId: me.id,
+            relatedId: data.id,
+          });
+        }
       }
     }
 
@@ -1729,6 +1797,65 @@ function zonedToUtc(dateStr: string, timeStr: string, tz: string): Date {
   } catch {
     return refDate; // fallback: assume local = UTC
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers: Call-Window → Synthetic Free Slots
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate synthetic free-slot entries from a user's call_windows over the
+ * next SYNC_WINDOW_DAYS days.  Returns objects shaped like availability rows
+ * ({ start_time, end_time }) so they can be merged directly into calendar-
+ * synced free slots before computing overlaps.
+ */
+function generateCallWindowSlots(
+  callWindows: { day: number; start: string; end: string; label?: string }[] | null | undefined,
+  timezone: string | null | undefined,
+): { start_time: string; end_time: string }[] {
+  if (!callWindows || callWindows.length === 0) return [];
+  const tz = timezone || "America/New_York";
+  const now = new Date();
+  const slots: { start_time: string; end_time: string }[] = [];
+
+  for (let d = 0; d < SYNC_WINDOW_DAYS; d++) {
+    const day = new Date(now.getTime() + d * 86400000);
+    const dayStr = day.toLocaleDateString("en-CA", { timeZone: tz }); // YYYY-MM-DD
+    const weekdayNum = new Date(
+      day.toLocaleString("en-US", { timeZone: tz }),
+    ).getDay();
+
+    for (const cw of callWindows) {
+      if (cw.day !== weekdayNum) continue;
+      const startUtc = zonedToUtc(dayStr, cw.start, tz);
+      const endUtc = zonedToUtc(dayStr, cw.end, tz);
+      if (startUtc >= endUtc || startUtc < now) continue;
+      slots.push({ start_time: startUtc.toISOString(), end_time: endUtc.toISOString() });
+    }
+  }
+  return slots;
+}
+
+/**
+ * Merge synthetic call-window slots into calendar-synced free slots.
+ * Adds windows that don't already overlap with existing free blocks.
+ */
+function mergeCallWindowSlots(
+  calendarSlots: { start_time: string; end_time: string }[],
+  cwSlots: { start_time: string; end_time: string }[],
+): { start_time: string; end_time: string }[] {
+  if (cwSlots.length === 0) return calendarSlots;
+  const merged = [...calendarSlots];
+  for (const cw of cwSlots) {
+    const alreadyCovered = calendarSlots.some(
+      (s) => s.start_time <= cw.start_time && s.end_time >= cw.end_time,
+    );
+    if (!alreadyCovered) {
+      merged.push(cw);
+    }
+  }
+  merged.sort((a, b) => a.start_time.localeCompare(b.start_time));
+  return merged;
 }
 
 // ---------------------------------------------------------------------------
@@ -2422,8 +2549,23 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
       return;
     }
 
+    if (!friendId || friendId === me.id) {
+      res.status(400).json({ error: "Invalid friendId" });
+      return;
+    }
+
+    const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
+    if (!acceptedFriendIds.has(friendId)) {
+      res.status(403).json({ error: "You can only view overlap with accepted friends" });
+      return;
+    }
+
     // Get the friend's DB user to find their firebase_uid for syncing
     const friendUser = await getDbUserById(friendId);
+    if (!friendUser) {
+      res.status(404).json({ error: "Friend not found" });
+      return;
+    }
 
     // Auto-sync both calendars (in parallel) before computing overlap
     const syncResults = await Promise.allSettled([
@@ -2459,11 +2601,21 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
       return;
     }
 
+    // Merge call-window slots into calendar-synced availability
+    const myMerged = mergeCallWindowSlots(
+      mySlots.data || [],
+      generateCallWindowSlots(me.call_windows, me.timezone),
+    );
+    const friendMerged = mergeCallWindowSlots(
+      friendSlots.data || [],
+      generateCallWindowSlots(friendUser?.call_windows, friendUser?.timezone),
+    );
+
     // Apply travel buffer — skip for phone/video calls
     const myBuffer = isCallMode ? 0 : (me.travel_buffer_min || 0);
     const friendBuffer = isCallMode ? 0 : (friendUser?.travel_buffer_min || 0);
-    const myBuffered = applyTravelBuffer(mySlots.data || [], myBuffer);
-    const friendBuffered = applyTravelBuffer(friendSlots.data || [], friendBuffer);
+    const myBuffered = applyTravelBuffer(myMerged, myBuffer);
+    const friendBuffered = applyTravelBuffer(friendMerged, friendBuffer);
 
     // Compute overlaps (using buffered slots)
     // Use participants' preferred duration to set minimum overlap length
@@ -2550,9 +2702,24 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
       return;
     }
 
+    const requestedFriendIds = [...new Set(
+      friendIds.filter((fid: unknown): fid is string => typeof fid === "string" && !!fid && fid !== me.id),
+    )];
+    if (requestedFriendIds.length === 0) {
+      res.status(400).json({ error: "friendIds must include at least one valid friend id" });
+      return;
+    }
+
+    const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
+    const unauthorizedFriendIds = requestedFriendIds.filter((fid) => !acceptedFriendIds.has(fid));
+    if (unauthorizedFriendIds.length > 0) {
+      res.status(403).json({ error: "All friendIds must be accepted friends" });
+      return;
+    }
+
     // Fetch all friends' DB records
     const friendUsers = await Promise.all(
-      friendIds.map((fid: string) => getDbUserById(fid)),
+      requestedFriendIds.map((fid: string) => getDbUserById(fid)),
     );
 
     // Sync all calendars in parallel (me + all friends)
@@ -2568,7 +2735,7 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
     const sb = getSupabase();
 
     // Fetch free slots for all participants (me + friends) with travel buffer
-    const allUserIds = [me.id, ...friendIds];
+    const allUserIds = [me.id, ...requestedFriendIds];
     const allProfiles = [me, ...friendUsers];
     const slotsByUser = await Promise.all(
       allUserIds.map((uid, idx) =>
@@ -2580,8 +2747,12 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
           .gte("end_time", now)
           .order("start_time")
           .then((r) => {
-            const buffer = allProfiles[idx]?.travel_buffer_min || 0;
-            return applyTravelBuffer(r.data || [], buffer);
+            const profile = allProfiles[idx];
+            const calSlots = r.data || [];
+            const cwSlots = generateCallWindowSlots(profile?.call_windows, profile?.timezone);
+            const merged = mergeCallWindowSlots(calSlots, cwSlots);
+            const buffer = profile?.travel_buffer_min || 0;
+            return applyTravelBuffer(merged, buffer);
           }),
       ),
     );
@@ -2620,7 +2791,7 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
     currentOverlaps = roundOverlaps(currentOverlaps, 30);
 
     // AI-score the group overlaps
-    const suggestions = await scoreGroupOverlaps(me.id, friendIds, currentOverlaps, 8);
+    const suggestions = await scoreGroupOverlaps(me.id, requestedFriendIds, currentOverlaps, 8);
 
     // Build sync status for each participant
     const participantStatus = friendUsers.map((fu, idx) => {
@@ -2632,7 +2803,7 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
         ? (syncResult.value as { synced: boolean; slots: number }).slots
         : 0;
       return {
-        id: fu?.id || friendIds[idx],
+        id: fu?.id || requestedFriendIds[idx],
         name: fu?.display_name || "Friend",
         synced,
         freeSlots,
@@ -2751,7 +2922,10 @@ app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
     if (!me) { res.status(404).json({ error: "User not found" }); return; }
 
     const { name, emoji, memberIds, invitedEmails } = req.body;
-    const hasMemberIds = Array.isArray(memberIds) && memberIds.length > 0;
+    const requestedMemberIds: string[] = Array.isArray(memberIds)
+      ? [...new Set(memberIds.filter((id: unknown): id is string => typeof id === "string" && !!id && id !== me.id))]
+      : [];
+    const hasMemberIds = requestedMemberIds.length > 0;
     const hasInvitedEmails = Array.isArray(invitedEmails) && invitedEmails.length > 0;
 
     if (!name || (!hasMemberIds && !hasInvitedEmails)) {
@@ -2760,6 +2934,12 @@ app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
     }
 
     const sb = getSupabase();
+    const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
+    const unauthorizedMemberIds = requestedMemberIds.filter((id) => !acceptedFriendIds.has(id));
+    if (unauthorizedMemberIds.length > 0) {
+      res.status(403).json({ error: "All direct group members must be accepted friends" });
+      return;
+    }
 
     const { data: group, error: gErr } = await sb
       .from("friend_groups")
@@ -2770,7 +2950,7 @@ app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
     if (gErr) { res.status(500).json({ error: gErr.message }); return; }
 
     // Add creator + all existing members
-    const allIds = [me.id, ...(hasMemberIds ? memberIds.filter((id: string) => id !== me.id) : [])];
+    const allIds = [me.id, ...requestedMemberIds];
     const rows = allIds.map((uid: string) => ({ group_id: group.id, user_id: uid }));
 
     const { error: mErr } = await sb
@@ -2794,15 +2974,21 @@ app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
             .single();
 
           if (existingUser) {
-            // User exists — add them to the group directly and send friend request if needed
-            if (existingUser.id !== me.id) {
+            // User exists — only add directly if already an accepted friend
+            if (existingUser.id !== me.id && acceptedFriendIds.has(existingUser.id)) {
               await sb.from("friend_group_members")
                 .upsert({ group_id: group.id, user_id: existingUser.id }, { onConflict: "group_id,user_id" });
-
-              // Also create/ensure friendship
+            } else if (existingUser.id !== me.id) {
+              // Not an accepted friend yet: create/ensure friendship invite and keep as pending invite
               const [userA, userB] = me.id < existingUser.id ? [me.id, existingUser.id] : [existingUser.id, me.id];
               await sb.from("friendships")
                 .upsert({ user_a_id: userA, user_b_id: userB, invited_by: me.id, status: "pending" }, { onConflict: "user_a_id,user_b_id" });
+              await sb.from("pending_invites")
+                .upsert(
+                  { inviter_id: me.id, invited_email: email, group_id: group.id },
+                  { onConflict: "inviter_id,invited_email" },
+                );
+              pendingResults.push(email);
             }
           } else {
             // User doesn't exist — store pending invite with group_id
@@ -2861,9 +3047,21 @@ app.put("/groups/:id", requireAuth, async (req: AuthRequest, res: Response) => {
         .eq("group_id", groupId);
       const previousIds = new Set((previousMembers || []).map((m: any) => m.user_id));
 
+      const requestedMemberIds = [...new Set(
+        memberIds.filter((id: unknown): id is string => typeof id === "string" && !!id && id !== me.id),
+      )];
+      const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
+      const previousMemberIds = Array.from(previousIds) as string[];
+      const allowedIds = new Set<string>([...previousMemberIds, ...Array.from(acceptedFriendIds)]);
+      const unauthorizedMemberIds = requestedMemberIds.filter((id) => !allowedIds.has(id));
+      if (unauthorizedMemberIds.length > 0) {
+        res.status(403).json({ error: "You can only add accepted friends to this group" });
+        return;
+      }
+
       // Replace all members
       await sb.from("friend_group_members").delete().eq("group_id", groupId);
-      const allIds = [me.id, ...memberIds.filter((id: string) => id !== me.id)];
+      const allIds = [me.id, ...requestedMemberIds];
       const rows = allIds.map((uid: string) => ({ group_id: groupId, user_id: uid }));
       await sb.from("friend_group_members").insert(rows);
 
@@ -2926,6 +3124,13 @@ app.post("/groups/:id/members", requireAuth, async (req: AuthRequest, res: Respo
       res.status(400).json({ error: "memberIds must be a non-empty array" });
       return;
     }
+    const requestedMemberIds = [...new Set(
+      memberIds.filter((id: unknown): id is string => typeof id === "string" && !!id && id !== me.id),
+    )];
+    if (requestedMemberIds.length === 0) {
+      res.status(400).json({ error: "memberIds must include at least one valid user id" });
+      return;
+    }
 
     // Verify the requester is a member of this group
     const { data: membership } = await sb
@@ -2947,10 +3152,17 @@ app.post("/groups/:id/members", requireAuth, async (req: AuthRequest, res: Respo
       .eq("group_id", groupId);
 
     const existingIds = new Set((existingMembers || []).map((m: any) => m.user_id));
-    const newIds = memberIds.filter((id: string) => !existingIds.has(id));
+    const newIds = requestedMemberIds.filter((id: string) => !existingIds.has(id));
 
     if (newIds.length === 0) {
       res.json({ added: 0, message: "All selected members are already in the group" });
+      return;
+    }
+
+    const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
+    const unauthorizedMemberIds = newIds.filter((id: string) => !acceptedFriendIds.has(id));
+    if (unauthorizedMemberIds.length > 0) {
+      res.status(403).json({ error: "You can only add accepted friends to this group" });
       return;
     }
 
@@ -3043,14 +3255,22 @@ app.post("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
     const { title, friendId, friendIds, startTime, endTime, location, description } = req.body;
 
     // Support both single friendId and multiple friendIds
-    const participantIds: string[] = friendIds && Array.isArray(friendIds)
-      ? friendIds
-      : friendId
+    const rawParticipantIds: string[] = Array.isArray(friendIds)
+      ? friendIds.filter((pid: unknown): pid is string => typeof pid === "string" && !!pid)
+      : (typeof friendId === "string" && !!friendId)
         ? [friendId]
         : [];
+    const participantIds = [...new Set(rawParticipantIds.filter((pid) => pid !== me.id))];
 
     if (participantIds.length === 0) {
       res.status(400).json({ error: "At least one friendId is required" });
+      return;
+    }
+
+    const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
+    const unauthorizedParticipantIds = participantIds.filter((pid) => !acceptedFriendIds.has(pid));
+    if (unauthorizedParticipantIds.length > 0) {
+      res.status(403).json({ error: "All participants must be accepted friends" });
       return;
     }
 
@@ -3375,6 +3595,12 @@ app.post("/meetups/:meetupId/counter-propose", requireAuth, async (req: AuthRequ
       return;
     }
 
+    const participant = await isMeetupParticipant(meetupId, me.id);
+    if (!participant) {
+      res.status(403).json({ error: "You are not a participant in this meetup" });
+      return;
+    }
+
     // Get the original meetup
     const { data: originalMeetup, error: meetupErr } = await getSupabase()
       .from("meetups")
@@ -3478,6 +3704,12 @@ app.patch("/meetups/:meetupId/didnt-happen", requireAuth, async (req: AuthReques
     const me = await getDbUser(req.uid!);
     if (!me) {
       res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const participant = await isMeetupParticipant(meetupId, me.id);
+    if (!participant) {
+      res.status(403).json({ error: "You are not a participant in this meetup" });
       return;
     }
 
@@ -3606,6 +3838,12 @@ app.post("/meetups/:meetupId/add-to-calendar", requireAuth, async (req: AuthRequ
   try {
     const me = await getDbUser(req.uid!);
     if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const participant = await isMeetupParticipant(meetupId, me.id);
+    if (!participant) {
+      res.status(403).json({ error: "You are not a participant in this meetup" });
+      return;
+    }
 
     // Fetch the meetup details
     const { data: meetup, error: meetupErr } = await getSupabase()
@@ -3855,14 +4093,25 @@ app.post("/suggestions/:suggestionId/act", requireAuth, async (req: AuthRequest,
     return;
   }
   try {
+    const me = await getDbUser(req.uid!);
+    if (!me) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
     const { data, error } = await getSupabase()
       .from("suggestion_events")
       .update({ outcome, acted_at: new Date().toISOString() })
       .eq("id", suggestionId)
+      .eq("user_id", me.id)
       .select()
       .single();
 
     if (error) {
+      if (error.code === "PGRST116") {
+        res.status(404).json({ error: "Suggestion not found" });
+        return;
+      }
       res.status(500).json({ error: error.message });
       return;
     }
@@ -4033,19 +4282,33 @@ app.get("/activity-feed", requireAuth, async (req: AuthRequest, res: Response) =
         const iAmA = f.user_a.id === me.id;
         const friend = iAmA ? f.user_b : f.user_a;
 
-        // Get last meetup with this friend
-        const { data: lastMeetup } = await getSupabase()
-          .from("meetups")
-          .select("start_time")
-          .eq("status", "completed")
-          .or(`id.in.(
-            select meetup_id from meetup_participants where user_id = '${me.id}'
-          ),id.in.(
-            select meetup_id from meetup_participants where user_id = '${friend.id}'
-          )`)
-          .order("start_time", { ascending: false })
-          .limit(1)
-          .single();
+        // Get last completed meetup shared by both users (safe intersection, no interpolated SQL)
+        const { data: sharedParticipantRows } = await getSupabase()
+          .from("meetup_participants")
+          .select("meetup_id, user_id")
+          .in("user_id", [me.id, friend.id]);
+
+        const participantSetsByMeetup = new Map<string, Set<string>>();
+        for (const row of sharedParticipantRows || []) {
+          if (!participantSetsByMeetup.has(row.meetup_id)) {
+            participantSetsByMeetup.set(row.meetup_id, new Set<string>());
+          }
+          participantSetsByMeetup.get(row.meetup_id)!.add(row.user_id);
+        }
+        const sharedMeetupIds = Array.from(participantSetsByMeetup.entries())
+          .filter(([, ids]) => ids.has(me.id) && ids.has(friend.id))
+          .map(([meetupId]) => meetupId);
+
+        const { data: lastMeetup } = sharedMeetupIds.length > 0
+          ? await getSupabase()
+              .from("meetups")
+              .select("start_time")
+              .eq("status", "completed")
+              .in("id", sharedMeetupIds)
+              .order("start_time", { ascending: false })
+              .limit(1)
+              .maybeSingle()
+          : { data: null };
 
         const lastSeen = lastMeetup ? new Date(lastMeetup.start_time) : null;
         
@@ -5393,6 +5656,21 @@ app.post("/events/invite", requireAuth, async (req: AuthRequest, res: Response) 
       return;
     }
 
+    const requestedFriendIds = [...new Set(
+      friendIds.filter((fid: unknown): fid is string => typeof fid === "string" && !!fid && fid !== me.id),
+    )];
+    if (requestedFriendIds.length === 0) {
+      res.status(400).json({ error: "friendIds must include at least one valid friend id" });
+      return;
+    }
+
+    const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
+    const unauthorizedFriendIds = requestedFriendIds.filter((fid) => !acceptedFriendIds.has(fid));
+    if (unauthorizedFriendIds.length > 0) {
+      res.status(403).json({ error: "All friendIds must be accepted friends" });
+      return;
+    }
+
     // Verify the saved event belongs to this user
     const { data: savedEvent } = await getSupabase()
       .from("saved_events")
@@ -5408,7 +5686,7 @@ app.post("/events/invite", requireAuth, async (req: AuthRequest, res: Response) 
 
     // Create invites and notifications
     const results = [];
-    for (const friendId of friendIds) {
+    for (const friendId of requestedFriendIds) {
       const { data: invite, error } = await getSupabase()
         .from("event_invites")
         .upsert(
@@ -5680,6 +5958,21 @@ app.post("/events/share", requireAuth, async (req: AuthRequest, res: Response) =
       return;
     }
 
+    const requestedFriendIds = [...new Set(
+      friendIds.filter((fid: unknown): fid is string => typeof fid === "string" && !!fid && fid !== me.id),
+    )];
+    if (requestedFriendIds.length === 0) {
+      res.status(400).json({ error: "friendIds must include at least one valid friend id" });
+      return;
+    }
+
+    const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
+    const unauthorizedFriendIds = requestedFriendIds.filter((fid) => !acceptedFriendIds.has(fid));
+    if (unauthorizedFriendIds.length > 0) {
+      res.status(403).json({ error: "All friendIds must be accepted friends" });
+      return;
+    }
+
     const senderName = me.display_name?.split(" ")[0] || "A friend";
     const eventDate = event.datetimeLocal
       ? new Date(event.datetimeLocal).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
@@ -5714,7 +6007,7 @@ app.post("/events/share", requireAuth, async (req: AuthRequest, res: Response) =
     const sentTo: string[] = [];
     const errors: string[] = [];
 
-    for (const friendId of friendIds) {
+    for (const friendId of requestedFriendIds) {
       try {
         // Try event_shared type first
         const { error } = await getSupabase().from("notifications").insert({
@@ -5779,7 +6072,7 @@ app.post("/events/share", requireAuth, async (req: AuthRequest, res: Response) =
 
     res.json({
       sent: sentTo.length,
-      total: friendIds.length,
+      total: requestedFriendIds.length,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (err: any) {
@@ -7199,6 +7492,18 @@ app.put("/calendar/selected", requireAuth, async (req: AuthRequest, res: Respons
 // Google Calendar webhook receiver (public — Google sends POST here)
 // ---------------------------------------------------------------------------
 app.post("/webhooks/google-calendar", async (req: Request, res: Response) => {
+  if (!GOOGLE_WEBHOOK_SECRET) {
+    res.status(503).json({ error: "Webhook secret not configured" });
+    return;
+  }
+  const providedSecret =
+    (req.headers["x-webhook-secret"] as string | undefined) ||
+    (req.headers["x-goog-channel-token"] as string | undefined);
+  if (!providedSecret || providedSecret !== GOOGLE_WEBHOOK_SECRET) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
   const channelId = req.headers["x-goog-channel-id"] as string | undefined;
   const resourceState = req.headers["x-goog-resource-state"];
   console.log("Calendar webhook:", { channelId, resourceState });
@@ -7227,11 +7532,7 @@ app.post("/webhooks/google-calendar", async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 // One-time migration endpoint
 // ---------------------------------------------------------------------------
-app.post("/admin/migrate", async (req: Request, res: Response) => {
-  if (req.body.secret !== "slotted-migrate-2026") {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
+app.post("/admin/migrate", requireAdmin, async (_req: Request, res: Response) => {
   const results: string[] = [];
   const sb = getSupabase();
 
@@ -8023,6 +8324,42 @@ app.get("/admin/stats", requireAdmin, async (_req: Request, res: Response) => {
       friendships: friendships.count ?? 0,
       notifications: notifications.count ?? 0,
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /admin/friendships — create or fix a friendship between two users
+// Body: { userAId, userBId, status? }
+// ---------------------------------------------------------------------------
+app.post("/admin/friendships", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+    const { userAId, userBId, status } = req.body;
+    if (!userAId || !userBId) {
+      res.status(400).json({ error: "userAId and userBId are required" });
+      return;
+    }
+    // Canonical ordering
+    const [uA, uB] = userAId < userBId ? [userAId, userBId] : [userBId, userAId];
+
+    const { data, error } = await sb
+      .from("friendships")
+      .upsert(
+        {
+          user_a_id: uA,
+          user_b_id: uB,
+          invited_by: uA,
+          status: status || "accepted",
+        },
+        { onConflict: "user_a_id,user_b_id" },
+      )
+      .select()
+      .single();
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
