@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Slotted is an AI-powered social scheduling app that syncs with Google Calendar to help busy young professionals maintain friendships. Built as a React + Vite PWA hosted on Firebase, with Firebase Cloud Functions (Express) as the backend and Supabase PostgreSQL as the database.
+Slotted (slotted-ai) is an AI-powered app that syncs with Google Calendar to help busy young professionals maintain friendships. Built as a React + Vite PWA hosted on Firebase, with Firebase Cloud Functions (Express) as the backend and Supabase PostgreSQL as the database.
 
 ## Architecture
 

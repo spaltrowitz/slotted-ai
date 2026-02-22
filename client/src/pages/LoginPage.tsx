@@ -1,22 +1,8 @@
-import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
   const { user, loading, signInWithGoogle, authError } = useAuth();
-
-  // Capture referral param from invite links (e.g. ?ref=abc123)
-  // Default: connect new signups with founder account for testing
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get('ref');
-    if (ref) {
-      localStorage.setItem('slotted_referrer', ref);
-      localStorage.removeItem('slotted_referrer_email');
-    } else if (!localStorage.getItem('slotted_referrer')) {
-      localStorage.setItem('slotted_referrer_email', 'sharipaltrowitz@gmail.com');
-    }
-  }, []);
 
   if (loading) {
     return (

@@ -1,4 +1,4 @@
-# Slotted — AI Social Scheduling
+# slotted-ai
 
 > An AI-powered scheduling app that syncs with Google Calendar to help busy young professionals actually see their friends.
 

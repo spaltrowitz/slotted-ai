@@ -47,6 +47,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isNewUser, setIsNewUser] = useState(false);
+
+  // Capture referral param from URL as early as possible (before any redirects)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref) {
+      localStorage.setItem('slotted_referrer', ref);
+      localStorage.removeItem('slotted_referrer_email');
+    } else if (!localStorage.getItem('slotted_referrer')) {
+      localStorage.setItem('slotted_referrer_email', 'sharipaltrowitz@gmail.com');
+    }
+  }, []);
+
   const [onboardingComplete, setOnboardingComplete] = useState(() => {
     return localStorage.getItem('slotted_onboarding_complete') === 'true';
   });
@@ -62,12 +75,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       setLoading(false);
       // Ensure user record exists in DB on every session
       if (firebaseUser) {
-        syncUserToDb(firebaseUser);
+        await syncUserToDb(firebaseUser);
+        // Auto-connect referral on every auth state change (handles already-logged-in users
+        // who click a referral link and get redirected before signInWithGoogle runs)
+        await connectReferral(firebaseUser);
       }
     });
     return unsubscribe;
@@ -84,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           // Auto-connect with referrer after redirect sign-in
           await syncUserToDb(result.user);
-          connectReferral(result.user);
+          await connectReferral(result.user);
         }
       })
       .catch((err) => {
@@ -159,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Auto-connect with referrer after successful sign-in
       if (result.user) {
         await syncUserToDb(result.user);
-        connectReferral(result.user);
+        await connectReferral(result.user);
       }
     } catch (err: any) {
       console.error('Auth error:', err);

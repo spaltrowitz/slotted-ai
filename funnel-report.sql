@@ -53,7 +53,7 @@ UNION ALL
 
 SELECT 
   'Scheduled at least 1 meetup' AS step,
-  COUNT(DISTINCT m.organizer_id) AS count
+  COUNT(DISTINCT m.created_by) AS count
 FROM meetups m
 
 ORDER BY count DESC;
@@ -80,10 +80,10 @@ LEFT JOIN (
   ) f GROUP BY user_id
 ) friends ON friends.user_id = u.id
 LEFT JOIN (
-  SELECT organizer_id, COUNT(*) AS cnt 
+  SELECT created_by, COUNT(*) AS cnt 
   FROM meetups 
-  GROUP BY organizer_id
-) meetups ON meetups.organizer_id = u.id
+  GROUP BY created_by
+) meetups ON meetups.created_by = u.id
 ORDER BY u.created_at;
 
 

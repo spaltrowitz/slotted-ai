@@ -1,4 +1,4 @@
-# User Research Interview Guide: Social Scheduling Problem Validation
+# User Research Interview Guide: slotted-ai Problem Validation
 
 | Field | Value |
 |---|---|

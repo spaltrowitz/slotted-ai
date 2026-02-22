@@ -1,6 +1,6 @@
 # Vibecoding Development Plan
 
-**Project:** Social Scheduling App - V1 MVP
+**Project:** slotted-ai - V1 MVP
 **Development Approach:** AI-assisted coding with Vibecode/Cursor
 **Timeline:** 8–10 weeks (part-time, 15–20 hrs/week)
 **Tech Stack:** Node.js/Express backend, React frontend, PostgreSQL, deployed on Railway/Vercel

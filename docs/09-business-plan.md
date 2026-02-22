@@ -34,7 +34,7 @@ The result: friendships slowly fade — not from lack of caring, but from lack o
 
 ## 4. Solution
 
-**Slotted** is an AI-powered social scheduling app that connects to your calendar, understands your preferences, and proactively helps you find time with the people you care about — without the back-and-forth.
+**Slotted (slotted-ai)** is an AI-powered app that connects to your calendar, understands your preferences, and proactively helps you find time with the people you care about — without the back-and-forth.
 
 ### How it works:
 
@@ -57,7 +57,7 @@ The result: friendships slowly fade — not from lack of caring, but from lack o
 
 ## 5. What Slotted Is Not
 
-Clarity on scope is just as important as the product itself. Slotted is a social scheduling layer, not a productivity tool or an event platform.
+Clarity on scope is just as important as the product itself. Slotted is a slotted-ai layer, not a productivity tool or an event platform.
 
 | Slotted is NOT... | Use this instead |
 |---|---|
@@ -298,7 +298,7 @@ The free tier must deliver the **complete "aha moment"** before any limit is hit
 
 **Partially yes, with caveats.**
 
-**The yes:** For a social scheduling tool, organic growth (users inviting friends) is the most honest signal of product-market fit. Slotted is inherently a network product — it's useless alone. If someone finds it valuable, they *must* invite friends to get value from it. So if no one invites anyone, that's a real signal that the pain isn't acute enough.
+**The yes:** For a slotted-ai tool, organic growth (users inviting friends) is the most honest signal of product-market fit. Slotted is inherently a network product — it's useless alone. If someone finds it valuable, they *must* invite friends to get value from it. So if no one invites anyone, that's a real signal that the pain isn't acute enough.
 
 **The caveats:**
 
@@ -402,7 +402,7 @@ These are the beliefs baked into this business plan that might be wrong:
 | Assumption | How to validate |
 |---|---|
 | Scheduling friction is a real, recurring pain point | Beta user survey: "How often do plans fall through because of scheduling?" |
-| People will grant calendar access for social scheduling | Track calendar connection rate in beta. Below 50% = problem. |
+| People will grant calendar access for slotted-ai | Track calendar connection rate in beta. Below 50% = problem. |
 | The AI suggestions are meaningfully better than texting | Ask beta users: "Was the suggested time one you would have found on your own?" |
 | Users will invite friends organically | Track organic invites. Zero after 1 month = critical problem. |
 | Free/busy data is enough (we don't need event details) | Monitor if users request richer calendar integration |

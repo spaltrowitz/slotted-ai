@@ -1,4 +1,4 @@
-# Product Requirements Document: Social Scheduling App V1
+# Product Requirements Document: slotted-ai V1
 
 | Field | Value |
 |---|---|
@@ -13,7 +13,7 @@
 
 **Problem:** Scheduling recurring social meetups with close friends requires excessive back-and-forth texting and manual calendar coordination. Existing solutions (Doodle, shared calendars) create friction by requiring manual time proposals or exposing too much calendar detail.
 
-**Solution:** An AI-powered social scheduling app that syncs friends' Google Calendars (free/busy only), proactively suggests optimal meeting times based on mutual availability, preferences, and learned behavior patterns. The goal: reduce scheduling coordination time by 80%.
+**Solution:** An AI-powered app, slotted-ai, that syncs friends' Google Calendars (free/busy only), proactively suggests optimal meeting times based on mutual availability, preferences, and learned behavior patterns. The goal: reduce scheduling coordination time by 80%.
 
 **Target Market:** Busy young professionals aged 25–40 who maintain 5–15 close friendships and value efficiency in social planning. Initial focus on tech-savvy professionals who use Google Calendar.
 
