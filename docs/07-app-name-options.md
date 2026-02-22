@@ -68,9 +68,24 @@
 
 ---
 
+## Domain Availability (checked Feb 22, 2026)
+
+`slotted.ai` is **registered** (resolves to active IPs, not available).
+
+### Preferred alternatives
+| Domain | Status | Notes |
+|---|---|---|
+| **getslotted.ai** | 🟢 Likely available | Top pick — keeps .ai branding, clean CTA |
+| **tryslotted.ai** | 🟢 Likely available | Great for launch/beta |
+| **slotted.me** | 🟢 Likely available | Short, personal, fits the friendship vibe |
+
+> Confirm availability on [Porkbun](https://porkbun.com) or [Namecheap](https://namecheap.com) before purchasing.
+
+---
+
 ## Next Steps
 
 - [ ] Search [USPTO trademark database](https://tmsearch.uspto.gov) for top pick(s)
 - [ ] Check App Store + Play Store listings
-- [ ] Check domain availability (.com, .app, .io)
+- [x] Check domain availability (.com, .app, .io, .ai) — see section above
 - [ ] Check social media handle availability (@slotted, etc.)
