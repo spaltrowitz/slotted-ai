@@ -52,7 +52,7 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(null, true); // Still allow in dev; tighten for production
+        callback(new Error("Not allowed by CORS"));
       }
     },
     credentials: true,
