@@ -40,3 +40,14 @@
 - Current state (ground truth): `docs/06-mvp-current-state.md`
 - Google OAuth verification plan: `docs/plans/plan-google-oauth-verification.md`
 - Test infrastructure: `tests/agents/` (scenario-based, not wired to CI)
+- Two-way sync plan: `docs/plans/plan-two-way-calendar-sync.md`
+
+### Two-Way Calendar Sync Architecture (Feb 2026)
+- **Watch channels are scaffolded but never created.** The webhook endpoint (`POST /webhooks/google-calendar`) exists, `GOOGLE_WEBHOOK_SECRET` is set, `calendar_watch_channel`/`calendar_watch_expiry` columns exist on `users` — but `calendar.events.watch()` is never called. The circuit is 80% wired.
+- **`syncUserCalendar()` does full fetches every time** — no sync tokens. It writes to the `availability` table (free/busy blocks) but never inspects individual events for RSVP or time changes.
+- **`google_event_id` on `meetup_participants`** is the key link between Slotted meetups and Google Calendar events. Already shipped via `migrations/add_google_event_id.sql`.
+- **`autoAddToCalendar()` creates GCal events** on meetup confirmation. Already has write scope (`calendar.events`).
+- **Feedback loop prevention is critical.** When RSVP changes flow in from Google Calendar, the system must track `rsvp_source` to avoid pushing the change back to GCal and triggering an infinite loop.
+- **Conflict resolution rule:** Calendar = source of truth for individual RSVP. Slotted = source of truth for multi-party state (who's invited, overall meetup status, time for everyone).
+- **Per-user watch on 'primary' calendar** is sufficient for Phase 1 since Slotted only writes events to primary. Per-calendar watches can be added later.
+- **Notification language for calendar-originated changes** must follow Slotted's soft social dynamics: "is no longer available" not "declined."
