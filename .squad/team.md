@@ -1,0 +1,19 @@
+# Squad Team — Slotted
+
+## Project Context
+
+**Project:** Slotted — AI-powered friendship maintenance app that syncs with Google Calendar
+**Owner:** Shari Paltrowitz
+**Stack:** React 19 + TypeScript + Tailwind CSS v4 + Vite (frontend), Firebase Cloud Functions + Express (backend), Supabase PostgreSQL (database), Firebase Auth (Google OAuth), Firebase Hosting (PWA)
+**Repo structure:** `client/` (frontend), `functions/` (backend), `database/` (schema), `migrations/` (SQL), `docs/` (documentation)
+
+## Members
+
+| Name | Role | Scope | Emoji |
+|------|------|-------|-------|
+| Beard | Lead | Architecture, code review, decisions, scope | 🏗️ |
+| Keeley | Frontend Dev | React, Tailwind, UI components, pages | ⚛️ |
+| Roy | Backend Dev | Firebase Functions, Express, Supabase, APIs | 🔧 |
+| Nate | Tester | Tests, quality, edge cases | 🧪 |
+| Scribe | Session Logger | Memory, decisions, session logs | 📋 |
+| Ralph | Work Monitor | Work queue, backlog, keep-alive | 🔄 |

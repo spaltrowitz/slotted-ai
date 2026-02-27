@@ -1,0 +1,9 @@
+[
+  {
+    "assignment_id": "slotted-001",
+    "universe": "ted-lasso",
+    "assigned_at": "2026-02-27T21:51:00Z",
+    "agents": ["Beard", "Keeley", "Roy", "Nate"],
+    "reason": "initial-team-formation"
+  }
+]
