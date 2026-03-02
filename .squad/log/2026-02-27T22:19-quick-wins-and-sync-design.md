@@ -5,7 +5,7 @@
 
 ## Summary
 
-Orchestrated 4 agents to unblock the roadmap. Beard designed two-way sync architecture (webhooks + incremental sync), Nate validated with 30 test scenarios and surfaced 4 critical edge cases, Keeley shipped QW-1 (empty states) and QW-6 (invite route), Roy confirmed CORS is already secure.
+Orchestrated 4 agents to unblock the roadmap. Toph designed two-way sync architecture (webhooks + incremental sync), Sokka validated with 30 test scenarios and surfaced 4 critical edge cases, Katara shipped QW-1 (empty states) and QW-6 (invite route), Zuko confirmed CORS is already secure.
 
 ## Outcomes
 
@@ -18,5 +18,5 @@ Orchestrated 4 agents to unblock the roadmap. Beard designed two-way sync archit
 
 - User approval on two-way sync architecture
 - Begin implementation phases (watch channels → RSVP sync → time change detection → Apple + hardening)
-- Address Nate's edge case questions before Phase 1 dev begins
+- Address Sokka's edge case questions before Phase 1 dev begins
 - QA and user testing for QW-1 and QW-6

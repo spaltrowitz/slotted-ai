@@ -11,9 +11,9 @@
 
 | Name | Role | Scope | Emoji |
 |------|------|-------|-------|
-| Leo | Lead | Architecture, code review, decisions, scope | 🏗️ |
-| CJ | Frontend Dev | React, Tailwind, UI components, pages | ⚛️ |
-| Sam | Backend Dev | Firebase Functions, Express, Supabase, APIs | 🔧 |
-| Josh | Tester | Tests, quality, edge cases | 🧪 |
+| Toph | Lead | Architecture, code review, decisions, scope | 🏗️ |
+| Katara | Frontend Dev | React, Tailwind, UI components, pages | ⚛️ |
+| Zuko | Backend Dev | Firebase Functions, Express, Supabase, APIs | 🔧 |
+| Sokka | Tester | Tests, quality, edge cases | 🧪 |
 | Scribe | Session Logger | Memory, decisions, session logs | 📋 |
 | Ralph | Work Monitor | Work queue, backlog, keep-alive | 🔄 |

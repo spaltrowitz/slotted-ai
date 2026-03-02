@@ -4,11 +4,11 @@
 
 ---
 
-## Architecture Decision: Two-Way Calendar Sync (Leo, 2026-02-28)
+## Architecture Decision: Two-Way Calendar Sync (Toph, 2026-02-28)
 
 | Field | Value |
 |---|---|
-| **Author** | Leo (Lead) |
+| **Author** | Toph (Lead) |
 | **Date** | 2026-02-28 |
 | **Status** | Proposed — awaiting user sign-off |
 | **Scope** | LI-1: Two-Way Calendar Sync (RICE: 900) |
@@ -52,10 +52,10 @@ No new privacy risks. Webhook data stays server-side. We only inspect events mat
 
 ---
 
-## Edge Cases Affecting Two-Way Sync Architecture (Josh, 2026-02-27)
+## Edge Cases Affecting Two-Way Sync Architecture (Sokka, 2026-02-27)
 
-**From:** Josh (QA)  
-**To:** Leo (Architect), Shari  
+**From:** Sokka (QA)  
+**To:** Toph (Architect), Shari  
 **Date:** 2025-02-27  
 **Priority:** High — these need architecture decisions before implementation
 
@@ -92,7 +92,7 @@ No new privacy risks. Webhook data stays server-side. We only inspect events mat
 - Large drift (> 1 hour): definitely a reschedule — should trigger counter-propose
 - All-day conversion: ambiguous — could mean "I blocked the day" not "change the time"
 
-**Need from Leo:** Define thresholds and the flow. My tests will assert against whatever is decided.
+**Need from Toph:** Define thresholds and the flow. My tests will assert against whatever is decided.
 
 #### 4. Stale Sync Token Recovery (EC-10)
 
@@ -108,9 +108,9 @@ No new privacy risks. Webhook data stays server-side. We only inspect events mat
 
 ---
 
-## Decision: Empty State Strategy (CJ, 2025-01-27)
+## Decision: Empty State Strategy (Katara, 2025-01-27)
 
-**Author:** CJ (Frontend Dev)  
+**Author:** Katara (Frontend Dev)  
 **Scope:** QW-1 + QW-6
 
 ### Decision
@@ -138,9 +138,9 @@ This was the critical growth-loop fix — invite links were 404ing before this c
 
 ---
 
-## Improvement Analysis (Leo, 2026-02-27)
+## Improvement Analysis (Toph, 2026-02-27)
 
-**Summary:** Leo's full-stack codebase analysis identified 18 prioritized improvements:
+**Summary:** Toph's full-stack codebase analysis identified 18 prioritized improvements:
 - 6 Quick Wins (empty states, OAuth verification, counter-propose wiring, CORS hardening, token encryption, invite route fix)
 - 7 Medium Lifts (backend split, integration tests, GDPR features, email fallback, onboarding pipeline, Lighthouse optimization, algorithm transparency)
 - 5 Large Initiatives (two-way calendar sync, recurring commitments, SMS bridge, ML preference learning, couple/family mode)

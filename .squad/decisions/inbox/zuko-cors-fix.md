@@ -1,6 +1,6 @@
 # Decision: CORS Hardening (QW-4)
 
-**Author:** Sam  
+**Author:** Zuko  
 **Date:** 2025-07-22  
 **Status:** Implemented  
 
