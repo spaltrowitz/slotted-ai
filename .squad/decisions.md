@@ -108,6 +108,75 @@ No new privacy risks. Webhook data stays server-side. We only inspect events mat
 
 ---
 
+## Decision: Calendar Sync Notification Rendering (Keeley, 2026-03-02)
+
+| Field | Value |
+|---|---|
+| **Author** | Keeley (Frontend Dev) |
+| **Date** | 2026-03-02 |
+| **Status** | Implemented |
+| **Scope** | Two-Way Calendar Sync — frontend notification types |
+
+### Decision
+
+Added three new notification types to `NotificationsPage.tsx` for the two-way calendar sync feature:
+
+- `meetup_rsvp_changed` — 🔄 sky-blue theme, "View meetup" CTA
+- `meetup_time_changed` — 🕐 indigo theme, "View meetup" CTA
+- `meetup_counter_propose` — 💡 violet theme, "View meetup" CTA (accept/dismiss UI deferred to Phase 3)
+
+### Key Choices
+
+1. **All three types in Reminders tab** — they're informational, not actionable (yet). `meetup_counter_propose` will move to Requests tab once Phase 3 adds accept/dismiss UI.
+2. **"View meetup" links to `/dashboard`** — no dedicated meetup detail route exists. When one is added, update these links.
+3. **No new components** — followed existing pattern of adding to `typeConfig` + inline JSX blocks.
+4. **Soft language is backend-driven** — notification `title` and `body` come from the server. Frontend only controls emoji, colors, and CTA text. CTA text uses neutral "View meetup."
+
+### Open Items
+
+- Phase 3: Add accept/dismiss UI for `meetup_counter_propose` (move to Requests tab at that point)
+- Future: When a meetup detail page is built, update the "View meetup" link target
+
+---
+
+## Roy — Two-Way Sync Implementation Decisions (2026-03-02)
+
+### Summary
+- Applied `calendar_sync_token` only for the primary Google calendar (calendar id `"primary"` or matching the user's email) since there is a single token stored per user.
+- When a sync token returns a 410, the token is cleared and the calendar is re-fetched without a sync token to preserve availability accuracy.
+
+### Notes
+- Watch channel creation/teardown and webhook integration follow the plan without further deviations.
+
+---
+
+## Decision: CORS Hardening (QW-4)
+
+**Author:** Zuko  
+**Date:** 2025-07-22  
+**Status:** Implemented  
+
+### Context
+The CORS middleware in `functions/src/index.ts` had a security hole: the fallback for unknown origins was `callback(null, true)`, allowing any domain to make authenticated API requests.
+
+### Decision
+Changed the else branch to `callback(new Error("Not allowed by CORS"))` so unknown origins are rejected with a CORS error.
+
+### Allowed Origins (unchanged)
+- `http://localhost:5173` — Vite dev server
+- `http://localhost:5174` — Vite dev server (alternate port)
+- `https://slotted-ai.web.app` — Firebase Hosting (production)
+- `https://slotted-ai.firebaseapp.com` — Firebase Hosting (alternate)
+
+### Trade-offs
+- Requests with no `Origin` header (mobile apps, curl, server-to-server) are still allowed through — this is standard and intentional. Firebase Auth middleware is the real gatekeeper for those.
+- If a staging domain is added later, it needs to be added to `allowedOrigins` or the request will be blocked.
+
+### Files Changed
+- `functions/src/index.ts` line 55 — one-line change
+
+---
+
 ## Decision: Empty State Strategy (Katara, 2025-01-27)
 
 **Author:** Katara (Frontend Dev)  
