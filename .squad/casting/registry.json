@@ -1,34 +1,10 @@
 [
-  {
-    "persistent_name": "Beard",
-    "role": "Lead",
-    "universe": "ted-lasso",
-    "created_at": "2026-02-27T21:51:00Z",
-    "legacy_named": false,
-    "status": "active"
-  },
-  {
-    "persistent_name": "Keeley",
-    "role": "Frontend Dev",
-    "universe": "ted-lasso",
-    "created_at": "2026-02-27T21:51:00Z",
-    "legacy_named": false,
-    "status": "active"
-  },
-  {
-    "persistent_name": "Roy",
-    "role": "Backend Dev",
-    "universe": "ted-lasso",
-    "created_at": "2026-02-27T21:51:00Z",
-    "legacy_named": false,
-    "status": "active"
-  },
-  {
-    "persistent_name": "Nate",
-    "role": "Tester",
-    "universe": "ted-lasso",
-    "created_at": "2026-02-27T21:51:00Z",
-    "legacy_named": false,
-    "status": "active"
-  }
+  {"persistent_name": "Leo", "role": "Lead", "universe": "the-west-wing", "created_at": "2026-03-02T16:15:00Z", "legacy_named": false, "status": "active"},
+  {"persistent_name": "CJ", "role": "Frontend Dev", "universe": "the-west-wing", "created_at": "2026-03-02T16:15:00Z", "legacy_named": false, "status": "active"},
+  {"persistent_name": "Sam", "role": "Backend Dev", "universe": "the-west-wing", "created_at": "2026-03-02T16:15:00Z", "legacy_named": false, "status": "active"},
+  {"persistent_name": "Josh", "role": "Tester", "universe": "the-west-wing", "created_at": "2026-03-02T16:15:00Z", "legacy_named": false, "status": "active"},
+  {"persistent_name": "Beard", "role": "Lead", "universe": "ted-lasso", "created_at": "2026-02-27T21:51:00Z", "legacy_named": false, "status": "retired"},
+  {"persistent_name": "Keeley", "role": "Frontend Dev", "universe": "ted-lasso", "created_at": "2026-02-27T21:51:00Z", "legacy_named": false, "status": "retired"},
+  {"persistent_name": "Roy", "role": "Backend Dev", "universe": "ted-lasso", "created_at": "2026-02-27T21:51:00Z", "legacy_named": false, "status": "retired"},
+  {"persistent_name": "Nate", "role": "Tester", "universe": "ted-lasso", "created_at": "2026-02-27T21:51:00Z", "legacy_named": false, "status": "retired"}
 ]

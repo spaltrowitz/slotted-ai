@@ -4,6 +4,15 @@
     "universe": "ted-lasso",
     "assigned_at": "2026-02-27T21:51:00Z",
     "agents": ["Beard", "Keeley", "Roy", "Nate"],
-    "reason": "initial-team-formation"
+    "reason": "initial-team-formation",
+    "status": "retired"
+  },
+  {
+    "assignment_id": "slotted-002",
+    "universe": "the-west-wing",
+    "assigned_at": "2026-03-02T16:15:00Z",
+    "agents": ["Leo", "CJ", "Sam", "Josh"],
+    "reason": "recast-by-user-request",
+    "status": "active"
   }
 ]
