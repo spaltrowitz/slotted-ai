@@ -15,10 +15,11 @@ interface CalendarPickerProps {
   source?: 'google' | 'apple' | 'outlook';
   onClose?: () => void;
   onSaved?: () => void;
+  onDisconnected?: () => void;
   compact?: boolean;
 }
 
-export default function CalendarPicker({ source = 'google', onClose, onSaved, compact = false }: CalendarPickerProps) {
+export default function CalendarPicker({ source = 'google', onClose, onSaved, onDisconnected, compact = false }: CalendarPickerProps) {
   const [calendars, setCalendars] = useState<CalendarInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,9 +39,12 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, co
       setCalendars(data.calendars || []);
     } catch (err: any) {
       const errCode = err.response?.data?.error;
-      if (errCode === 'calendar_reconnect_required') {
+      if (errCode === 'calendar_reconnect_required' || errCode === 'Calendar not connected') {
         setNeedsReconnect(true);
-        setError(err.response?.data?.message || 'Your calendar connection has expired. Please reconnect.');
+        setError('Your Google Calendar connection has expired. Please reconnect below.');
+        // Clear stale "Connected" badge in parent
+        localStorage.removeItem('slotted_google_calendar_connected');
+        onDisconnected?.();
       } else {
         setError(errCode || 'Failed to load calendars');
       }
@@ -178,6 +182,8 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, co
         </div>
       )}
 
+      {!needsReconnect && (
+      <>
       <div className={compact ? 'space-y-3' : 'px-5 py-4 space-y-4'}>
         {/* Quick actions */}
         <div className="flex items-center justify-between">
@@ -238,6 +244,8 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, co
           {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save Selection'}
         </button>
       </div>
+      </>
+      )}
     </div>
   );
 }

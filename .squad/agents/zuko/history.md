@@ -10,6 +10,24 @@
 
 <!-- Append learnings below -->
 
+### Deploy Attempt — Firebase Functions (2026-03-03)
+
+**Result: FAILED — two blockers identified.**
+
+#### Blocker 1: Placeholder env vars in `functions/.env`
+Three required variables still have `PASTE_YOUR_*` placeholder values, not real credentials:
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+
+The other three vars (`SUPABASE_URL`, `GOOGLE_REDIRECT_URI`, `FRONTEND_URL`) have real values. `GOOGLE_WEBHOOK_SECRET` also has a value.
+
+#### Blocker 2: Deploy timeout during code analysis
+Firebase CLI timed out loading user code (`Timeout after 10000`). The env var FATAL message printed (all 6 vars reported missing), meaning Firebase CLI 15.8.0 may not be loading `functions/.env` during the deploy analysis phase at all. Additionally, `package.json` specifies `"engines": { "node": "24" }` — Firebase Cloud Functions may not yet support Node.js 24. Recommend checking supported runtimes.
+
+#### Migration Status Check
+The migration file `migrations/two_way_calendar_sync.sql` has 5 statements. Per prior session notes, statement 5 (DROP CONSTRAINT on notifications) was already run. Without direct Supabase access, I cannot verify which of statements 1–4 were applied. The user should run the column-check query below in Supabase SQL Editor to determine what's missing, then run only the missing ALTER statements.
+
 ### CRIT Fixes Delivered (2026-03-03, commit 5db77f9)
 
 **Fixed all 3 critical bugs from Sokka's code review. Build passes. Ready for production.**

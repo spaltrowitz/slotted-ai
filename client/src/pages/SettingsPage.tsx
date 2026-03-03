@@ -25,6 +25,7 @@ export default function SettingsPage() {
   const [showAppleCalendarDetails, setShowAppleCalendarDetails] = useState(false);
   const [showAppleWhy, setShowAppleWhy] = useState(false);
   const [showCalendarDetails, setShowCalendarDetails] = useState(false);
+  const [googleCalendarStale, setGoogleCalendarStale] = useState(false);
   const [showOutlookCalendarDetails, setShowOutlookCalendarDetails] = useState(false);
 
   const [socialRecharge, setSocialRecharge] = useState('2-3-week');
@@ -264,10 +265,14 @@ export default function SettingsPage() {
                       {googleIcon}
                     </div>
                     <span className="text-xs font-medium text-gray-700">Google Calendar</span>
-                    {googleCalendarConnected ? (
+                    {googleCalendarConnected && !googleCalendarStale ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
                         <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
                         Connected
+                      </span>
+                    ) : googleCalendarStale ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                        Reconnect needed
                       </span>
                     ) : (
                       <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500">
@@ -275,27 +280,28 @@ export default function SettingsPage() {
                       </span>
                     )}
                   </div>
-                  {googleCalendarConnected ? (
+                  {googleCalendarConnected && !googleCalendarStale ? (
                     <button
                       onClick={() => setShowCalendarDetails(!showCalendarDetails)}
                       className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700"
                     >
                       {showCalendarDetails ? 'Hide' : 'Manage'}
                     </button>
-                  ) : (
+                  ) : !googleCalendarStale ? (
                     <button
                       onClick={connectCalendar}
                       className="rounded-lg gradient-btn px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md"
                     >
                       Connect
                     </button>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Expandable Google calendar details */}
-                {showCalendarDetails && googleCalendarConnected && (
+                {(showCalendarDetails && googleCalendarConnected) || googleCalendarStale ? (
                   <div className="mt-3 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
-                    <CalendarPicker source="google" />
+                    <CalendarPicker source="google" onDisconnected={() => setGoogleCalendarStale(true)} />
+                    {!googleCalendarStale && (
                     <div className="flex gap-2 pt-1">
                       <button
                         onClick={async () => { disconnectCalendar(); await signOut(); signInWithGoogle(); }}
@@ -310,8 +316,9 @@ export default function SettingsPage() {
                         Disconnect
                       </button>
                     </div>
+                    )}
                   </div>
-                )}
+                ) : null}
 
                 {!googleCalendarConnected && (
                   <div className="mt-1.5 space-y-1">
