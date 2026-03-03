@@ -176,6 +176,9 @@ export default function LoginPage() {
       {/* Footer */}
       <footer className="relative z-10 pb-8 text-center">
         <p className="text-xs text-gray-400">Built for busy people who'd rather hang out than plan to hang out.</p>
+        <Link to="/privacy" className="mt-2 inline-block text-xs text-gray-300 hover:text-gray-500 transition-colors">
+          Privacy Policy
+        </Link>
       </footer>
     </div>
   );
