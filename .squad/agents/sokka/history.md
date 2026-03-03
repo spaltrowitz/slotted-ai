@@ -10,6 +10,16 @@
 
 <!-- Append learnings below -->
 
+### Phase 4 Priority Recommendations (2026-03-03)
+
+**HIGH-1 (Creator time change override):** Medium-high urgency. Creator dragging a group meetup in GCal silently changes everyone's time with no consent. Fix: route group meetups (3+ participants) through counter-propose; allow direct update only for 1:1s. ~2 hours. Fix before Phase 4.
+
+**HIGH-2 (410 stale token no retry):** Low-medium urgency. Webhook handler clears stale token but doesn't retry — one-webhook delay before catch-up. Self-healing but adds invisible latency. ~30 min fix. Bundle with HIGH-1.
+
+**Phase 4 ordering:** Integration tests FIRST (zero tests exist — every past bug was found by code review), then structured logging (no visibility into sync behavior), then rate limiting (low risk at ~20 users), then Apple CalDAV LAST (defer — no user demand, high complexity, Google sync not hardened yet).
+
+**Key insight:** The `tests/` directory has no actual test files — only agent scaffolding. This means there is no regression safety net. Every code change to the 8000+ line `index.ts` is flying blind. The test harness is the single highest-leverage thing to build next.
+
 ### Zuko's CRIT Fixes Applied (2026-03-03, commit 5db77f9)
 
 **All 3 critical bugs from this review are now fixed by Zuko. Ready for production deployment.**

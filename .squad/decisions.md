@@ -345,6 +345,172 @@ Firebase Functions deploy succeeded after `.env` was populated with real credent
 
 ---
 
+## Decision: Landing Page Section Redesign (Suki, 2026-03-03)
+
+| Field | Value |
+|---|---|
+| **Author** | Suki (Designer) |
+| **Date** | 2026-03-03 |
+| **Status** | Implemented |
+| **Scope** | LoginPage.tsx — Early Access badge + "Why It Matters" section |
+
+### Summary
+
+Redesigned two elements of the public landing page to fix visual hierarchy and section differentiation issues reported by Shari.
+
+### Changes
+
+#### 1. Early Access Badge
+
+**Problem:** Badge used teal color identical to the CTA button, creating no visual hierarchy. The tiny 1.5px pulsing dot was too subtle and the badge lacked urgency.
+
+**Fix:**
+- Color shifted from teal → amber/orange gradient (`from-amber-50/90 to-orange-50/90`, `text-amber-800`)
+- Replaced pulsing dot with ✨ sparkle emoji for personality
+- Bumped padding (`px-3 py-1` → `px-4 py-1.5`) and weight (`font-medium` → `font-semibold`)
+- Added `shadow-sm` for subtle depth
+- Added urgency copy: "Early access — limited spots"
+
+#### 2. "Why It Matters" Section
+
+**Problem:** Visually identical to "How It Works" — same pastel gradient cards, same borders, same heading style, same hover effects. Users couldn't distinguish sections while scanning.
+
+**Fix:**
+- Wrapped entire section in a `rounded-3xl` dark panel (`from-slate-900 via-slate-800 to-slate-900`) with `shadow-xl`
+- Cards changed from colored pastel fills to frosted glass: `bg-white/[0.06]` with `border-white/[0.08]`
+- Text inverted: titles → `text-white`, descriptions → `text-slate-400`
+- Hover changed from translate-y lift to subtle opacity shift (`hover:bg-white/[0.10]`)
+- Removed per-card color/border data (no longer needed on dark surface)
+- Added more vertical breathing room (`mb-6` → `mb-8`)
+
+### Design Rationale
+
+- The dark panel creates an unmistakable visual break between "How It Works" (light, colorful, step-based) and "Why It Matters" (dark, refined, value-based)
+- Amber badge avoids competing with teal CTAs — warm gold connotes exclusivity
+- No new CSS classes or design tokens introduced — all standard Tailwind utilities
+- Respects Slotted's product principles: no pressure language in the badge copy, privacy card retained prominently
+
+### Files Changed
+
+- `client/src/pages/LoginPage.tsx` — lines 36-39 (badge), lines 137-184 (Why It Matters section)
+
+---
+
+## Phase 4 Priority Recommendations (Sokka, 2026-03-03)
+
+| Field | Value |
+|---|---|
+| **Author** | Sokka (QA) |
+| **Date** | 2026-03-03 |
+| **Status** | Proposed — awaiting user sign-off |
+| **Scope** | HIGH issues from Phase 1–3 review + Phase 4 ordering |
+
+### HIGH Issues Assessment
+
+#### HIGH-1: Creator Time Change Silently Overrides Group Meetup Time
+
+**What happens now:** When a meetup creator drags an event in Google Calendar, `processCalendarChanges()` (line 8120) directly updates `meetups.start_time`/`end_time` for ALL participants and sends a `meetup_time_changed` notification. No one gets a say.
+
+**Why this is a problem:** Imagine a 4-person brunch. The creator drags it from 11am to 8am in Google Calendar — maybe they were just exploring times, maybe it was a fat-finger. Everyone's meetup silently changes. In a friendship app, unilateral time changes feel controlling and break trust.
+
+**User impact:** MEDIUM-HIGH. Doesn't cause data loss, but violates Slotted's design principle #4 ("reduce friction") by creating friction — people learn they can't trust meetup times to stay put. For 1:1 meetups the behavior is arguably fine (it's your plan together), but for group meetups it's clearly wrong.
+
+**Urgency:** Fix before shipping to more beta testers, but not a blocker for current ~20 users. The fix is small: route creator time changes through the same counter-propose flow for group meetups (3+ participants), allow direct update only for 1:1s. Estimated effort: 1–2 hours.
+
+**Recommendation:** Fix BEFORE Phase 4. This is a design correctness issue, not a technical debt item.
+
+#### HIGH-2: 410 Stale Sync Token Doesn't Retry in Webhook Handler
+
+**What happens now:** In the webhook handler (line 8296), when `events.list` returns 410 (stale sync token), the code clears `calendar_sync_token` but then falls into the `catch` block and exits. No retry. The `syncUserCalendar()` function (line 1633) handles 410 correctly with a retry, but the `processCalendarChanges` path does not.
+
+**Result:** The webhook that triggers the 410 processes zero meetup changes. The NEXT webhook will do a full sync (no token → full fetch), but there's a one-webhook delay. During that delay, any RSVP/time changes from this webhook are invisible to Slotted.
+
+**User impact:** LOW-MEDIUM. Most users won't notice because another webhook usually follows quickly (Google often sends multiple). The edge case where it matters: user declines a meetup in Google Calendar right when the sync token expires. Their decline isn't reflected until the next calendar change triggers another webhook — could be minutes or hours.
+
+**Urgency:** Worth fixing, but not urgent. The window is small and self-healing. Estimated effort: 30 minutes — add a retry block after clearing the token.
+
+**Recommendation:** Fix BEFORE Phase 4, since you're already in the webhook handler code and the fix is trivial. Bundle with HIGH-1.
+
+### Phase 4 Item Analysis
+
+#### 1. Integration Tests — DO FIRST
+
+**Why:** There are zero automated tests in this project. The `tests/` directory contains only agent scaffolding. Every bug found so far (CRIT-1, CRIT-2, CRIT-3, both HIGHs) was found by manual code review. That's not sustainable.
+
+Before adding more complexity (rate limiting, Apple Calendar, monitoring), we need a test harness that catches regressions. Otherwise every new change is a gamble.
+
+**Minimum viable test suite:**
+- Webhook handler: valid channel → sync fires, invalid channel → 200 response (no crash)
+- `processCalendarChanges`: event deleted → RSVP declined, RSVP changed → mapped correctly, time changed by creator vs. non-creator → correct routing
+- Feedback loop prevention: `rsvp_source = 'app'` within 60s → skip
+- 410 recovery: stale token → clears and retries
+- `mapGoogleRsvp`: all status mappings
+
+This can be done with unit tests against the business logic functions — no need for a full E2E framework yet. Mock Supabase, mock Google API.
+
+#### 2. Monitoring/Logging — DO SECOND
+
+**Why:** We're running in production with ~20 beta testers and have NO visibility into sync behavior. When something goes wrong, we find out from user complaints ("my meetup didn't update"), not from logs.
+
+**Minimum viable monitoring:**
+- Structured log line on every webhook: `{ event: "webhook_received", userId, channelId, eventsProcessed: N, syncTokenUsed: bool }`
+- Structured log line on every RSVP change from calendar: `{ event: "calendar_rsvp_sync", userId, meetupId, oldRsvp, newRsvp, source: "google_calendar" }`
+- Error counter for 410s, OAuth failures, unmatched channels
+- Optional: a simple `/admin/sync-stats` endpoint that queries recent sync activity from logs
+
+Don't need Datadog or PagerDuty. Firebase Functions already logs to Cloud Logging — just need structured log lines we can query.
+
+#### 3. Rate Limiting — DO THIRD
+
+**Why:** Important for scale, but with ~20 users, webhook storms are unlikely to cause real problems. Google's own rate limits are the actual ceiling right now.
+
+**What to add:**
+- Per-user sync debounce: if a webhook fires for a user who was synced within the last 30 seconds, skip (use a Firestore/Supabase timestamp check)
+- Exponential backoff on Google API 429s (partially exists in `syncUserCalendar` but not in `processCalendarChanges`)
+
+This is a ~half-day task and prevents a real problem before it becomes one at 100+ users.
+
+#### 4. Apple Calendar (CalDAV) — DO LAST (or defer entirely)
+
+**Why this is premature:**
+- CalDAV is a completely different protocol with different auth, different change detection, and different edge cases
+- None of the beta testers have reported Apple Calendar as a pain point
+- The existing Apple Calendar integration (one-way write via ICS download/subscription) covers the basic case
+- Adding CalDAV polling introduces a new scheduled function, new auth flow (app-specific passwords or Sign in with Apple), new failure modes
+- The two-way sync for Google Calendar isn't fully hardened yet
+
+**Recommendation:** Defer Apple CalDAV to Phase 5 or later. If beta testers ask for it, reconsider. Don't build it speculatively.
+
+### Recommended Priority Order
+
+1. **HIGH-1 Fix: Creator time change routing** — Design correctness bug. Route group meetup creator changes through counter-propose. (~2 hours)
+2. **HIGH-2 Fix: 410 retry in webhook handler** — Add retry after clearing stale token. (~30 minutes)
+3. **Integration tests for sync pipeline** — Zero tests exist. Build a minimal test harness for the webhook→sync→RSVP flow. (~2–3 days)
+4. **Structured logging/monitoring** — Add queryable log lines to webhook handler and `processCalendarChanges`. (~1 day)
+5. **Rate limiting / webhook debounce** — Per-user sync debounce + 429 backoff. (~half day)
+6. **Apple Calendar CalDAV** — Defer. No user demand, high complexity, Google sync not yet hardened.
+
+### Rationale
+
+Items 1–2 are small fixes that should be bundled into a single commit before anything else. They fix real user-facing bugs in shipped code.
+
+Item 3 (tests) comes before items 4–5 because monitoring and rate limiting add code paths that themselves need testing. Building the test harness first means every subsequent change ships with confidence.
+
+Items 4–5 are operational hardening that becomes more important as the user base grows. At ~20 users, the risk is low but the cost of adding them is also low — good investment.
+
+Item 6 (Apple Calendar) is explicitly deferred. It's a significant effort with uncertain ROI and the Google sync path needs more maturity first.
+
+### Open Question for Shari
+
+**HIGH-1 fix — what's the right behavior for 1:1 meetups?**
+
+Option A: Creator can always change time directly for 1:1 meetups (current behavior, seems reasonable for two people)
+Option B: All time changes go through counter-propose regardless of participant count
+
+My recommendation is Option A — for 1:1 meetups, the creator dragging it in Google Calendar is equivalent to texting "hey can we do 3pm instead?" The counter-propose adds friction for no benefit when it's just two people. But for 3+ participants, counter-propose is the right call.
+
+---
+
 ## Decision: Empty State Strategy (Katara, 2025-01-27)
 
 **Author:** Katara (Frontend Dev)  

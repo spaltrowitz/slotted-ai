@@ -33,6 +33,9 @@
 
 ## Cross-Agent References (2026-02-27)
 
+### Suki's Landing Page Redesign (2026-03-03)
+Suki redesigned LoginPage landing page (Early Access badge + "Why It Matters" section). Changes don't directly affect DashboardPage but inform global design consistency — dark panel + frosted glass cards pattern could be reused if needed. Type check passes.
+
 ### Sokka's Sync Testing (Two-Way Calendar Sync)
 Sokka produced 30 test scenarios for two-way sync in `docs/plans/test-scenarios-two-way-sync.md`. Frontend impact: soft notification language rules apply to calendar-originated RSVP changes. See Sokka's learnings on notification language (never "declined," use "can't make it" or "stepped out").
 
