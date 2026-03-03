@@ -20,7 +20,7 @@ export default function PrivacyPolicyPage() {
         <h1 className="font-display text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">
           Privacy Policy
         </h1>
-        <p className="mt-2 text-sm text-gray-400">Effective date: July 14, 2025</p>
+        <p className="mt-2 text-sm text-gray-400">Effective date: February 1, 2026</p>
 
         <div className="mt-8 space-y-8 text-sm leading-relaxed text-gray-600">
           {/* Intro */}
@@ -46,24 +46,32 @@ export default function PrivacyPolicyPage() {
                 </p>
               </div>
               <div>
-                <h3 className="font-semibold text-gray-800">Google Calendar Data</h3>
+                <h3 className="font-semibold text-gray-800">Calendar Data</h3>
                 <p className="mt-1">
-                  With your permission, we access your Google Calendar using the following scopes:
+                  With your permission, we access your calendar from one or more of the following
+                  providers:
                 </p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   <li>
-                    <span className="font-medium text-gray-800">calendar.readonly</span> — to read
-                    your calendar list
+                    <span className="font-medium text-gray-800">Google Calendar</span> — via OAuth,
+                    using scopes to read your calendar list, read events for availability, and create
+                    events when you confirm plans
                   </li>
                   <li>
-                    <span className="font-medium text-gray-800">calendar.events.readonly</span> — to
-                    read your calendar events and determine your availability
+                    <span className="font-medium text-gray-800">Apple Calendar (iCloud)</span> — via
+                    CalDAV, using an app-specific password you provide to read your events and
+                    determine availability
                   </li>
                   <li>
-                    <span className="font-medium text-gray-800">calendar.events</span> — to create
-                    events on your calendar when you confirm plans with friends
+                    <span className="font-medium text-gray-800">Microsoft Outlook</span> — support
+                    planned for the future via Microsoft Graph API
                   </li>
                 </ul>
+                <p className="mt-2">
+                  Regardless of provider, we use calendar data only to determine your availability
+                  and create events you explicitly confirm. The same privacy commitments below apply
+                  to all calendar sources.
+                </p>
               </div>
               <div>
                 <h3 className="font-semibold text-gray-800">User-Created Content</h3>
@@ -78,10 +86,10 @@ export default function PrivacyPolicyPage() {
           {/* 2 */}
           <section>
             <h2 className="font-display text-lg font-bold text-gray-900">
-              2. How We Use Google Calendar Data
+              2. How We Use Calendar Data
             </h2>
             <div className="mt-3 space-y-2">
-              <p>Your Google Calendar data is used solely to:</p>
+              <p>Your calendar data (from any connected provider) is used solely to:</p>
               <ul className="list-disc space-y-1 pl-5">
                 <li>Determine your availability for scheduling suggestions</li>
                 <li>Find mutual free times between you and your friends</li>
@@ -91,9 +99,9 @@ export default function PrivacyPolicyPage() {
                 <p className="font-semibold text-teal-800">Important privacy commitments:</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-teal-700">
                   <li>
-                    Calendar data is <span className="font-semibold">fetched live</span> from
-                    Google's API each time it is needed — we do not store your calendar events in our
-                    database.
+                    Calendar data is <span className="font-semibold">fetched live</span> from your
+                    calendar provider each time it is needed — we do not permanently store your
+                    calendar events in our database.
                   </li>
                   <li>
                     Your calendar details, event titles, and descriptions are{' '}
@@ -129,8 +137,10 @@ export default function PrivacyPolicyPage() {
                 </li>
               </ul>
               <p className="mt-2">
-                Google Calendar data is not persisted in our database. It is retrieved from the Google
-                Calendar API in real time and used only for the duration of the request.
+                Google Calendar data is not persisted in our database. It is retrieved from the
+                calendar provider's API in real time and used only for the duration of the request.
+                For Apple Calendar connections, your CalDAV credentials are stored encrypted in our
+                database to maintain the connection.
               </p>
             </div>
           </section>
@@ -162,10 +172,10 @@ export default function PrivacyPolicyPage() {
             <h2 className="font-display text-lg font-bold text-gray-900">5. Your Rights and Choices</h2>
             <div className="mt-3 space-y-4">
               <div>
-                <h3 className="font-semibold text-gray-800">Revoke Google Calendar Access</h3>
+                <h3 className="font-semibold text-gray-800">Revoke Calendar Access</h3>
                 <p className="mt-1">
-                  You can disconnect your Google Calendar at any time from the Settings page within
-                  Slotted. You can also revoke Slotted's access to your Google Account by visiting{' '}
+                  You can disconnect your calendar at any time from the Settings page within
+                  Slotted. For Google Calendar, you can also revoke Slotted's access by visiting{' '}
                   <a
                     href="https://myaccount.google.com/permissions"
                     target="_blank"
@@ -174,7 +184,8 @@ export default function PrivacyPolicyPage() {
                   >
                     Google Account Permissions
                   </a>
-                  .
+                  . For Apple Calendar, you can revoke the app-specific password from your Apple ID
+                  settings.
                 </p>
               </div>
               <div>
@@ -228,10 +239,10 @@ export default function PrivacyPolicyPage() {
             <p className="mt-3">
               If you have questions about this Privacy Policy or your data, please contact us at:{' '}
               <a
-                href="mailto:support@slotted-ai.web.app"
+                href="mailto:slotted.ai@gmail.com"
                 className="font-medium text-slotted-600 underline underline-offset-2 hover:text-slotted-800"
               >
-                support@slotted-ai.web.app
+                slotted.ai@gmail.com
               </a>
             </p>
           </section>

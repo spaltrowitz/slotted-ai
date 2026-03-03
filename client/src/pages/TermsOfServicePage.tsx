@@ -20,7 +20,7 @@ export default function TermsOfServicePage() {
         <h1 className="font-display text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">
           Terms of Service
         </h1>
-        <p className="mt-2 text-sm text-gray-400">Effective date: July 14, 2025</p>
+        <p className="mt-2 text-sm text-gray-400">Effective date: February 1, 2026</p>
 
         <div className="mt-8 space-y-8 text-sm leading-relaxed text-gray-600">
           <section>
@@ -36,8 +36,9 @@ export default function TermsOfServicePage() {
             <h2 className="font-display text-lg font-bold text-gray-900">1. Description of Service</h2>
             <p className="mt-2">
               Slotted is a calendar-based scheduling tool that helps you find mutual free time with
-              friends and make plans. The Service connects to your Google Calendar, analyzes
-              availability, and suggests times to meet.
+              friends and make plans. The Service connects to your calendar (Google Calendar, Apple
+              Calendar via iCloud, and in the future Microsoft Outlook), analyzes availability, and
+              suggests times to meet.
             </p>
           </section>
 
@@ -59,11 +60,12 @@ export default function TermsOfServicePage() {
           </section>
 
           <section>
-            <h2 className="font-display text-lg font-bold text-gray-900">4. Google Calendar Access</h2>
+            <h2 className="font-display text-lg font-bold text-gray-900">4. Calendar Access</h2>
             <p className="mt-2">
-              Slotted requests access to your Google Calendar to read your free/busy status and
-              create events on your behalf when you confirm a plan. You can disconnect your calendar
-              at any time from the Settings page. See our{' '}
+              Slotted requests access to your calendar (via Google OAuth, Apple CalDAV, or other
+              supported providers) to read your free/busy status and create events on your behalf
+              when you confirm a plan. You can disconnect your calendar at any time from the Settings
+              page. See our{' '}
               <Link to="/privacy" className="font-medium text-teal-600 hover:text-teal-700 underline underline-offset-2">
                 Privacy Policy
               </Link>{' '}
@@ -142,7 +144,13 @@ export default function TermsOfServicePage() {
             <h2 className="font-display text-lg font-bold text-gray-900">12. Contact</h2>
             <p className="mt-2">
               Questions about these Terms? Reach us at{' '}
-              <span className="font-medium text-gray-900">support@slotted-ai.web.app</span>.
+              <a
+                href="mailto:slotted.ai@gmail.com"
+                className="font-medium text-slotted-600 underline underline-offset-2 hover:text-slotted-800"
+              >
+                slotted.ai@gmail.com
+              </a>
+              .
             </p>
           </section>
         </div>
