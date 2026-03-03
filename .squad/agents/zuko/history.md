@@ -10,6 +10,8 @@
 
 <!-- Append learnings below -->
 
+2026-03-03: Firebase deploy succeeded after .env was populated with real credentials. All 5 functions live at https://api-xwsmuazwmq-uc.a.run.app. Migration columns still pending user action in Supabase SQL Editor.
+
 ### Deploy Attempt — Firebase Functions (2026-03-03)
 
 **Result: FAILED — two blockers identified.**

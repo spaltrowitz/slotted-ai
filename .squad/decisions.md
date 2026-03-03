@@ -311,6 +311,40 @@ Changed the else branch to `callback(new Error("Not allowed by CORS"))` so unkno
 
 ---
 
+## Decision: Firebase Functions Deploy Success (Zuko, 2026-03-03)
+
+| Field | Value |
+|---|---|
+| **Author** | Zuko (Backend Dev) |
+| **Date** | 2026-03-03 18:30 |
+| **Status** | Deployed |
+| **Scope** | Production deployment — all 5 functions live |
+
+### Summary
+
+Firebase Functions deploy succeeded after `.env` was populated with real credentials. All functions now at `https://api-xwsmuazwmq-uc.a.run.app`.
+
+### Functions Deployed
+
+- `api` — Express app + all HTTP routes
+- `findCalendarMatches` — AI matching engine
+- `renewCalendarWatchChannels` — Scheduled watch renewal
+- `sendMeetupReminders` — Scheduled reminders
+- `sendPendingRsvpNudges` — Scheduled nudges
+
+### Key Outcomes
+
+- Node.js 24 engine accepted without downgrade
+- All webhooks now reachable from Google Calendar service
+- Calendar sync pipeline operationalized
+- Build passed with no code changes
+
+### Open Items
+
+- User to run migration column-check in Supabase SQL Editor (statements 1–4 pending)
+
+---
+
 ## Decision: Empty State Strategy (Katara, 2025-01-27)
 
 **Author:** Katara (Frontend Dev)  
