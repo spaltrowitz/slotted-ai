@@ -328,7 +328,7 @@ export default function SettingsPage() {
                 {(googleCalendarConnected || appleCalendarConnected) && (
                   <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/40 px-3 py-2">
                     <p className="text-[11px] text-blue-700 leading-relaxed">
-                      🔒 <strong>Your calendar is private.</strong> Friends only see when you're free or busy — never event titles, descriptions, or attendees. You choose exactly which calendars to share, and you can disconnect anytime.
+                      🔒 <strong>Your calendar is private.</strong> Friends only see free or busy. You control which calendars to share and can disconnect anytime.
                     </p>
                   </div>
                 )}
@@ -546,7 +546,7 @@ export default function SettingsPage() {
               <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
                 <p className="text-[11px] text-gray-500">
                   {shareHangouts
-                    ? '\u2705 Friends will see "You caught up with [Name]" in their activity feed'
+                    ? '✅ Friends will see "You caught up with [Name]" in their activity feed. Only shows when both friends have this turned on.'
                     : '\uD83D\uDD12 Your hangouts are completely private \u2014 only you can see them'}
                 </p>
               </div>
@@ -1157,7 +1157,7 @@ export default function SettingsPage() {
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">5</span>
             <div>
               <h2 className="text-sm font-bold text-gray-800">Event Interests</h2>
-              <p className="text-[11px] text-gray-400">We use these to surface shows, concerts, and events you'd actually want to go to with friends</p>
+              <p className="text-[11px] text-gray-400">Surface events you'd actually want to go to with friends</p>
             </div>
           </div>
 

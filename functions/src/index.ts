@@ -4486,8 +4486,8 @@ app.get("/activity-feed", requireAuth, async (req: AuthRequest, res: Response) =
 
     if (recentLogs) {
       for (const log of recentLogs) {
-        // Only show if user has share_hangouts enabled
-        if (!log.user.share_hangouts) continue;
+        // Only show if BOTH users have share_hangouts enabled (mutual opt-in)
+        if (!log.user.share_hangouts || !me.share_hangouts) continue;
 
         // Check if this person is my friend
         const { data: friendship } = await getSupabase()
@@ -6237,6 +6237,27 @@ app.post("/feedback", requireAuth, async (req: AuthRequest, res: Response) => {
     // Always log so it's visible in Cloud Functions logs
     console.log("📬 USER FEEDBACK:", JSON.stringify(feedbackEntry));
 
+    // Notify the app owner via in-app notification
+    try {
+      const { data: ownerRow } = await getSupabase()
+        .from("users")
+        .select("id")
+        .eq("email", "sharipaltrowitz@gmail.com")
+        .single();
+      if (ownerRow) {
+        await createNotification({
+          userId: ownerRow.id,
+          type: "feedback",
+          title: `Feedback from ${feedbackEntry.display_name}`,
+          body: message.trim().slice(0, 500),
+          relatedUserId: undefined,
+          relatedId: undefined,
+        });
+      }
+    } catch (notifErr) {
+      console.error("Failed to notify owner of feedback:", notifErr);
+    }
+
     res.json({ success: true });
   } catch (err) {
     console.error("Feedback error:", err);
@@ -7457,8 +7478,22 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
 
           await Promise.all(googlePromises);
         }
-      } catch (err) {
-        console.error("Google Calendar events fetch error:", err);
+      } catch (err: any) {
+        const errMsg = err?.response?.data?.error || err?.message || "";
+        if (errMsg === "invalid_grant" || errMsg.includes("invalid_grant") || errMsg.includes("Token has been expired or revoked")) {
+          // Clear stale tokens
+          await getSupabase()
+            .from("users")
+            .update({
+              google_access_token: null,
+              google_refresh_token: null,
+              google_token_expires_at: null,
+            })
+            .eq("id", dbUser.id);
+          console.warn("Google Calendar token expired (invalid_grant) — cleared tokens for re-auth");
+        } else {
+          console.error("Google Calendar events fetch error:", err);
+        }
       }
     }
 
@@ -7923,6 +7958,24 @@ app.get("/calendar/list", requireAuth, async (req: AuthRequest, res: Response) =
     res.json({ calendars: enriched });
   } catch (err: any) {
     console.error("Calendar list error:", err);
+    // Detect expired/revoked tokens and tell the client to reconnect
+    const errMsg = err?.response?.data?.error || err?.message || "";
+    if (errMsg === "invalid_grant" || errMsg.includes("invalid_grant") || errMsg.includes("Token has been expired or revoked")) {
+      // Clear stale tokens so user can re-auth
+      const dbUser = await getDbUser(req.uid!);
+      if (dbUser) {
+        await getSupabase()
+          .from("users")
+          .update({
+            google_access_token: null,
+            google_refresh_token: null,
+            google_token_expires_at: null,
+          })
+          .eq("id", dbUser.id);
+      }
+      res.status(401).json({ error: "calendar_reconnect_required", message: "Your Google Calendar connection has expired. Please reconnect." });
+      return;
+    }
     res.status(500).json({ error: err.message });
   }
 });

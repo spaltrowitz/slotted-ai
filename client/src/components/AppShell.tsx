@@ -98,13 +98,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               Sign out
             </button>
-            {user?.photoURL ? (
-              <img src={user.photoURL} alt="" className="h-8 w-8 rounded-full ring-2 ring-slotted-100" />
-            ) : (
-              <div className="flex h-8 w-8 items-center justify-center rounded-full gradient-btn text-xs font-bold text-white">
-                {user?.displayName?.[0] ?? '?'}
-              </div>
-            )}
+            <Link to="/settings" className="cursor-pointer">
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt="" className="h-8 w-8 rounded-full ring-2 ring-slotted-100 transition-opacity hover:opacity-80" />
+              ) : (
+                <div className="flex h-8 w-8 items-center justify-center rounded-full gradient-btn text-xs font-bold text-white transition-opacity hover:opacity-80">
+                  {user?.displayName?.[0] ?? '?'}
+                </div>
+              )}
+            </Link>
           </div>
         </div>
       </header>

@@ -160,6 +160,7 @@ This document captures the **actual MVP** as it exists in code, including all de
 | Onboarding survey | OnboardingPage | Preferred times, Social Battery defaults, calendar connection, call duration prefs |
 | Google Calendar sync | SettingsPage + backend | Real-time via webhooks, sync status shown to user only |
 | Apple Calendar connect | SettingsPage | App-specific password flow (CalDAV) |
+| Outlook Calendar connect | SettingsPage + backend | Microsoft OAuth flow (Graph API), availability sync + event creation |
 | Social Battery (self) | SettingsPage, SocialBattery component | Open / Ask Me / Recharging — private to user + AI |
 | Social frequency preference | SettingsPage | Daily / 2–3×/week / Weekly / Biweekly — "all friends combined" |
 | Recharging days | SettingsPage | Per-day-of-week defaults |

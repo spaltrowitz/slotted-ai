@@ -259,31 +259,31 @@ Add Outlook to calendar providers section.
 ## Todo List
 
 ### Phase 1: Database
-- [ ] 1.1 Create migration `migrations/add_outlook_calendar.sql`
-- [ ] 1.2 Update `database/schema.sql` canonical schema
+- [x] 1.1 Create migration `migrations/add_outlook_calendar.sql`
+- [x] 1.2 Update `database/schema.sql` canonical schema
 
 ### Phase 2: Backend Helpers
-- [ ] 2.1 Install `@azure/msal-node` and `@microsoft/microsoft-graph-client`
-- [ ] 2.2 Add MSAL client helpers (getMsalClient, getOutlookGraphClient)
+- [x] 2.1 Install `@azure/msal-node` and `@microsoft/microsoft-graph-client`
+- [x] 2.2 Add MSAL client helpers (getMsalClient, getOutlookGraphClient)
 
 ### Phase 3: Backend OAuth Routes
-- [ ] 3.1 `GET /calendar/outlook/auth-url`
-- [ ] 3.2 `GET /calendar/outlook/callback`
-- [ ] 3.3 `POST /calendar/outlook/disconnect`
-- [ ] 3.4 `GET /calendar/outlook/list`
-- [ ] 3.5 Update `/calendar/status` for Outlook
+- [x] 3.1 `GET /calendar/outlook/auth-url`
+- [x] 3.2 `GET /calendar/outlook/callback`
+- [x] 3.3 `POST /calendar/outlook/disconnect`
+- [x] 3.4 `GET /calendar/outlook/list`
+- [x] 3.5 Update `/calendar/status` for Outlook
 
 ### Phase 4: Backend Sync
-- [ ] 4.1 Extend `syncUserCalendar()` with Outlook branch
-- [ ] 4.2 Extend `autoAddToCalendar()` with Outlook branch
+- [x] 4.1 Extend `syncUserCalendar()` with Outlook branch
+- [x] 4.2 Extend `autoAddToCalendar()` with Outlook branch
 
 ### Phase 5: Frontend
-- [ ] 5.1 Update AuthContext.tsx
-- [ ] 5.2 Update SettingsPage.tsx
-- [ ] 5.3 Update CalendarPicker.tsx types and endpoint
-- [ ] 5.4 Handle callback redirect (verify existing behavior)
+- [x] 5.1 Update AuthContext.tsx
+- [x] 5.2 Update SettingsPage.tsx
+- [x] 5.3 Update CalendarPicker.tsx types and endpoint
+- [x] 5.4 Handle callback redirect (verify existing behavior)
 
 ### Phase 6: Validation
-- [ ] 6.1 Type-check frontend
-- [ ] 6.2 Build functions
-- [ ] 6.3 Update current-state docs
+- [x] 6.1 Type-check frontend
+- [x] 6.2 Build functions
+- [x] 6.3 Update current-state docs

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface CalendarInfo {
   calendar_id: string;
@@ -23,17 +24,26 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, co
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsReconnect, setNeedsReconnect] = useState(false);
+  const { connectCalendar } = useAuth();
 
   const listEndpoint = source === 'apple' ? '/calendar/apple/list' : source === 'outlook' ? '/calendar/outlook/list' : '/calendar/list';
 
   const fetchCalendars = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setNeedsReconnect(false);
     try {
       const { data } = await api.get(listEndpoint);
       setCalendars(data.calendars || []);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load calendars');
+      const errCode = err.response?.data?.error;
+      if (errCode === 'calendar_reconnect_required') {
+        setNeedsReconnect(true);
+        setError(err.response?.data?.message || 'Your calendar connection has expired. Please reconnect.');
+      } else {
+        setError(errCode || 'Failed to load calendars');
+      }
     } finally {
       setLoading(false);
     }
@@ -148,8 +158,23 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, co
       )}
 
       {error && (
-        <div className="mx-5 mt-3 rounded-xl border border-red-100 bg-red-50/50 px-4 py-2 text-xs text-red-600">
-          {error}
+        <div className="mx-5 mt-3 rounded-xl border border-red-100 bg-red-50/50 px-4 py-3 text-xs text-red-600">
+          <p>{error}</p>
+          {needsReconnect && source === 'google' && (
+            <button
+              onClick={async () => {
+                try {
+                  await connectCalendar();
+                  await fetchCalendars();
+                } catch {
+                  setError('Failed to reconnect. Please try again.');
+                }
+              }}
+              className="mt-2 rounded-lg bg-slotted-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slotted-600 transition-colors"
+            >
+              Reconnect Google Calendar
+            </button>
+          )}
         </div>
       )}
 
