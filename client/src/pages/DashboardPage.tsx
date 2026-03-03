@@ -215,13 +215,8 @@ export default function DashboardPage() {
     return () => { active = false; };
   }, [userUid]); // only depends on UID string, not the mutable User object
 
-  // Calendar: sync once on mount
-  useEffect(() => {
-    if (!userUid || !calendarConnected) return;
-    api.post('/calendar/sync').catch(() => {});
-  }, [userUid]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Fetch calendar events (works for both calendar-connected and manual-only users)
+  // Note: /calendar/events also triggers a background availability sync server-side
   useEffect(() => {
     if (!userUid) return;
     let active = true;

@@ -7,6 +7,8 @@ import * as admin from "firebase-admin";
 import { google } from "googleapis";
 import type { calendar_v3 } from "googleapis";
 import { createDAVClient, DAVCalendar, DAVObject } from "tsdav";
+import { ConfidentialClientApplication } from "@azure/msal-node";
+import { Client as GraphClient } from "@microsoft/microsoft-graph-client";
 import { getSupabase } from "./supabase";
 
 // ---------------------------------------------------------------------------
@@ -301,6 +303,34 @@ async function autoAddToCalendar(firebaseUid: string, meetup: {
         console.log(`🍎 Auto-added meetup ${meetup.id} to ${dbUser.email}'s Apple Calendar`);
       } catch (err) {
         console.error(`Apple auto-add failed for ${dbUser.email}:`, err);
+      }
+    }
+
+    // ─── Try Outlook Calendar if Google/Apple didn't work ───
+    if (!addedEventId && dbUser.outlook_calendar_connected && dbUser.outlook_refresh_token) {
+      try {
+        const graphClient = await getOutlookGraphClient(firebaseUid);
+        if (graphClient) {
+          const outlookEvent = await graphClient.api("/me/events").post({
+            subject: eventTitle,
+            body: { contentType: "text", content: eventDescription },
+            start: {
+              dateTime: meetup.start_time,
+              timeZone: dbUser.timezone || "America/New_York",
+            },
+            end: {
+              dateTime: meetup.end_time,
+              timeZone: dbUser.timezone || "America/New_York",
+            },
+            location: meetup.location ? { displayName: meetup.location } : undefined,
+            reminderMinutesBeforeStart: 15,
+            isReminderOn: true,
+          });
+          addedEventId = outlookEvent.id;
+          console.log(`📅 Auto-added meetup ${meetup.id} to ${dbUser.email}'s Outlook Calendar`);
+        }
+      } catch (err) {
+        console.error(`Outlook auto-add failed for ${dbUser.email}:`, err);
       }
     }
 
@@ -1526,8 +1556,9 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
 
   const hasGoogle = !!dbUser.google_refresh_token;
   const hasApple = !!(dbUser.apple_calendar_connected && dbUser.apple_caldav_username && dbUser.apple_caldav_password);
+  const hasOutlook = !!(dbUser.outlook_calendar_connected && dbUser.outlook_refresh_token);
 
-  if (!hasGoogle && !hasApple) return { synced: false, slots: 0 };
+  if (!hasGoogle && !hasApple && !hasOutlook) return { synced: false, slots: 0 };
 
   const sb = getSupabase();
   const now = new Date();
@@ -1660,6 +1691,51 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
       } catch (err) {
         console.error("Failed to fetch Apple Calendar events:", err);
       }
+    }
+  }
+
+  // --- Outlook Calendar sync ---
+  if (hasOutlook) {
+    try {
+      const graphClient = await getOutlookGraphClient(firebaseUid);
+      if (graphClient) {
+        const { data: selectedOutlookCals } = await sb
+          .from("user_calendars")
+          .select("calendar_id")
+          .eq("user_id", dbUser.id)
+          .eq("is_selected", true)
+          .eq("source", "outlook");
+
+        for (const cal of selectedOutlookCals || []) {
+          try {
+            const eventsRes = await graphClient
+              .api(`/me/calendars/${cal.calendar_id}/calendarView`)
+              .query({
+                startDateTime: now.toISOString(),
+                endDateTime: windowEnd.toISOString(),
+              })
+              .select("subject,start,end,showAs,isCancelled")
+              .top(500)
+              .get();
+
+            for (const event of eventsRes.value || []) {
+              if (event.isCancelled || event.showAs === "free" || event.showAs === "unknown") continue;
+              const startDt = event.start?.dateTime;
+              const endDt = event.end?.dateTime;
+              if (!startDt || !endDt) continue;
+              const tz = event.start?.timeZone || "UTC";
+              allBusyBlocks.push({
+                start: tz === "UTC" ? new Date(startDt + "Z").toISOString() : new Date(startDt).toISOString(),
+                end: tz === "UTC" ? new Date(endDt + "Z").toISOString() : new Date(endDt).toISOString(),
+              });
+            }
+          } catch (err) {
+            console.error(`Failed to fetch Outlook events for calendar ${cal.calendar_id}:`, err);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to sync Outlook Calendar:", err);
     }
   }
 
@@ -6369,6 +6445,59 @@ async function getAuthedCalendarClient(firebaseUid: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Outlook Calendar (Microsoft Graph) helpers
+// ---------------------------------------------------------------------------
+
+const MICROSOFT_SCOPES = [
+  "Calendars.Read",
+  "Calendars.ReadWrite",
+  "offline_access",
+  "User.Read",
+];
+
+function getMsalClient(): ConfidentialClientApplication {
+  return new ConfidentialClientApplication({
+    auth: {
+      clientId: process.env.MICROSOFT_CLIENT_ID!,
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
+      authority: `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID || "common"}`,
+    },
+  });
+}
+
+async function getOutlookGraphClient(firebaseUid: string): Promise<GraphClient | null> {
+  const user = await getDbUser(firebaseUid);
+  if (!user?.outlook_refresh_token) return null;
+
+  const msalClient = getMsalClient();
+
+  try {
+    const result = await msalClient.acquireTokenByRefreshToken({
+      refreshToken: user.outlook_refresh_token,
+      scopes: MICROSOFT_SCOPES.filter(s => s !== "offline_access"),
+    });
+
+    if (!result) return null;
+
+    const updates: Record<string, unknown> = {
+      outlook_access_token: result.accessToken,
+      outlook_token_expires_at: result.expiresOn?.toISOString() || null,
+    };
+    await getSupabase()
+      .from("users")
+      .update(updates)
+      .eq("firebase_uid", firebaseUid);
+
+    return GraphClient.init({
+      authProvider: (done) => done(null, result.accessToken),
+    });
+  } catch (err) {
+    console.error("Failed to get Outlook Graph client:", err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Google Calendar OAuth routes
 // ---------------------------------------------------------------------------
 
@@ -6495,16 +6624,18 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
   }
 });
 
-/** GET /calendar/status — check if user has connected their calendar (Google and/or Apple) */
+/** GET /calendar/status — check if user has connected their calendar (Google, Apple, and/or Outlook) */
 app.get("/calendar/status", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const user = await getDbUser(req.uid!);
     const googleConnected = !!(user?.google_refresh_token);
     const appleConnected = !!(user?.apple_calendar_connected && user?.apple_caldav_username);
+    const outlookConnected = !!(user?.outlook_calendar_connected && user?.outlook_refresh_token);
     res.json({
-      connected: googleConnected || appleConnected,
+      connected: googleConnected || appleConnected || outlookConnected,
       google: googleConnected,
       apple: appleConnected,
+      outlook: outlookConnected,
       appleUsername: user?.apple_caldav_username || null,
     });
   } catch (err: any) {
@@ -6959,6 +7090,202 @@ app.get("/calendar/apple/list", requireAuth, async (req: AuthRequest, res: Respo
 });
 
 // ---------------------------------------------------------------------------
+// Outlook Calendar (Microsoft Graph) routes
+// ---------------------------------------------------------------------------
+
+/** GET /calendar/outlook/auth-url — generate the Microsoft OAuth URL */
+app.get("/calendar/outlook/auth-url", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const msalClient = getMsalClient();
+    const authUrl = await msalClient.getAuthCodeUrl({
+      scopes: MICROSOFT_SCOPES,
+      redirectUri: process.env.MICROSOFT_REDIRECT_URI || "https://slotted-ai.web.app/api/calendar/outlook/callback",
+      state: req.uid!,
+      prompt: "consent",
+    });
+    res.json({ url: authUrl });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /calendar/outlook/callback — exchange the OAuth code for tokens */
+app.get("/calendar/outlook/callback", async (req: Request, res: Response) => {
+  const code = req.query.code as string;
+  const state = req.query.state as string;
+  if (!code || !state) {
+    res.status(400).json({ error: "Missing code or state" });
+    return;
+  }
+  try {
+    const msalClient = getMsalClient();
+    const tokenResponse = await msalClient.acquireTokenByCode({
+      code,
+      scopes: MICROSOFT_SCOPES,
+      redirectUri: process.env.MICROSOFT_REDIRECT_URI || "https://slotted-ai.web.app/api/calendar/outlook/callback",
+    });
+
+    await getSupabase()
+      .from("users")
+      .update({
+        outlook_access_token: tokenResponse.accessToken,
+        outlook_refresh_token: (tokenResponse as any).refreshToken || null,
+        outlook_token_expires_at: tokenResponse.expiresOn?.toISOString() || null,
+        outlook_calendar_connected: true,
+      })
+      .eq("firebase_uid", state);
+
+    // Fetch and store user's Outlook calendars
+    const graphClient = GraphClient.init({
+      authProvider: (done) => done(null, tokenResponse.accessToken),
+    });
+
+    const calendarsRes = await graphClient.api("/me/calendars").get();
+    const calendars = calendarsRes.value || [];
+
+    const dbUser = await getDbUser(state);
+    if (dbUser) {
+      for (const cal of calendars) {
+        const { data: existing } = await getSupabase()
+          .from("user_calendars")
+          .select("calendar_id")
+          .eq("user_id", dbUser.id)
+          .eq("calendar_id", cal.id)
+          .single();
+
+        if (existing) {
+          await getSupabase()
+            .from("user_calendars")
+            .update({
+              calendar_color: cal.hexColor || null,
+              access_role: cal.canEdit ? "owner" : "reader",
+            })
+            .eq("user_id", dbUser.id)
+            .eq("calendar_id", cal.id);
+        } else {
+          await getSupabase()
+            .from("user_calendars")
+            .insert({
+              user_id: dbUser.id,
+              calendar_id: cal.id,
+              calendar_color: cal.hexColor || null,
+              is_selected: cal.isDefaultCalendar || cal.canEdit,
+              access_role: cal.canEdit ? "owner" : "reader",
+              source: "outlook",
+            });
+        }
+      }
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    res.redirect(`${frontendUrl}/dashboard?calendar=connected`);
+  } catch (err: any) {
+    console.error("Outlook OAuth callback error:", err);
+    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    res.redirect(`${frontendUrl}/dashboard?calendar=error`);
+  }
+});
+
+/** POST /calendar/outlook/disconnect — remove stored Outlook tokens */
+app.post("/calendar/outlook/disconnect", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    await getSupabase()
+      .from("users")
+      .update({
+        outlook_access_token: null,
+        outlook_refresh_token: null,
+        outlook_token_expires_at: null,
+        outlook_calendar_connected: false,
+      })
+      .eq("firebase_uid", req.uid!);
+
+    const dbUser = await getDbUser(req.uid!);
+    if (dbUser) {
+      await getSupabase()
+        .from("user_calendars")
+        .delete()
+        .eq("user_id", dbUser.id)
+        .eq("source", "outlook");
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /calendar/outlook/list — refresh Outlook calendar list */
+app.get("/calendar/outlook/list", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const graphClient = await getOutlookGraphClient(req.uid!);
+    if (!graphClient) {
+      res.status(400).json({ error: "Outlook Calendar not connected" });
+      return;
+    }
+
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const calendarsRes = await graphClient.api("/me/calendars").get();
+    const calendars = calendarsRes.value || [];
+
+    const calNameMap = new Map<string, string>();
+    for (const cal of calendars) {
+      calNameMap.set(cal.id, cal.name || "Outlook Calendar");
+
+      const { data: existing } = await getSupabase()
+        .from("user_calendars")
+        .select("calendar_id")
+        .eq("user_id", dbUser.id)
+        .eq("calendar_id", cal.id)
+        .single();
+
+      if (existing) {
+        await getSupabase()
+          .from("user_calendars")
+          .update({
+            calendar_color: cal.hexColor || null,
+            access_role: cal.canEdit ? "owner" : "reader",
+          })
+          .eq("user_id", dbUser.id)
+          .eq("calendar_id", cal.id);
+      } else {
+        await getSupabase()
+          .from("user_calendars")
+          .insert({
+            user_id: dbUser.id,
+            calendar_id: cal.id,
+            calendar_color: cal.hexColor || null,
+            is_selected: cal.isDefaultCalendar || cal.canEdit,
+            access_role: cal.canEdit ? "owner" : "reader",
+            source: "outlook",
+          });
+      }
+    }
+
+    const { data: stored } = await getSupabase()
+      .from("user_calendars")
+      .select("*")
+      .eq("user_id", dbUser.id)
+      .eq("source", "outlook")
+      .order("calendar_id");
+
+    const enriched = (stored || []).map((row: any) => ({
+      ...row,
+      calendar_name: calNameMap.get(row.calendar_id) || "Outlook Calendar",
+    }));
+
+    res.json({ calendars: enriched });
+  } catch (err: any) {
+    console.error("Outlook calendar list error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Combined calendar events endpoint
 // ---------------------------------------------------------------------------
 
@@ -6983,7 +7310,7 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
       end: string;
       allDay: boolean;
       location: string | null;
-      source: "google" | "apple";
+      source: "google" | "apple" | "outlook";
       calendarName: string;
       color: string | null;
     }
@@ -7194,6 +7521,72 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
       }
     }
 
+    // --- Outlook Calendar events ---
+    const hasOutlookEv = !!(dbUser.outlook_calendar_connected && dbUser.outlook_refresh_token);
+    if (hasOutlookEv) {
+      try {
+        const graphClient = await getOutlookGraphClient(req.uid!);
+        if (graphClient) {
+          const { data: selectedOutlookCals } = await sb
+            .from("user_calendars")
+            .select("calendar_id, calendar_color")
+            .eq("user_id", dbUser.id)
+            .eq("is_selected", true)
+            .eq("source", "outlook");
+
+          for (const cal of selectedOutlookCals || []) {
+            try {
+              const eventsRes = await graphClient
+                .api(`/me/calendars/${(cal as any).calendar_id}/calendarView`)
+                .query({
+                  startDateTime: now.toISOString(),
+                  endDateTime: windowEnd.toISOString(),
+                })
+                .select("id,subject,start,end,isAllDay,location,isCancelled,showAs")
+                .top(250)
+                .get();
+
+              for (const event of eventsRes.value || []) {
+                if (event.isCancelled) continue;
+
+                const startDt = event.start?.dateTime;
+                const endDt = event.end?.dateTime;
+                if (!startDt || !endDt) continue;
+
+                const isAllDay = !!event.isAllDay;
+                let startVal: string;
+                let endVal: string;
+                if (isAllDay) {
+                  startVal = startDt.slice(0, 10);
+                  endVal = endDt.slice(0, 10);
+                } else {
+                  const tz = event.start?.timeZone || "UTC";
+                  startVal = tz === "UTC" ? new Date(startDt + "Z").toISOString() : new Date(startDt).toISOString();
+                  endVal = tz === "UTC" ? new Date(endDt + "Z").toISOString() : new Date(endDt).toISOString();
+                }
+
+                allEvents.push({
+                  id: `outlook_${event.id}`,
+                  title: event.subject || "Busy",
+                  start: startVal,
+                  end: endVal,
+                  allDay: isAllDay,
+                  location: event.location?.displayName || null,
+                  source: "outlook",
+                  calendarName: "Outlook Calendar",
+                  color: (cal as any).calendar_color || "#0078d4",
+                });
+              }
+            } catch (err) {
+              console.error(`Failed to fetch events from Outlook cal ${(cal as any).calendar_id}:`, err);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Outlook Calendar events fetch error:", err);
+      }
+    }
+
     // ─── Trip buffer: detect multi-day all-day events and inject buffer days ───
     const tripBufferBefore = !!dbUser.trip_buffer_before;
     const tripBufferAfter = dbUser.trip_buffer_after !== false; // default true
@@ -7296,6 +7689,14 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
         apple: hasApple,
       },
     });
+
+    // Fire-and-forget: sync availability slots in the background
+    // so the scheduling engine stays fresh without a separate client call
+    if (hasGoogle || hasApple) {
+      syncUserCalendar(req.uid!).catch((err) =>
+        console.error("Background availability sync error:", err)
+      );
+    }
   } catch (err: any) {
     console.error("Calendar events error:", err);
     res.status(500).json({ error: err.message });
