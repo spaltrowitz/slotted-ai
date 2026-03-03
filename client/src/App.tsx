@@ -11,6 +11,8 @@ import SettingsPage from './pages/SettingsPage';
 import NotificationsPage from './pages/NotificationsPage';
 import EventsPage from './pages/EventsPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
+import InvitePage from './pages/InvitePage';
 
 /* ─── Error boundary ─── */
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -61,6 +63,8 @@ export default function App() {
             <Route path="/" element={<LoginPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
+            <Route path="/terms" element={<TermsOfServicePage />} />
+            <Route path="/invite/:code" element={<InvitePage />} />
 
             {/* Protected routes */}
             <Route element={<ProtectedRoute />}>

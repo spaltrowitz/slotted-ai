@@ -179,6 +179,10 @@ export default function LoginPage() {
         <Link to="/privacy" className="mt-2 inline-block text-xs text-gray-300 hover:text-gray-500 transition-colors">
           Privacy Policy
         </Link>
+        <span className="mx-1.5 mt-2 inline-block text-xs text-gray-200">·</span>
+        <Link to="/terms" className="mt-2 inline-block text-xs text-gray-300 hover:text-gray-500 transition-colors">
+          Terms of Service
+        </Link>
       </footer>
     </div>
   );
