@@ -10,6 +10,30 @@
 
 <!-- Append learnings below -->
 
+### Zuko's CRIT Fixes Applied (2026-03-03, commit 5db77f9)
+
+**All 3 critical bugs from this review are now fixed by Zuko. Ready for production deployment.**
+
+#### CRIT-1 Fix: Feedback Loop Prevention
+- **Location:** `functions/src/index.ts` ~lines 7607–7640
+- **Change:** Added `isRecentAppChange` guard: if `rsvp_source === 'app'` AND `gcal_last_synced_at` within 60s, skip RSVP change
+- **Applied to:** Both cancelled-event and RSVP-mapping paths
+- **Secondary:** Cancelled-event path now explicitly updates etag before skipping
+
+#### CRIT-2 Fix: Disconnect Cleanup
+- **Location:** `functions/src/index.ts` ~lines 6536–6555
+- **Change:** Added `calendar_watch_channel: null, calendar_watch_resource_id: null, calendar_sync_token: null` to user update
+- **Additional:** Separate query nulls `google_event_id` on participant rows
+
+#### CRIT-3 Fix: Webhook Returns 200
+- **Location:** `functions/src/index.ts` ~line 7800
+- **Change:** `console.warn()` + `res.status(200).send("OK")` (was: 403)
+- **Reason:** Google deactivates endpoints returning 4xx
+
+**Review Summary:** 15/30 test scenarios fully covered, 9/30 partial, 4/30 missing (3 were the criticals). Notification language audit: ✅ Compliant.
+
+---
+
 ### Two-Way Sync Code Review — Phases 1-3 (2026-03-03)
 
 **Reviewed implementation in `functions/src/index.ts` lines 6440-8000 and `client/src/pages/NotificationsPage.tsx` against test scenarios in `docs/plans/test-scenarios-two-way-sync.md`.**

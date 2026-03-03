@@ -150,6 +150,140 @@ Added three new notification types to `NotificationsPage.tsx` for the two-way ca
 
 ---
 
+## CRIT Fixes: Two-Way Calendar Sync (Zuko, 2026-03-03)
+
+| Field | Value |
+|---|---|
+| **Author** | Zuko (Backend Dev) |
+| **Date** | 2026-03-03 |
+| **Status** | Implemented — deployed |
+| **Scope** | Critical bug fixes from Sokka's code review |
+
+### Summary
+
+Fixed 3 critical bugs from Sokka's code review of Two-Way Calendar Sync (Phases 1–3). All fixes committed as 5db77f9. Build passes.
+
+### CRIT-1: Feedback Loop Prevention
+
+**Problem:** `rsvp_source` selected but never checked. Stale webhooks could overwrite app-sourced RSVPs.
+
+**Fix:**
+- Added `gcal_last_synced_at` to participant query
+- Added `isRecentAppChange` guard: if `rsvp_source === 'app'` AND sync within 60s, skip RSVP change
+- Applied to both cancelled-event and RSVP-mapping paths
+- Fixed secondary bug: cancelled-event `continue` now updates etag before skipping
+
+### CRIT-2: Disconnect Cleanup
+
+**Problem:** `POST /calendar/disconnect` left `calendar_watch_channel`, `calendar_watch_resource_id`, `calendar_sync_token` orphaned. Stale watch channels kept firing webhooks; orphaned `google_event_id` caused sync confusion on reconnect.
+
+**Fix:**
+- Added null fields to user update at line 6536
+- Added separate query to null `google_event_id` on participant rows
+
+### CRIT-3: Webhook Returns 200
+
+**Problem:** Webhook returned 403 for invalid tokens. Google deactivates endpoints returning 4xx.
+
+**Fix:**
+- Changed to `console.warn()` + `res.status(200).send("OK")`
+- Any webhook handler must NEVER return non-2xx — log the error, always respond 200
+
+### Verification
+- `npm run build` ✅
+- No schema changes
+- Ready for production
+
+---
+
+## Code Review: Two-Way Calendar Sync — Phases 1–3 (Sokka, 2026-03-03)
+
+| Field | Value |
+|---|---|
+| **Author** | Sokka (QA) |
+| **Date** | 2026-03-03 |
+| **Status** | Conditional Approve — 3 critical issues fixed (Zuko) |
+| **Scope** | `functions/src/index.ts` lines 6440–8000, `client/src/pages/NotificationsPage.tsx` |
+
+### Verdict
+
+Structurally sound. Core happy paths covered well. **3 critical bugs + 2 high-severity gaps** identified and fixed by Zuko (commit 5db77f9). Notification language compliant with soft social dynamics ✅.
+
+### Coverage Scorecard
+
+| Category | ✅ Covered | ⚠️ Partial | ❌ Missing | 🔮 Future |
+|----------|-----------|-----------|-----------|----------|
+| Happy Path (6) | 5 | 1 | 0 | 0 |
+| Conflicts (5) | 2 | 2 | 1 | 0 |
+| Edge Cases (10) | 4 | 2 | 2 | 2 |
+| Privacy (5) | 3 | 2 | 0 | 0 |
+| Performance (4) | 1 | 2 | 1 | 0 |
+| **Total (30)** | **15** | **9** | **4** | **2** |
+
+**Coverage: 15/30 fully covered (50%), 9/30 partial (30%), 4/30 missing (13%), 2/30 deferred (7%).**
+
+### Notification Language Audit
+
+All user-facing strings comply with soft social dynamics:
+- Decline: "is no longer available" ✅
+- Maybe: "is now a maybe" ✅
+- Time change: "updated the time" ✅
+- Counter-propose: "suggests a different time" ✅
+- Frontend: "Not this time" (never "declined") ✅
+
+---
+
+## Decision: Counter-Propose Notification Actions (Keeley, 2026-03-02)
+
+| Field | Value |
+|---|---|
+| **Author** | Keeley (Frontend Dev) |
+| **Date** | 2026-03-02 |
+| **Status** | Implemented — Requests tab |
+| **Scope** | Phase 3 interactivity |
+
+### Decision
+
+Upgraded `meetup_counter_propose` notifications from informational to actionable:
+- **"💡 Update time"** — primary action, violet accent. Calls `PATCH /meetups/:id/rsvp` (interim signal), marks read.
+- **"Keep original"** — secondary. Marks read without side effect.
+
+Moved to Requests tab (was Reminders).
+
+### Key Choices
+- Three-state rendering: unread (buttons) → acted (pill) → already-read (fallback link)
+- Soft language: "Update time" / "Keep original" (never "Accept" / "Reject")
+- RSVP endpoint as interim — awaiting dedicated backend endpoint for actual time update
+
+### Open Items
+- Backend: Need endpoint for creator to accept counter-proposal and update meetup time
+- UX: "View meetup" link should target dedicated meetup detail page (not `/dashboard`) when available
+
+---
+
+## Decision: Time Change Detection Routing (Roy, 2026-03-03)
+
+| Field | Value |
+|---|---|
+| **Author** | Roy (Backend Dev) |
+| **Date** | 2026-03-03 |
+| **Status** | Implemented |
+| **Scope** | Phase 3 — calendar time changes |
+
+### Decision
+
+When a Google Calendar event time changes for a Slotted meetup:
+
+1. **Creator moved it** → Meetup `start_time`/`end_time` updated directly. All participants get `meetup_time_changed` notification.
+2. **Non-creator moved it** → No meetup times changed. Creator gets `meetup_counter_propose` notification with suggested time.
+
+### Key Choices
+- **ISO string comparison** for time equality (avoids timezone edge cases)
+- **No threshold logic** — any time difference triggers flow (can add thresholds later)
+- **Counter-propose is notification-only** — no accept/dismiss UI yet (deferred per Keeley)
+
+---
+
 ## Decision: CORS Hardening (QW-4)
 
 **Author:** Zuko  
