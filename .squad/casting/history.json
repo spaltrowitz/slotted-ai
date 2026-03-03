@@ -19,7 +19,7 @@
     "assignment_id": "slotted-003",
     "universe": "avatar-the-last-airbender",
     "assigned_at": "2026-03-02T16:35:00Z",
-    "agents": ["Toph", "Katara", "Zuko", "Sokka"],
+    "agents": ["Toph", "Katara", "Zuko", "Sokka", "Suki"],
     "reason": "recast-non-human-names",
     "status": "active"
   }

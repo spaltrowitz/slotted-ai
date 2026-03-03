@@ -10,6 +10,7 @@
 | Tests, testing, quality, edge cases, validation | Sokka | Zuko |
 | Google Calendar, calendar sync, OAuth tokens | Zuko | Toph |
 | AI features, suggestions, ranking, prompts | Toph + Zuko | — |
+| UI/UX design, visual design, layout, design tokens, accessibility | Suki | Katara |
 | Performance, bundle size, loading | Katara (frontend) / Zuko (backend) | Toph |
 | Auth, Firebase Auth, tokens, middleware | Zuko | Toph |
 | Schema changes, RLS policies, migrations | Zuko | Toph |

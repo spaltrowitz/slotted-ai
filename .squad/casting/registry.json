@@ -3,6 +3,7 @@
   {"persistent_name": "Katara", "role": "Frontend Dev", "universe": "avatar-the-last-airbender", "created_at": "2026-03-02T16:35:00Z", "legacy_named": false, "status": "active"},
   {"persistent_name": "Zuko", "role": "Backend Dev", "universe": "avatar-the-last-airbender", "created_at": "2026-03-02T16:35:00Z", "legacy_named": false, "status": "active"},
   {"persistent_name": "Sokka", "role": "Tester", "universe": "avatar-the-last-airbender", "created_at": "2026-03-02T16:35:00Z", "legacy_named": false, "status": "active"},
+  {"persistent_name": "Suki", "role": "Designer", "universe": "avatar-the-last-airbender", "created_at": "2026-03-03T18:25:00Z", "legacy_named": false, "status": "active"},
   {"persistent_name": "Leo", "role": "Lead", "universe": "the-west-wing", "created_at": "2026-03-02T16:15:00Z", "legacy_named": false, "status": "retired"},
   {"persistent_name": "CJ", "role": "Frontend Dev", "universe": "the-west-wing", "created_at": "2026-03-02T16:15:00Z", "legacy_named": false, "status": "retired"},
   {"persistent_name": "Sam", "role": "Backend Dev", "universe": "the-west-wing", "created_at": "2026-03-02T16:15:00Z", "legacy_named": false, "status": "retired"},

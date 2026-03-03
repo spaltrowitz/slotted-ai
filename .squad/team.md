@@ -15,5 +15,6 @@
 | Katara | Frontend Dev | React, Tailwind, UI components, pages | ⚛️ |
 | Zuko | Backend Dev | Firebase Functions, Express, Supabase, APIs | 🔧 |
 | Sokka | Tester | Tests, quality, edge cases | 🧪 |
+| Suki | Designer | UI/UX design, visual consistency, accessibility | 🎨 |
 | Scribe | Session Logger | Memory, decisions, session logs | 📋 |
 | Ralph | Work Monitor | Work queue, backlog, keep-alive | 🔄 |
