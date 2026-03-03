@@ -6539,8 +6539,19 @@ app.post("/calendar/disconnect", requireAuth, async (req: AuthRequest, res: Resp
         google_access_token: null,
         google_refresh_token: null,
         google_token_expires_at: null,
+        calendar_watch_channel: null,
+        calendar_watch_resource_id: null,
+        calendar_sync_token: null,
       })
       .eq("firebase_uid", req.uid!);
+
+    // Clear google_event_id from user's meetup_participants
+    if (dbUser) {
+      await getSupabase()
+        .from("meetup_participants")
+        .update({ google_event_id: null })
+        .eq("user_id", dbUser.id);
+    }
 
     // Only remove Google calendars (not Apple)
     if (dbUser) {
@@ -7595,7 +7606,7 @@ async function processCalendarChanges(
 
     const { data: participant } = await sb
       .from("meetup_participants")
-      .select("id, meetup_id, user_id, rsvp, rsvp_source, gcal_etag")
+      .select("id, meetup_id, user_id, rsvp, rsvp_source, gcal_etag, gcal_last_synced_at")
       .eq("google_event_id", event.id)
       .eq("user_id", dbUser.id)
       .single();
@@ -7603,6 +7614,12 @@ async function processCalendarChanges(
     if (!participant) continue;
 
     if (event.etag && participant.gcal_etag === event.etag) continue;
+
+    // Feedback loop prevention: if an app-sourced RSVP was made very recently,
+    // skip overwriting it from a stale webhook but still update the etag
+    const isRecentAppChange = participant.rsvp_source === "app"
+      && participant.gcal_last_synced_at
+      && (Date.now() - new Date(participant.gcal_last_synced_at).getTime()) < 60000;
 
     const { data: meetup } = await sb
       .from("meetups")
@@ -7613,9 +7630,14 @@ async function processCalendarChanges(
     if (!meetup || ["cancelled", "completed"].includes(meetup.status)) continue;
 
     if (event.status === "cancelled") {
-      if (participant.rsvp !== "declined") {
+      if (participant.rsvp !== "declined" && !isRecentAppChange) {
         await updateRsvpFromCalendar(participant, meetup, dbUser, "declined");
       }
+      // Always update etag so we don't reprocess this event
+      await sb.from("meetup_participants").update({
+        gcal_etag: event.etag,
+        gcal_last_synced_at: new Date().toISOString(),
+      }).eq("id", participant.id);
       continue;
     }
 
@@ -7624,7 +7646,7 @@ async function processCalendarChanges(
     );
     if (myAttendee?.responseStatus) {
       const mappedRsvp = mapGoogleRsvp(myAttendee.responseStatus);
-      if (mappedRsvp && mappedRsvp !== participant.rsvp) {
+      if (mappedRsvp && mappedRsvp !== participant.rsvp && !isRecentAppChange) {
         await updateRsvpFromCalendar(participant, meetup, dbUser, mappedRsvp);
       }
     }
@@ -7775,7 +7797,8 @@ app.post("/webhooks/google-calendar", async (req: Request, res: Response) => {
     (req.headers["x-webhook-secret"] as string | undefined) ||
     (req.headers["x-goog-channel-token"] as string | undefined);
   if (!providedSecret || providedSecret !== GOOGLE_WEBHOOK_SECRET) {
-    res.status(403).json({ error: "Forbidden" });
+    console.warn("Webhook received with invalid or missing token:", { providedSecret: !!providedSecret });
+    res.status(200).send("OK");
     return;
   }
 

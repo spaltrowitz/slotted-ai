@@ -10,6 +10,25 @@
 
 <!-- Append learnings below -->
 
+### Two-Way Sync Code Review — Phases 1-3 (2026-03-03)
+
+**Reviewed implementation in `functions/src/index.ts` lines 6440-8000 and `client/src/pages/NotificationsPage.tsx` against test scenarios in `docs/plans/test-scenarios-two-way-sync.md`.**
+
+**Key findings:**
+- Core RSVP sync (HP-01, HP-04, HP-06) is correctly implemented with `processCalendarChanges` → `updateRsvpFromCalendar` pipeline
+- Phase 3 time detection works but has a critical bug: creator time changes silently update meetup for all participants without consent check
+- Feedback loop prevention via `rsvp_source` column is INCOMPLETE — code selects it but never checks it before overwriting app-sourced RSVPs
+- Disconnect endpoint (`POST /calendar/disconnect`) does NOT clear `calendar_watch_channel`, `calendar_watch_resource_id`, `calendar_sync_token`, or `google_event_id` on participant rows
+- Webhook endpoint returns 403 for unknown channels instead of 200 — will cause Google to deactivate the endpoint (EC-08 violation)
+- 410 stale sync token handling clears the token but does NOT retry with a full sync in the same request
+- No webhook debouncing — 20 rapid webhooks will fire 20 parallel `events.list` calls
+- Notification language is compliant (soft social dynamics) ✅
+- `toLocaleString()` on server-side (line 7674) will render in server's locale, not user's — minor but sloppy
+
+**Verdict: CONDITIONAL APPROVE** — 3 critical issues must be fixed before shipping (feedback loop, disconnect teardown, webhook 403→200).
+
+---
+
 ### Two-Way Calendar Sync Test Planning (2025-02-27)
 
 **Schema details relevant to testing:**
