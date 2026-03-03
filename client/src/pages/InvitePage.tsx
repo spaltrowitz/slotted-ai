@@ -72,7 +72,7 @@ export default function InvitePage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
-          <span className="font-display text-xl font-bold tracking-tight text-gray-900">Slotted</span>
+          <span className="font-display text-xl font-bold tracking-tight text-gray-900">Slotted.ai</span>
         </Link>
       </nav>
 
@@ -86,7 +86,7 @@ export default function InvitePage() {
               to="/login"
               className="mt-6 inline-flex items-center gap-2 rounded-xl gradient-btn px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg"
             >
-              Go to Slotted
+              Go to Slotted.ai
             </Link>
           </div>
         ) : inviter && !user ? (
@@ -102,7 +102,7 @@ export default function InvitePage() {
               {inviter.displayName} invited you!
             </h2>
             <p className="mt-2 text-sm text-gray-500 leading-relaxed">
-              Join Slotted to find the perfect time to hang out. It syncs your calendars so you never have to text back and forth.
+              Join Slotted.ai to find the perfect time to hang out. It syncs your calendars so you never have to text back and forth.
             </p>
             <button
               onClick={signInWithGoogle}

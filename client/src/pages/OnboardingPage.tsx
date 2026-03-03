@@ -98,7 +98,7 @@ export default function OnboardingPage() {
         {currentStep === 'calendar' && (
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
-              Hey {user?.displayName?.split(' ')[0]}! 👋 Let's get Slotted working for you
+              Hey {user?.displayName?.split(' ')[0]}! 👋 Let's get Slotted.ai working for you
             </h2>
             <p className="text-sm text-gray-500">
               Connect your calendar so we can find the best times to hang out with friends. We only read busy/free — never event titles or details.
@@ -110,7 +110,7 @@ export default function OnboardingPage() {
               </p>
             </div>
             <p className="text-xs text-amber-600 font-medium">
-              ⚠️ When Google asks for permissions, please make sure to select all 3 checkboxes so Slotted can work properly.
+              ⚠️ When Google asks for permissions, please make sure to select all 3 checkboxes so Slotted.ai can work properly.
             </p>
             {calendarConnected ? (
               <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
@@ -154,7 +154,7 @@ export default function OnboardingPage() {
             <h2 className="font-display text-xl font-bold text-gray-900">
               When do you usually hang out?
             </h2>
-            <p className="text-sm text-gray-500">Select all that apply — this helps Slotted suggest the best times</p>
+            <p className="text-sm text-gray-500">Select all that apply — this helps Slotted.ai suggest the best times</p>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { value: 'weekday-morning', emoji: '🌅', prefix: 'Weekday', suffix: 'mornings' },

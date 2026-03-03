@@ -326,7 +326,7 @@ export default function SettingsPage() {
                       We only read busy/free times — never event names or details
                     </p>
                     <p className="text-[11px] text-amber-600 font-medium">
-                      ⚠️ When Google asks for permissions, please select all 3 checkboxes so Slotted can work properly.
+                      ⚠️ When Google asks for permissions, please select all 3 checkboxes so Slotted.ai can work properly.
                     </p>
                   </div>
                 )}
@@ -410,7 +410,7 @@ export default function SettingsPage() {
                         <p>Apple doesn't offer a calendar API like Google does, so all third-party apps (Calendly, Reclaim, etc.) use the same approach:</p>
                         <ol className="list-decimal list-inside space-y-0.5">
                           <li>Go to <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">appleid.apple.com</a> → Sign-In and Security</li>
-                          <li>Generate an App-Specific Password (name it "Slotted")</li>
+                          <li>Generate an App-Specific Password (name it "Slotted.ai")</li>
                           <li>Paste it below — we only read busy/free times, never event details</li>
                         </ol>
                         <p className="text-gray-400">You can revoke this anytime from your Apple ID settings.</p>
@@ -569,7 +569,7 @@ export default function SettingsPage() {
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">2</span>
             <div>
               <h2 className="text-sm font-bold text-gray-800">Planning Style</h2>
-              <p className="text-[11px] text-gray-400">We use this to decide how far in advance to suggest plans — so Slotted matches your vibe</p>
+              <p className="text-[11px] text-gray-400">We use this to decide how far in advance to suggest plans — so Slotted.ai matches your vibe</p>
             </div>
           </div>
 
@@ -650,7 +650,7 @@ export default function SettingsPage() {
                 <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
                   Always-recharge days
                 </label>
-                <p className="mt-0.5 text-[10px] text-gray-400">Select days you never want plans with anyone — Slotted won't suggest hangouts on these days</p>
+                <p className="mt-0.5 text-[10px] text-gray-400">Select days you never want plans with anyone — Slotted.ai won't suggest hangouts on these days</p>
                 <div className="mt-2 grid grid-cols-7 gap-1.5">
                   {[
                     { day: 0, label: 'Sun' },
@@ -685,14 +685,14 @@ export default function SettingsPage() {
               <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
                 <p className="text-[11px] text-gray-500">
                   {rechargingDays.length > 0
-                    ? `💡 Slotted will never suggest plans on ${rechargingDays.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}.`
+                    ? `💡 Slotted.ai will never suggest plans on ${rechargingDays.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}.`
                     : socialRecharge === 'daily'
-                      ? '💡 Slotted will look for every good opportunity to help you connect with friends.'
+                      ? '💡 Slotted.ai will look for every good opportunity to help you connect with friends.'
                       : socialRecharge === '2-3-week'
-                        ? '💡 Slotted will suggest plans with enough breathing room between hangouts.'
+                        ? '💡 Slotted.ai will suggest plans with enough breathing room between hangouts.'
                         : socialRecharge === 'weekly'
-                          ? '💡 Slotted will space out suggestions and protect your downtime.'
-                          : '💡 Slotted will be very selective, only suggesting the best opportunities.'}
+                          ? '💡 Slotted.ai will space out suggestions and protect your downtime.'
+                          : '💡 Slotted.ai will be very selective, only suggesting the best opportunities.'}
                 </p>
               </div>
 
@@ -701,7 +701,7 @@ export default function SettingsPage() {
                 <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
                   Social goal
                 </label>
-                <p className="mt-0.5 text-[10px] text-gray-400">We use this to adjust how proactively Slotted nudges you toward plans</p>
+                <p className="mt-0.5 text-[10px] text-gray-400">We use this to adjust how proactively Slotted.ai nudges you toward plans</p>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {[
                     { value: 'increase', emoji: '📈', label: 'See people more' },
@@ -934,7 +934,7 @@ export default function SettingsPage() {
               </div>
 
               <p className="text-xs text-gray-500 mb-3">
-                Set recurring windows when you're available for phone or video calls. These help Slotted match you with long-distance friends.
+                Set recurring windows when you're available for phone or video calls. These help Slotted.ai match you with long-distance friends.
               </p>
 
               {/* Default call duration */}
@@ -1235,7 +1235,7 @@ export default function SettingsPage() {
               {/* Info note */}
               <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3">
                 <p className="text-[11px] text-blue-700">
-                  💡 These preferences help Slotted find events you'd enjoy. Search for shows, concerts, and more from a friend's profile and plan a time to go together.
+                  💡 These preferences help Slotted.ai find events you'd enjoy. Search for shows, concerts, and more from a friend's profile and plan a time to go together.
                 </p>
               </div>
             </div>

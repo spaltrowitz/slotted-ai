@@ -4175,6 +4175,229 @@ app.post("/meetups/:meetupId/add-to-calendar", requireAuth, async (req: AuthRequ
 });
 
 // ---------------------------------------------------------------------------
+// Shareable Event Links (public share pages for meetups)
+// ---------------------------------------------------------------------------
+
+const shareLookupHits = new Map<string, number[]>();
+function isShareLookupRateLimited(clientKey: string): boolean {
+  const now = Date.now();
+  const windowMs = 60_000;
+  const maxHits = 30;
+  const hits = shareLookupHits.get(clientKey) || [];
+  const recentHits = hits.filter((t) => now - t < windowMs);
+  recentHits.push(now);
+  shareLookupHits.set(clientKey, recentHits);
+  return recentHits.length > maxHits;
+}
+
+function generateShareCode(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+/** POST /meetups/:meetupId/share — generate a shareable link for a meetup */
+app.post("/meetups/:meetupId/share", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { meetupId } = req.params;
+
+    const { data: meetup, error: meetupErr } = await getSupabase()
+      .from("meetups")
+      .select("id, share_code, created_by")
+      .eq("id", meetupId)
+      .single();
+
+    if (meetupErr || !meetup) {
+      res.status(404).json({ error: "Meetup not found" });
+      return;
+    }
+
+    if (meetup.created_by !== me.id) {
+      res.status(403).json({ error: "Only the meetup creator can generate a share link" });
+      return;
+    }
+
+    if (meetup.share_code) {
+      res.json({ shareCode: meetup.share_code, shareUrl: `https://slotted-ai.web.app/e/${meetup.share_code}` });
+      return;
+    }
+
+    let shareCode = generateShareCode();
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const { data: existing } = await getSupabase()
+        .from("meetups")
+        .select("id")
+        .eq("share_code", shareCode)
+        .single();
+      if (!existing) break;
+      shareCode = generateShareCode();
+    }
+
+    const { error: updateErr } = await getSupabase()
+      .from("meetups")
+      .update({ share_code: shareCode })
+      .eq("id", meetupId);
+
+    if (updateErr) {
+      res.status(500).json({ error: updateErr.message });
+      return;
+    }
+
+    res.json({ shareCode, shareUrl: `https://slotted-ai.web.app/e/${shareCode}` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /meetups/shared/:code — public: fetch meetup data for share landing page */
+app.get("/meetups/shared/:code", async (req: Request, res: Response) => {
+  try {
+    const forwardedFor = req.headers["x-forwarded-for"];
+    const clientKey = typeof forwardedFor === "string"
+      ? forwardedFor.split(",")[0].trim()
+      : req.ip || "unknown";
+    if (isShareLookupRateLimited(clientKey)) {
+      res.status(429).json({ error: "Too many requests. Please try again shortly." });
+      return;
+    }
+
+    const { code } = req.params;
+    const normalizedCode = String(code || "").trim().toLowerCase();
+    if (!/^[a-z0-9]{3,32}$/.test(normalizedCode)) {
+      res.status(400).json({ error: "Invalid share code format" });
+      return;
+    }
+
+    const { data: meetup, error } = await getSupabase()
+      .from("meetups")
+      .select("id, title, description, location, start_time, end_time, created_by")
+      .eq("share_code", normalizedCode)
+      .single();
+
+    if (error || !meetup) {
+      res.status(404).json({ error: "Event not found" });
+      return;
+    }
+
+    const { data: creator } = await getSupabase()
+      .from("users")
+      .select("display_name, photo_url, invite_code")
+      .eq("id", meetup.created_by)
+      .single();
+
+    res.json({
+      title: meetup.title,
+      description: meetup.description,
+      location: meetup.location,
+      startTime: meetup.start_time,
+      endTime: meetup.end_time,
+      sharer: {
+        displayName: creator?.display_name || "A Slotted user",
+        photoUrl: creator?.photo_url || null,
+        inviteCode: creator?.invite_code || null,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /meetups/shared/:code/ics — public: download branded .ics file */
+app.get("/meetups/shared/:code/ics", async (req: Request, res: Response) => {
+  try {
+    const forwardedFor = req.headers["x-forwarded-for"];
+    const clientKey = typeof forwardedFor === "string"
+      ? forwardedFor.split(",")[0].trim()
+      : req.ip || "unknown";
+    if (isShareLookupRateLimited(clientKey)) {
+      res.status(429).json({ error: "Too many requests. Please try again shortly." });
+      return;
+    }
+
+    const { code } = req.params;
+    const normalizedCode = String(code || "").trim().toLowerCase();
+    if (!/^[a-z0-9]{3,32}$/.test(normalizedCode)) {
+      res.status(400).json({ error: "Invalid share code format" });
+      return;
+    }
+
+    const { data: meetup, error } = await getSupabase()
+      .from("meetups")
+      .select("id, title, description, location, start_time, end_time, created_by")
+      .eq("share_code", normalizedCode)
+      .single();
+
+    if (error || !meetup) {
+      res.status(404).json({ error: "Event not found" });
+      return;
+    }
+
+    const { data: creator } = await getSupabase()
+      .from("users")
+      .select("invite_code")
+      .eq("id", meetup.created_by)
+      .single();
+
+    const inviteCode = creator?.invite_code || "";
+    const inviteUrl = inviteCode ? `https://slotted-ai.web.app/invite/${inviteCode}` : "https://slotted-ai.web.app";
+
+    const fmtIcs = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const now = fmtIcs(new Date().toISOString());
+    const dtStart = fmtIcs(meetup.start_time);
+    const dtEnd = fmtIcs(meetup.end_time);
+
+    const description = [
+      meetup.description || "",
+      "",
+      "---",
+      "📅 Created with Slotted (https://slotted-ai.web.app)",
+      "The app that helps friends find time to hang.",
+      `Join: ${inviteUrl}`,
+    ].join("\\n");
+
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Slotted//EN",
+      "CALSCALE:GREGORIAN",
+      "METHOD:PUBLISH",
+      "BEGIN:VEVENT",
+      `UID:slotted-${meetup.id}@slotted-ai.web.app`,
+      `DTSTAMP:${now}`,
+      `DTSTART:${dtStart}`,
+      `DTEND:${dtEnd}`,
+      `SUMMARY:${(meetup.title || "Hangout").replace(/[,;\\]/g, " ")}`,
+      `DESCRIPTION:${description}`,
+      ...(meetup.location ? [`LOCATION:${meetup.location.replace(/[,;\\]/g, " ")}`] : []),
+      "BEGIN:VALARM",
+      "TRIGGER:-PT60M",
+      "ACTION:DISPLAY",
+      `DESCRIPTION:${meetup.title || "Hangout"} in 1 hour`,
+      "END:VALARM",
+      "BEGIN:VALARM",
+      "TRIGGER:-PT15M",
+      "ACTION:DISPLAY",
+      `DESCRIPTION:${meetup.title || "Hangout"} in 15 minutes`,
+      "END:VALARM",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${(meetup.title || "event").replace(/[^a-zA-Z0-9 ]/g, "")}.ics"`);
+    res.send(ics);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Suggestions routes (AI scoring — placeholder logic for now)
 // ---------------------------------------------------------------------------
 
@@ -8118,11 +8341,13 @@ async function processCalendarChanges(
 
         if (newStart !== meetupStart || newEnd !== meetupEnd) {
           if (participant.user_id === meetup.created_by) {
-            // Creator moved the event — update meetup for everyone
-            await sb.from("meetups").update({
-              start_time: newStart,
-              end_time: newEnd,
-            }).eq("id", meetup.id);
+            // Count participants to determine if this is a group meetup
+            const { count: participantCount } = await sb
+              .from("meetup_participants")
+              .select("id", { count: "exact", head: true })
+              .eq("meetup_id", meetup.id);
+
+            const isGroupMeetup = (participantCount || 0) > 2;
 
             // Notify all other participants
             const { data: allParts } = await sb
@@ -8131,15 +8356,35 @@ async function processCalendarChanges(
               .eq("meetup_id", meetup.id)
               .neq("user_id", participant.user_id);
 
-            for (const p of (allParts || [])) {
-              await createNotification({
-                userId: p.user_id,
-                type: "meetup_time_changed",
-                title: `🕐 ${dbUser.display_name || "Someone"} updated the time`,
-                body: meetup.title || "Hangout",
-                relatedUserId: dbUser.id,
-                relatedId: meetup.id,
-              });
+            if (isGroupMeetup) {
+              // Group meetup: don't auto-update time, notify others to consent
+              for (const p of (allParts || [])) {
+                await createNotification({
+                  userId: p.user_id,
+                  type: "meetup_time_changed",
+                  title: `🕐 ${dbUser.display_name || "Someone"} wants to change the time`,
+                  body: `${meetup.title || "Hangout"} — proposed ${new Date(newStart).toLocaleString()}`,
+                  relatedUserId: dbUser.id,
+                  relatedId: meetup.id,
+                });
+              }
+            } else {
+              // 1:1 meetup: auto-update time for both participants
+              await sb.from("meetups").update({
+                start_time: newStart,
+                end_time: newEnd,
+              }).eq("id", meetup.id);
+
+              for (const p of (allParts || [])) {
+                await createNotification({
+                  userId: p.user_id,
+                  type: "meetup_time_changed",
+                  title: `🕐 ${dbUser.display_name || "Someone"} updated the time`,
+                  body: meetup.title || "Hangout",
+                  relatedUserId: dbUser.id,
+                  relatedId: meetup.id,
+                });
+              }
             }
           } else {
             // Non-creator moved their calendar event — counter-propose
@@ -8294,14 +8539,38 @@ app.post("/webhooks/google-calendar", async (req: Request, res: Response) => {
             }
           } catch (syncErr: any) {
             if (syncErr?.code === 410) {
+              // Clear stale sync token
               await getSupabase()
                 .from("users")
                 .update({
                   calendar_sync_token: null,
                 })
                 .eq("firebase_uid", user.firebase_uid);
+              console.warn("Sync token stale (410). Retrying with full sync...");
+
+              // Immediately retry with a full sync (no syncToken)
+              try {
+                const fullSyncRes = await calendarApi.events.list({
+                  calendarId: "primary",
+                  maxResults: 50,
+                });
+                if (fullSyncRes.data.items) {
+                  await processCalendarChanges(user.firebase_uid, fullSyncRes.data.items);
+                }
+                if (fullSyncRes.data.nextSyncToken) {
+                  await getSupabase()
+                    .from("users")
+                    .update({
+                      calendar_sync_token: fullSyncRes.data.nextSyncToken,
+                    })
+                    .eq("firebase_uid", user.firebase_uid);
+                }
+              } catch (retryErr) {
+                console.error("Full sync retry also failed:", retryErr);
+              }
+            } else {
+              console.error("Incremental sync error:", syncErr);
             }
-            console.error("Incremental sync error:", syncErr);
           }
         }
         console.log(`🔄 Webhook-triggered sync for channel ${channelId}`);

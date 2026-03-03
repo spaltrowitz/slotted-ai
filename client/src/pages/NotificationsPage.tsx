@@ -288,7 +288,7 @@ export default function NotificationsPage() {
             </h3>
             <p className="mt-2 max-w-sm text-center text-sm text-gray-400 leading-relaxed">
               {activeTab === 'all'
-                ? 'Notifications will appear here when a friend accepts your invite, suggests a meetup, or when Slotted finds a great time to hang out.'
+                ? 'Notifications will appear here when a friend accepts your invite, suggests a meetup, or when Slotted.ai finds a great time to hang out.'
                 : activeTab === 'unread'
                   ? "You've read all your notifications. Nice!"
                   : `No ${activeTab} to show right now.`}

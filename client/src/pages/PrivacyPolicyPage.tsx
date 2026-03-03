@@ -11,7 +11,7 @@ export default function PrivacyPolicyPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
-          <span className="font-display text-xl font-bold tracking-tight text-gray-900">Slotted</span>
+          <span className="font-display text-xl font-bold tracking-tight text-gray-900">Slotted.ai</span>
         </Link>
       </nav>
 
@@ -26,7 +26,7 @@ export default function PrivacyPolicyPage() {
           {/* Intro */}
           <section>
             <p>
-              Slotted ("we," "us," or "our") operates the web application at{' '}
+              Slotted.ai ("we," "us," or "our") operates the web application at{' '}
               <span className="font-medium text-gray-900">slotted-ai.web.app</span>. This Privacy
               Policy explains what information we collect, how we use it, and your choices regarding
               your data.
@@ -106,7 +106,7 @@ export default function PrivacyPolicyPage() {
                   <li>
                     Your calendar details, event titles, and descriptions are{' '}
                     <span className="font-semibold">never visible</span> to other users, including
-                    your friends on Slotted.
+                    your friends on Slotted.ai.
                   </li>
                   <li>
                     We only use calendar data to calculate availability — other users see only whether
@@ -162,7 +162,7 @@ export default function PrivacyPolicyPage() {
               </ul>
               <p className="mt-2">
                 Your calendar details, social battery status, and friend activity are never exposed to
-                other users of Slotted.
+                other users of Slotted.ai.
               </p>
             </div>
           </section>
@@ -175,7 +175,7 @@ export default function PrivacyPolicyPage() {
                 <h3 className="font-semibold text-gray-800">Revoke Calendar Access</h3>
                 <p className="mt-1">
                   You can disconnect your calendar at any time from the Settings page within
-                  Slotted. For Google Calendar, you can also revoke Slotted's access by visiting{' '}
+                  Slotted.ai. For Google Calendar, you can also revoke Slotted.ai's access by visiting{' '}
                   <a
                     href="https://myaccount.google.com/permissions"
                     target="_blank"
@@ -218,7 +218,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="font-display text-lg font-bold text-gray-900">7. Children's Privacy</h2>
             <p className="mt-3">
-              Slotted is not intended for use by anyone under the age of 13. We do not knowingly
+              Slotted.ai is not intended for use by anyone under the age of 13. We do not knowingly
               collect personal information from children under 13.
             </p>
           </section>
@@ -228,7 +228,7 @@ export default function PrivacyPolicyPage() {
             <h2 className="font-display text-lg font-bold text-gray-900">8. Changes to This Policy</h2>
             <p className="mt-3">
               We may update this Privacy Policy from time to time. If we make material changes, we
-              will notify you through the app or by other means. Your continued use of Slotted after
+              will notify you through the app or by other means. Your continued use of Slotted.ai after
               changes constitutes acceptance of the updated policy.
             </p>
           </section>
@@ -255,7 +255,7 @@ export default function PrivacyPolicyPage() {
           to="/"
           className="text-sm font-medium text-teal-600 hover:text-teal-700 transition-colors"
         >
-          ← Back to Slotted
+          ← Back to Slotted.ai
         </Link>
       </div>
     </div>

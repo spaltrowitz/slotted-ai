@@ -109,7 +109,7 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
           <span className="text-2xl">📱</span>
           <div className="flex-1">
             <p className="text-sm font-semibold text-emerald-900">App installed</p>
-            <p className="text-xs text-emerald-600">You're using Slotted as an installed app — great!</p>
+            <p className="text-xs text-emerald-600">You're using Slotted.ai as an installed app — great!</p>
           </div>
         </div>
       </div>
@@ -131,7 +131,7 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
                   onClick={handleInstall}
                   className="text-left underline decoration-slotted-300 underline-offset-2 hover:text-slotted-600 transition-colors cursor-pointer"
                 >
-                  {isMobile ? 'Install Slotted as an app on your phone' : 'Add Slotted to your desktop'}
+                  {isMobile ? 'Install Slotted.ai as an app on your phone' : 'Add Slotted.ai to your desktop'}
                 </button>
               </p>
               <p className="mt-0.5 text-xs text-gray-500">
@@ -164,7 +164,7 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
           <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-white p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-display text-lg font-bold text-gray-900">
-                Install Slotted
+                Install Slotted.ai
               </h2>
               <button
                 onClick={handleDismiss}
@@ -178,7 +178,7 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
               /* ---------- iOS Instructions ---------- */
               <div className="space-y-4">
                 <p className="text-sm text-gray-500">
-                  Follow these steps in <strong>Safari</strong> to add Slotted to your home screen:
+                  Follow these steps in <strong>Safari</strong> to add Slotted.ai to your home screen:
                 </p>
 
                 <div className="space-y-3">
@@ -208,7 +208,7 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
                     number={3}
                     emoji="✅"
                     title='Tap "Add"'
-                    description='Confirm the name and tap Add in the top-right corner. Slotted will appear on your home screen!'
+                    description='Confirm the name and tap Add in the top-right corner. Slotted.ai will appear on your home screen!'
                   />
                 </div>
 
@@ -225,7 +225,7 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
               /* ---------- Android Instructions ---------- */
               <div className="space-y-4">
                 <p className="text-sm text-gray-500">
-                  Follow these steps in <strong>Chrome</strong> to add Slotted to your home screen:
+                  Follow these steps in <strong>Chrome</strong> to add Slotted.ai to your home screen:
                 </p>
 
                 <div className="space-y-3">
@@ -247,7 +247,7 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
                     number={3}
                     emoji="✅"
                     title='Tap "Add"'
-                    description="Confirm the name and tap Add. Slotted will appear on your home screen!"
+                    description="Confirm the name and tap Add. Slotted.ai will appear on your home screen!"
                   />
                 </div>
               </div>
@@ -255,7 +255,7 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
               /* ---------- Generic / Desktop fallback ---------- */
               <div className="space-y-4">
                 <p className="text-sm text-gray-500">
-                  You can install Slotted as an app or bookmark it for quick access:
+                  You can install Slotted.ai as an app or bookmark it for quick access:
                 </p>
 
                 <div className="space-y-3">
@@ -267,7 +267,7 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
                       <>
                         In Chrome, click the install icon{' '}
                         <span className="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium">⊕</span>{' '}
-                        in the address bar, or go to <strong>⋮ → Install Slotted</strong>. In Edge, go to <strong>… → Apps → Install this site as an app</strong>.
+                        in the address bar, or go to <strong>⋮ → Install Slotted.ai</strong>. In Edge, go to <strong>… → Apps → Install this site as an app</strong>.
                       </>
                     }
                   />
@@ -293,7 +293,7 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
 
                 <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
                   <p className="text-xs text-blue-700">
-                    <strong>Best on mobile:</strong> Slotted works on desktop, but the best experience is on your phone. Visit{' '}
+                    <strong>Best on mobile:</strong> Slotted.ai works on desktop, but the best experience is on your phone. Visit{' '}
                     <strong>slotted-ai.web.app</strong> on your phone's browser and install it from there.
                   </p>
                 </div>

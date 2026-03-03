@@ -151,6 +151,8 @@ export default function DashboardPage() {
   const [expandedMeetupId, setExpandedMeetupId] = useState<string | null>(null);
   const [acceptingMeetupId, setAcceptingMeetupId] = useState<string | null>(null);
   const [calendarModal, setCalendarModal] = useState<{ meetupId: string; title: string; startTime: string; endTime: string } | null>(null);
+  const [sharingMeetupId, setSharingMeetupId] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
 
   // Calendar sync
 
@@ -446,6 +448,25 @@ export default function DashboardPage() {
       ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
+  const handleShareMeetup = async (meetupId: string, title: string) => {
+    setSharingMeetupId(meetupId);
+    setShareUrl(null);
+    try {
+      const { data } = await api.post(`/meetups/${meetupId}/share`);
+      const url = data.shareUrl as string;
+      setShareUrl(url);
+      const message = `Hey! Here are the details for ${title || 'our hangout'} — add it to your calendar:\n${url}`;
+      if (navigator.share) {
+        await navigator.share({ title: title || 'Hangout', text: message, url });
+        setSharingMeetupId(null);
+        setShareUrl(null);
+      } else {
+        await navigator.clipboard.writeText(message);
+      }
+    } catch { /* silent */ }
+    finally { if (!navigator.share) setTimeout(() => { setSharingMeetupId(null); setShareUrl(null); }, 2000); }
+  };
+
   const otherParticipants = (m: Meetup) =>
     m.participants.filter((p) => p.userId !== user?.uid?.replace(/^firebase_/, ''));
 
@@ -686,7 +707,7 @@ export default function DashboardPage() {
           <span className="text-3xl">📅</span>
           <h3 className="mt-2 font-display text-base font-bold text-gray-900">No hangouts coming up</h3>
           <p className="mt-1.5 text-sm text-gray-500 leading-relaxed max-w-sm mx-auto">
-            You've got friends on Slotted — find a time that works for everyone and book something fun.
+            You've got friends on Slotted.ai — find a time that works for everyone and book something fun.
           </p>
           <Link
             to="/friends"
@@ -794,6 +815,13 @@ export default function DashboardPage() {
                             🔄 Find new time
                           </Link>
                         )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleShareMeetup(m.id, m.title); }}
+                          disabled={sharingMeetupId === m.id}
+                          className="rounded-lg border border-blue-200 px-3 py-1.5 text-[11px] font-medium text-blue-600 hover:bg-blue-50 transition-all disabled:opacity-50"
+                        >
+                          {sharingMeetupId === m.id && shareUrl ? '✅ Copied!' : sharingMeetupId === m.id ? 'Sharing…' : '🔗 Share'}
+                        </button>
                         {!iNeedToRespond && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleCancelMeetup(m.id); }}
@@ -876,6 +904,13 @@ export default function DashboardPage() {
                           🔄 Find new time
                         </Link>
                       )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleShareMeetup(m.id, m.title); }}
+                        disabled={sharingMeetupId === m.id}
+                        className="rounded-lg border border-blue-200 px-3 py-1.5 text-[11px] font-medium text-blue-600 hover:bg-blue-50 transition-all disabled:opacity-50"
+                      >
+                        {sharingMeetupId === m.id && shareUrl ? '✅ Copied!' : sharingMeetupId === m.id ? 'Sharing…' : '🔗 Share'}
+                      </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleCancelMeetup(m.id); }}
                         disabled={cancellingMeetupId === m.id}
@@ -1117,7 +1152,7 @@ export default function DashboardPage() {
                                     : undefined,
                                 minHeight: '20px',
                               }}
-                              title={isManual ? `${ev.title} (tap to remove)` : `${ev.title}\n${formatEventTime(ev.start, ev.end, ev.allDay)}${ev.location ? '\n📍 ' + ev.location : ''}\n${isBuf ? '🗓️ Slotted' : (ev.source === 'apple' ? '🍎' : '📧') + ' ' + ev.calendarName}`}
+                              title={isManual ? `${ev.title} (tap to remove)` : `${ev.title}\n${formatEventTime(ev.start, ev.end, ev.allDay)}${ev.location ? '\n📍 ' + ev.location : ''}\n${isBuf ? '🗓️ Slotted.ai' : (ev.source === 'apple' ? '🍎' : '📧') + ' ' + ev.calendarName}`}
                               onClick={isManual ? () => handleRemoveBusyBlock(ev.id) : undefined}
                             >
                               <p className={`text-[10px] font-semibold truncate leading-tight ${isManual ? 'text-amber-700' : isBuf ? 'text-slate-600' : 'text-white'}`}>
@@ -1231,7 +1266,7 @@ export default function DashboardPage() {
                           <div className="flex-1 min-w-0">
                             <p className={`text-sm font-medium truncate ${isBufferEvent(ev) ? 'text-slate-600' : 'text-gray-900'}`}>{ev.title}</p>
                             <p className="text-[11px] text-gray-400">
-                              {isBufferEvent(ev) ? 'Blocked by Slotted' : formatEventTime(ev.start, ev.end, ev.allDay)}
+                              {isBufferEvent(ev) ? 'Blocked by Slotted.ai' : formatEventTime(ev.start, ev.end, ev.allDay)}
                             </p>
                             {ev.location && (
                               <p className="text-[11px] text-gray-400 truncate">📍 {ev.location}</p>
@@ -1244,7 +1279,7 @@ export default function DashboardPage() {
                                 ? 'bg-gray-100 text-gray-500'
                                 : 'bg-blue-50 text-blue-500'
                           }`}>
-                            {isBufferEvent(ev) ? '🗓️ Slotted' : (ev.source === 'apple' ? '🍎' : '📧') + ' ' + ((ev.calendarName || '').length > 12 ? (ev.calendarName || '').slice(0, 12) + '…' : (ev.calendarName || 'Calendar'))}
+                            {isBufferEvent(ev) ? '🗓️ Slotted.ai' : (ev.source === 'apple' ? '🍎' : '📧') + ' ' + ((ev.calendarName || '').length > 12 ? (ev.calendarName || '').slice(0, 12) + '…' : (ev.calendarName || 'Calendar'))}
                           </span>
                         </div>
                       ))}
@@ -1261,9 +1296,9 @@ export default function DashboardPage() {
       {!dashboardLoading && friendsToSee.length === 0 && allFriends.length === 0 && (
         <div className="mb-6 rounded-2xl border border-slotted-200/60 bg-gradient-to-br from-slotted-50/60 to-purple-50/40 p-6 shadow-sm text-center">
           <span className="text-3xl">👋</span>
-          <h3 className="mt-3 font-display text-base font-bold text-gray-900">Welcome to Slotted!</h3>
+          <h3 className="mt-3 font-display text-base font-bold text-gray-900">Welcome to Slotted.ai!</h3>
           <p className="mt-1.5 text-sm text-gray-500 leading-relaxed max-w-sm mx-auto">
-            Invite a friend to get started — once they connect, Slotted will find the best times for you to hang out.
+            Invite a friend to get started — once they connect, Slotted.ai will find the best times for you to hang out.
           </p>
           <Link
             to="/friends"
@@ -1588,7 +1623,7 @@ export default function DashboardPage() {
                 value={logFriendId ? '' : logFriendName}
                 disabled={!!logFriendId}
                 onChange={(e) => { setLogFriendName(e.target.value); setLogFriendId(''); }}
-                placeholder={logFriendId ? allFriends.find(f => f.id === logFriendId)?.displayName || 'Selected' : 'Or type a name (not on Slotted)...'}
+                placeholder={logFriendId ? allFriends.find(f => f.id === logFriendId)?.displayName || 'Selected' : 'Or type a name (not on Slotted.ai)...'}
                 className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100 transition-all w-full disabled:opacity-50 disabled:bg-gray-50"
               />
             </div>

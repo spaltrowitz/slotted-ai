@@ -1260,7 +1260,7 @@ export default function EventsPage() {
                       <h3 className="font-display text-sm font-bold text-gray-900">Plan something with friends</h3>
                       <p className="mt-1 text-xs text-gray-500 leading-relaxed">
                         Search for an event, then switch to <strong>"Match with friends"</strong> to find
-                        showings when everyone is free. Slotted checks all your calendars automatically.
+                        showings when everyone is free. Slotted.ai checks all your calendars automatically.
                       </p>
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         {friends.slice(0, 5).map((f) => (

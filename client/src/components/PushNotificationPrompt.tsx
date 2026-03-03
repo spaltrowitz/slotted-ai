@@ -13,7 +13,7 @@ export default function PushNotificationPrompt() {
           <div className="flex-1">
             <p className="text-sm font-semibold text-gray-700">Notifications not supported</p>
             <p className="text-xs text-gray-500">
-              Your browser doesn't support push notifications. For the best experience, install Slotted as an app on your phone (see instructions above).
+              Your browser doesn't support push notifications. For the best experience, install Slotted.ai as an app on your phone (see instructions above).
             </p>
           </div>
         </div>
@@ -48,11 +48,11 @@ export default function PushNotificationPrompt() {
           <div className="flex-1">
             <p className="text-sm font-semibold text-emerald-900">Push notifications active</p>
             <p className="text-xs text-emerald-600">
-              You'll get notified when friends want to hang, accept your invites, or when Slotted finds a great time to meet up.
+              You'll get notified when friends want to hang, accept your invites, or when Slotted.ai finds a great time to meet up.
             </p>
             {!isStandalone && isMobile && (
               <p className="mt-1.5 text-[10px] text-emerald-500/80">
-                💡 For the most reliable notifications, install Slotted as an app on your phone.
+                💡 For the most reliable notifications, install Slotted.ai as an app on your phone.
               </p>
             )}
           </div>
@@ -73,7 +73,7 @@ export default function PushNotificationPrompt() {
             </p>
             {!isStandalone && isMobile && (
               <p className="mt-1.5 text-[10px] text-amber-600">
-                📲 Installing Slotted as an app (see above) gives the most reliable push notifications.
+                📲 Installing Slotted.ai as an app (see above) gives the most reliable push notifications.
               </p>
             )}
             {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
@@ -124,7 +124,7 @@ export default function PushNotificationPrompt() {
           </p>
           {!isStandalone && isMobile && (
             <p className="mt-1.5 text-[10px] text-gray-400">
-              📲 For the best experience, install Slotted as an app first (see above), then enable notifications.
+              📲 For the best experience, install Slotted.ai as an app first (see above), then enable notifications.
             </p>
           )}
           {error && (

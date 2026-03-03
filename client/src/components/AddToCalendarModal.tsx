@@ -16,7 +16,7 @@ function buildGoogleCalendarLink(title: string, startTime: string, endTime: stri
     action: 'TEMPLATE',
     text: title,
     dates: `${fmt(startTime)}/${fmt(endTime)}`,
-    details: 'Scheduled via Slotted',
+    details: 'Scheduled via Slotted.ai',
   });
   return `https://www.google.com/calendar/render?${params.toString()}`;
 }
@@ -31,7 +31,7 @@ function buildIcsContent(title: string, startTime: string, endTime: string): str
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Slotted//EN',
+    'PRODID:-//Slotted.ai//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
@@ -40,7 +40,7 @@ function buildIcsContent(title: string, startTime: string, endTime: string): str
     `DTSTART:${dtStart}`,
     `DTEND:${dtEnd}`,
     `SUMMARY:${title}`,
-    'DESCRIPTION:Scheduled via Slotted',
+    'DESCRIPTION:Scheduled via Slotted.ai',
     'BEGIN:VALARM',
     'TRIGGER:-PT60M',
     'ACTION:DISPLAY',

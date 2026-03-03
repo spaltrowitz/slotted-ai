@@ -228,7 +228,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs">1</span>
                   <div>
                     <p className="text-sm font-medium text-gray-800">{friendName} gets notified</p>
-                    <p className="text-[11px] text-gray-400">They'll see the invite in their Slotted notifications</p>
+                    <p className="text-[11px] text-gray-400">They'll see the invite in their Slotted.ai notifications</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -275,7 +275,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
             <h4 className="mt-3 text-sm font-semibold text-gray-800">No overlapping free times found</h4>
             <p className="mt-1.5 max-w-sm text-xs text-gray-400 leading-relaxed">
               {!syncStatus?.me.synced
-                ? "Connect your Google Calendar in Settings to let Slotted find available times."
+                ? "Connect your Google Calendar in Settings to let Slotted.ai find available times."
                 : "Both calendars are packed for the next 2 weeks. Try adjusting your schedules or check back later."}
             </p>
           </div>

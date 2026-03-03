@@ -27,22 +27,21 @@ export default function LoginPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
-          <span className="font-display text-xl font-bold tracking-tight text-gray-900">Slotted</span>
+          <span className="font-display text-xl font-bold tracking-tight text-gray-900">Slotted.ai</span>
         </div>
       </nav>
 
       {/* Hero section */}
       <div className="relative z-10 mx-auto max-w-3xl px-6 pt-16 pb-10 text-center">
-        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-teal-200/60 bg-teal-50/80 px-3 py-1 text-xs font-medium text-teal-700 backdrop-blur-sm">
-          <span className="h-1.5 w-1.5 rounded-full bg-teal-500 animate-pulse" />
-          Early access
+        <div className="mb-5 inline-flex items-center rounded-full border border-amber-200/60 bg-gradient-to-r from-amber-50/90 to-orange-50/90 px-4 py-1.5 text-xs font-semibold text-amber-800 shadow-sm backdrop-blur-sm">
+          Early access — limited spots
         </div>
         <h1 className="font-display text-5xl font-extrabold tracking-tight text-gray-900 sm:text-6xl leading-[1.1]">
           Stop texting back and forth.{' '}
           <span className="gradient-text">Just hang out.</span>
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-gray-500">
-          Slotted connects to your calendar, finds when you and your friends are both free, and makes it ridiculously easy to actually make plans.
+          Slotted.ai connects to your calendar, finds when you and your friends are both free, and makes it ridiculously easy to actually make plans.
         </p>
 
         {/* CTA */}
@@ -134,58 +133,55 @@ export default function LoginPage() {
         </div>
       </section>
 
-      {/* Why it matters */}
-      <section className="relative z-10 mx-auto max-w-4xl px-6 pb-10">
+      {/* Why it matters — single-column, left-accent cards */}
+      <section className="relative z-10 mx-auto max-w-md px-6 pb-10">
         <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-6">
           Why it matters
         </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-3">
           {[
             {
               emoji: '📅',
               title: 'Hang out on your terms',
-              desc: 'Slotted finds times that actually work for both of you.',
-              color: 'from-teal-50 to-cyan-50',
-              border: 'border-teal-100',
+              desc: 'Slotted.ai finds times that actually work for both of you.',
+              accent: 'border-l-teal-400',
             },
             {
               emoji: '💬',
               title: 'Make it a real plan',
               desc: "Turn \"let's catch up soon\" into something on the calendar, fast.",
-              color: 'from-violet-50 to-purple-50',
-              border: 'border-violet-100',
+              accent: 'border-l-violet-400',
             },
             {
               emoji: '🔔',
               title: 'Stay in touch',
               desc: "Get a gentle nudge when it's been too long since you hung out.",
-              color: 'from-amber-50 to-yellow-50',
-              border: 'border-amber-100',
+              accent: 'border-l-amber-400',
             },
             {
               emoji: '🎫',
               title: 'Find something fun',
               desc: 'Discover things to do together, not just a time to meet.',
-              color: 'from-pink-50 to-rose-50',
-              border: 'border-pink-100',
+              accent: 'border-l-pink-400',
+            },
+            {
+              emoji: '🔒',
+              title: 'Your calendar stays private',
+              desc: 'We only see free or busy. Never event titles, details, or who you\'re meeting with.',
+              accent: 'border-l-cyan-400',
             },
           ].map((item, i) => (
             <div
               key={i}
-              className={`rounded-2xl border ${item.border} bg-gradient-to-br ${item.color} p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md`}
+              className={`rounded-xl border border-gray-200/60 border-l-[3px] ${item.accent} bg-white/70 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md`}
             >
-              <span className="text-xl">{item.emoji}</span>
-              <h3 className="mt-2 font-display text-sm font-bold text-gray-900">{item.title}</h3>
-              <p className="mt-1.5 text-xs leading-relaxed text-gray-500">{item.desc}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-base">{item.emoji}</span>
+                <h3 className="font-display text-sm font-bold text-gray-900">{item.title}</h3>
+              </div>
+              <p className="mt-1 pl-7 text-xs leading-relaxed text-gray-500">{item.desc}</p>
             </div>
           ))}
-        </div>
-        <div className="mt-4 flex justify-center">
-          <div className="w-full sm:w-1/2 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50 p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md">
-            <span className="text-xl">🔒</span>
-            <h3 className="mt-2 font-display text-sm font-bold text-gray-900">Your calendar stays private</h3>
-            <p className="mt-1.5 text-xs leading-relaxed text-gray-500">We only see free or busy. Never event titles, details, or who you're meeting with.</p>
-          </div>
         </div>
       </section>
 

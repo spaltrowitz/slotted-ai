@@ -181,7 +181,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs">1</span>
                   <div>
                     <p className="text-sm font-medium text-gray-800">{friendNames.join(' & ')} get notified</p>
-                    <p className="text-[11px] text-gray-400">They'll see the invite in their Slotted notifications</p>
+                    <p className="text-[11px] text-gray-400">They'll see the invite in their Slotted.ai notifications</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">

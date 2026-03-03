@@ -50,8 +50,8 @@ function HowItWorks() {
 
   const steps = [
     { emoji: '1️⃣', title: 'Invite a friend', desc: 'Share your invite link via text, email, or copy link. They\'ll get a friend request when they sign up.' },
-    { emoji: '2️⃣', title: 'Connect calendars', desc: 'Both you and your friend connect a Google or Apple calendar in Settings so Slotted can find free times. Tip: Ask your friends to connect their calendar too — Slotted works best when both sides are synced!' },
-    { emoji: '3️⃣', title: 'Find times', desc: 'Tap "Find times" on a friend — then choose In Person, Phone Call, or Video Call. Slotted finds the best slots for each type (calls can be shorter and skip travel time).' },
+    { emoji: '2️⃣', title: 'Connect calendars', desc: 'Both you and your friend connect a Google or Apple calendar in Settings so Slotted.ai can find free times. Tip: Ask your friends to connect their calendar too — Slotted.ai works best when both sides are synced!' },
+    { emoji: '3️⃣', title: 'Find times', desc: 'Tap "Find times" on a friend — then choose In Person, Phone Call, or Video Call. Slotted.ai finds the best slots for each type (calls can be shorter and skip travel time).' },
     { emoji: '4️⃣', title: 'Book it', desc: 'Pick a time and hit "Book it." Your friend gets a notification in their inbox to accept or decline.' },
     { emoji: '5️⃣', title: 'Add to calendar', desc: 'After booking (or accepting), you\'ll both be prompted to save the event to a specific Google or Apple calendar.' },
   ];
@@ -64,7 +64,7 @@ function HowItWorks() {
       >
         <div className="flex items-center gap-2.5">
           <span className="text-base">💡</span>
-          <span className="text-sm font-semibold text-gray-800">How Slotted works</span>
+          <span className="text-sm font-semibold text-gray-800">How Slotted.ai works</span>
         </div>
         <svg
           className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
@@ -87,7 +87,7 @@ function HowItWorks() {
           ))}
           <div className="rounded-xl bg-slotted-50 border border-slotted-200 px-4 py-2.5">
             <p className="text-[11px] text-slotted-700 leading-relaxed">
-              <span className="font-semibold">📲 Install the app:</span> Add Slotted to your home screen for the best experience. Go to{' '}
+              <span className="font-semibold">📲 Install the app:</span> Add Slotted.ai to your home screen for the best experience. Go to{' '}
               <a href="/settings" className="underline font-medium hover:text-slotted-800">Settings</a>{' '}
               to see install instructions for your device.
             </p>
@@ -263,7 +263,7 @@ export default function FriendsPage() {
 
   const handleEmail = () => {
     trackFriendInvited('email');
-    window.location.href = `mailto:?subject=${encodeURIComponent("Let's hang — try Slotted!")}&body=${encodeURIComponent(message)}`;
+    window.location.href = `mailto:?subject=${encodeURIComponent("Let's hang — try Slotted.ai!")}&body=${encodeURIComponent(message)}`;
   };
 
   const handleCopy = async () => {
@@ -566,7 +566,7 @@ export default function FriendsPage() {
 
       {/* Invite friends — share link */}
       <div className="relative mb-5">
-        <p className="text-sm text-gray-500 mb-3">Invite friends to Slotted so you can find the best times to hang out.</p>
+        <p className="text-sm text-gray-500 mb-3">Invite friends to Slotted.ai so you can find the best times to hang out.</p>
         <div className="flex gap-2 flex-wrap">
           <button onClick={handleText} className="flex items-center gap-2 rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
             📱 Text
@@ -773,9 +773,9 @@ export default function FriendsPage() {
               </label>
             ))}
           </div>
-          {/* Invite friends not on Slotted */}
+          {/* Invite friends not on Slotted.ai */}
           <div className="mt-4 mb-4">
-            <p className="text-xs font-medium text-gray-500 mb-2">Friends not on Slotted yet? Invite by email:</p>
+            <p className="text-xs font-medium text-gray-500 mb-2">Friends not on Slotted.ai yet? Invite by email:</p>
             <div className="flex gap-2">
               <input
                 type="email"
@@ -810,7 +810,7 @@ export default function FriendsPage() {
             )}
             {invitedEmails.length > 0 && (
               <p className="mt-1.5 text-[10px] text-gray-400">
-                These friends will receive an invite to join Slotted and will be added to the group once they sign up.
+                These friends will receive an invite to join Slotted.ai and will be added to the group once they sign up.
               </p>
             )}
           </div>
@@ -925,7 +925,7 @@ export default function FriendsPage() {
               Ready to connect?
             </h3>
             <p className="mt-2 max-w-sm text-center text-sm text-gray-500 leading-relaxed">
-              Share your invite link and Slotted will find the best times for you to hang out together.
+              Share your invite link and Slotted.ai will find the best times for you to hang out together.
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               <button onClick={handleText} className="flex items-center gap-2 rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">

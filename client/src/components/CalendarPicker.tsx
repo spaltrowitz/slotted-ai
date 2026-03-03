@@ -140,12 +140,12 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
   return (
     <div className={compact ? '' : 'rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden'}>
       {/* Header */}
-      {!compact && (
+      {!compact && !needsReconnect && (
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
           <div>
             <h3 className="text-sm font-semibold text-gray-900">📅 Choose Calendars</h3>
             <p className="mt-0.5 text-[11px] text-gray-400">
-              Select which calendars Slotted should read for availability
+              Select which calendars Slotted.ai should read for availability
             </p>
           </div>
           {onClose && (
@@ -161,24 +161,30 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
         </div>
       )}
 
-      {error && (
+      {needsReconnect && source === 'google' && (
+        <div className="px-4 py-3">
+          <button
+            onClick={async () => {
+              try {
+                setNeedsReconnect(false);
+                setError(null);
+                await connectCalendar();
+                await fetchCalendars();
+              } catch {
+                setNeedsReconnect(true);
+                setError('Failed to reconnect. Please try again.');
+              }
+            }}
+            className="w-full rounded-lg bg-slotted-500 px-4 py-2 text-xs font-semibold text-white hover:bg-slotted-600 transition-colors"
+          >
+            Reconnect Google Calendar
+          </button>
+        </div>
+      )}
+
+      {error && !needsReconnect && (
         <div className="mx-5 mt-3 rounded-xl border border-red-100 bg-red-50/50 px-4 py-3 text-xs text-red-600">
           <p>{error}</p>
-          {needsReconnect && source === 'google' && (
-            <button
-              onClick={async () => {
-                try {
-                  await connectCalendar();
-                  await fetchCalendars();
-                } catch {
-                  setError('Failed to reconnect. Please try again.');
-                }
-              }}
-              className="mt-2 rounded-lg bg-slotted-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slotted-600 transition-colors"
-            >
-              Reconnect Google Calendar
-            </button>
-          )}
         </div>
       )}
 
