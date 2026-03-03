@@ -29,6 +29,7 @@ interface AuthContextType {
   googleCalendarConnected: boolean;
   calendarJustConnected: boolean;
   appleCalendarConnected: boolean;
+  outlookCalendarConnected: boolean;
   clearNewUser: () => void;
   completeOnboarding: () => void;
   skipOnboarding: () => void;
@@ -36,6 +37,8 @@ interface AuthContextType {
   disconnectCalendar: () => Promise<void>;
   connectAppleCalendar: (username: string, password: string) => Promise<{ success: boolean; error?: string; calendarsFound?: number }>;
   disconnectAppleCalendar: () => Promise<void>;
+  connectOutlookCalendar: () => Promise<void>;
+  disconnectOutlookCalendar: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -72,6 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [calendarJustConnected, setCalendarJustConnected] = useState(false);
   const [appleCalendarConnected, setAppleCalendarConnected] = useState(() => {
     return localStorage.getItem('slotted_apple_calendar_connected') === 'true';
+  });
+  const [outlookCalendarConnected, setOutlookCalendarConnected] = useState(() => {
+    return localStorage.getItem('slotted_outlook_calendar_connected') === 'true';
   });
 
   useEffect(() => {
@@ -273,12 +279,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('slotted_apple_calendar_connected');
       // Check if Google is still connected
       const { data } = await api.get('/calendar/status');
-      if (!data?.google) {
+      if (!data?.connected) {
         setCalendarConnected(false);
         localStorage.removeItem('slotted_calendar_connected');
       }
     } catch (err) {
       console.error('Failed to disconnect Apple Calendar:', err);
+    }
+  }, []);
+
+  const connectOutlookCalendar = useCallback(async () => {
+    try {
+      const { data } = await api.get('/calendar/outlook/auth-url');
+      if (data?.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error('Failed to get Outlook calendar auth URL:', err);
+    }
+  }, []);
+
+  const disconnectOutlookCalendar = useCallback(async () => {
+    try {
+      await api.post('/calendar/outlook/disconnect');
+      setOutlookCalendarConnected(false);
+      localStorage.removeItem('slotted_outlook_calendar_connected');
+      const { data } = await api.get('/calendar/status');
+      if (!data?.connected) {
+        setCalendarConnected(false);
+        localStorage.removeItem('slotted_calendar_connected');
+      }
+    } catch (err) {
+      console.error('Failed to disconnect Outlook Calendar:', err);
     }
   }, []);
 
@@ -309,6 +341,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         localStorage.removeItem('slotted_apple_calendar_connected');
       }
+      // Outlook-specific status
+      const outlookConnected = !!data?.outlook;
+      setOutlookCalendarConnected(outlookConnected);
+      if (outlookConnected) {
+        localStorage.setItem('slotted_outlook_calendar_connected', 'true');
+      } else {
+        localStorage.removeItem('slotted_outlook_calendar_connected');
+      }
     } catch {
       // silently fail
     }
@@ -326,18 +366,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const params = new URLSearchParams(window.location.search);
     if (params.get('calendar') === 'connected') {
       setCalendarConnected(true);
-      setGoogleCalendarConnected(true);
-      localStorage.setItem('slotted_calendar_connected', 'true');
-      localStorage.setItem('slotted_google_calendar_connected', 'true');
       setCalendarJustConnected(true);
-      trackCalendarConnected('google');
+      localStorage.setItem('slotted_calendar_connected', 'true');
+      // Refresh status from API to detect which provider was just connected
+      checkCalendarStatus();
       setTimeout(() => setCalendarJustConnected(false), 3000);
       // Clean up the URL
       const url = new URL(window.location.href);
       url.searchParams.delete('calendar');
       window.history.replaceState({}, '', url.pathname);
     }
-  }, []);
+  }, [checkCalendarStatus]);
 
   const signOut = async () => {
     setIsNewUser(false);
@@ -345,7 +384,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, authError, isNewUser, onboardingComplete, calendarConnected, googleCalendarConnected, calendarJustConnected, appleCalendarConnected, clearNewUser, completeOnboarding, skipOnboarding, connectCalendar, disconnectCalendar, connectAppleCalendar, disconnectAppleCalendar, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, authError, isNewUser, onboardingComplete, calendarConnected, googleCalendarConnected, calendarJustConnected, appleCalendarConnected, outlookCalendarConnected, clearNewUser, completeOnboarding, skipOnboarding, connectCalendar, disconnectCalendar, connectAppleCalendar, disconnectAppleCalendar, connectOutlookCalendar, disconnectOutlookCalendar, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );

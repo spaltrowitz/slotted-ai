@@ -51,6 +51,12 @@ CREATE TABLE users (
   apple_caldav_password   TEXT,                         -- App-specific password (encrypted)
   apple_calendar_connected BOOLEAN NOT NULL DEFAULT FALSE,
 
+  -- Outlook Calendar (Microsoft Graph API)
+  outlook_access_token     TEXT,
+  outlook_refresh_token    TEXT,
+  outlook_token_expires_at TIMESTAMPTZ,
+  outlook_calendar_connected BOOLEAN NOT NULL DEFAULT FALSE,
+
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -292,8 +298,8 @@ CREATE TABLE user_calendars (
   calendar_color  TEXT,                               -- hex color from provider
   is_selected     BOOLEAN NOT NULL DEFAULT TRUE,      -- user wants this calendar used for availability
   access_role     TEXT,                               -- owner, writer, reader, freeBusyReader
-  source          TEXT NOT NULL DEFAULT 'google'      -- 'google' or 'apple'
-    CHECK (source IN ('google', 'apple')),
+  source          TEXT NOT NULL DEFAULT 'google'      -- 'google', 'apple', or 'outlook'
+    CHECK (source IN ('google', 'apple', 'outlook')),
 
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),

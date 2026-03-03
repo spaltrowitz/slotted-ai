@@ -17,6 +17,8 @@
   },
   "main": "lib/index.js",
   "dependencies": {
+    "@azure/msal-node": "^5.0.6",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "@supabase/supabase-js": "^2.95.3",
     "cors": "^2.8.6",
     "express": "^5.2.1",

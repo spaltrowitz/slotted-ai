@@ -7,11 +7,11 @@ interface CalendarInfo {
   calendar_color: string | null;
   access_role: string; // 'owner' | 'writer' | 'reader' | 'freeBusyReader'
   is_selected: boolean;
-  source: 'google' | 'apple';
+  source: 'google' | 'apple' | 'outlook';
 }
 
 interface CalendarPickerProps {
-  source?: 'google' | 'apple';
+  source?: 'google' | 'apple' | 'outlook';
   onClose?: () => void;
   onSaved?: () => void;
   compact?: boolean;
@@ -24,7 +24,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, co
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const listEndpoint = source === 'apple' ? '/calendar/apple/list' : '/calendar/list';
+  const listEndpoint = source === 'apple' ? '/calendar/apple/list' : source === 'outlook' ? '/calendar/outlook/list' : '/calendar/list';
 
   const fetchCalendars = useCallback(async () => {
     setLoading(true);

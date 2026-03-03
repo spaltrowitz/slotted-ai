@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { trackSettingsSaved } from '../lib/analytics';
 
 export default function SettingsPage() {
-  const { user, onboardingComplete, googleCalendarConnected, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, signInWithGoogle, signOut } = useAuth();
+  const { user, onboardingComplete, googleCalendarConnected, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, outlookCalendarConnected, connectOutlookCalendar, disconnectOutlookCalendar, signInWithGoogle, signOut } = useAuth();
   const [travelBuffer, setTravelBuffer] = useState(30);
   const [planningStyle, setPlanningStyle] = useState('flexible');
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['weekday-evening', 'weekend-afternoon']);
@@ -25,6 +25,7 @@ export default function SettingsPage() {
   const [showAppleCalendarDetails, setShowAppleCalendarDetails] = useState(false);
   const [showAppleWhy, setShowAppleWhy] = useState(false);
   const [showCalendarDetails, setShowCalendarDetails] = useState(false);
+  const [showOutlookCalendarDetails, setShowOutlookCalendarDetails] = useState(false);
 
   const [socialRecharge, setSocialRecharge] = useState('2-3-week');
   const [rechargingDays, setRechargingDays] = useState<number[]>([]);
@@ -457,6 +458,59 @@ export default function SettingsPage() {
                   </div>
                 )}
               </div>
+
+                {/* Outlook Calendar */}
+                <div className="mt-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-gray-100 shadow-sm">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#0078d4"/>
+                        <path d="M8 8h3.5v8H8V8zm4.5 0H16v8h-3.5V8z" fill="white" opacity="0.9"/>
+                      </svg>
+                    </div>
+                    <span className="text-xs font-medium text-gray-700">Outlook Calendar</span>
+                    {outlookCalendarConnected ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                        <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
+                        Connected
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500">
+                        Not connected
+                      </span>
+                    )}
+                  </div>
+                  {outlookCalendarConnected ? (
+                    <button
+                      onClick={() => setShowOutlookCalendarDetails(!showOutlookCalendarDetails)}
+                      className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700"
+                    >
+                      {showOutlookCalendarDetails ? 'Hide' : 'Manage'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={connectOutlookCalendar}
+                      className="rounded-lg gradient-btn px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md"
+                    >
+                      Connect
+                    </button>
+                  )}
+                </div>
+
+                {/* Expandable Outlook calendar details */}
+                {showOutlookCalendarDetails && outlookCalendarConnected && (
+                  <div className="mt-2 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
+                    <CalendarPicker source="outlook" />
+                    <div className="pt-1">
+                      <button
+                        onClick={disconnectOutlookCalendar}
+                        className="w-full rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50"
+                      >
+                        Disconnect Outlook Calendar
+                      </button>
+                    </div>
+                  </div>
+                )}
             </div>
 
             {/* Install as app + Push Notifications */}
