@@ -685,6 +685,23 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ─── NO UPCOMING HANGOUTS (when user has friends but nothing scheduled) ─── */}
+      {!dashboardLoading && allFriends.length > 0 && upcoming.length === 0 && (
+        <div className="mb-6 rounded-2xl border border-dashed border-slotted-200 bg-slotted-50/30 p-6 text-center">
+          <span className="text-3xl">📅</span>
+          <h3 className="mt-2 font-display text-base font-bold text-gray-900">No hangouts coming up</h3>
+          <p className="mt-1.5 text-sm text-gray-500 leading-relaxed max-w-sm mx-auto">
+            You've got friends on Slotted — find a time that works for everyone and book something fun.
+          </p>
+          <Link
+            to="/friends"
+            className="mt-4 inline-flex items-center gap-2 rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+          >
+            👋 Find a time with a friend
+          </Link>
+        </div>
+      )}
+
       {/* ─── PENDING HANGOUTS (needs action) ─── */}
       {pendingHangouts.length > 0 && (
         <div className="mb-6 rounded-2xl border border-amber-200/60 bg-gradient-to-r from-amber-50/50 to-orange-50/30 p-5 shadow-sm">

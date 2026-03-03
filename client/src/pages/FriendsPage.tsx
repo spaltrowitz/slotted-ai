@@ -918,16 +918,24 @@ export default function FriendsPage() {
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-slotted-400 border-t-transparent" />
         </div>
       ) : acceptedFriends.length === 0 && incomingInvites.length === 0 && outgoingInvites.length === 0 ? (
-        <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-slotted-200/60 bg-gradient-to-br from-slotted-50/60 to-purple-50/40 shadow-sm overflow-hidden">
           <div className="flex flex-col items-center justify-center px-6 py-16">
             <div className="text-5xl mb-2">🤝</div>
             <h3 className="mt-3 font-display text-lg font-bold text-gray-900">
-              No friends yet — but soon!
+              Ready to connect?
             </h3>
-            <p className="mt-2 max-w-sm text-center text-sm text-gray-400 leading-relaxed">
-              Enter their email above to send an invite. Once they accept,
-              you'll see their availability and Slotted will start suggesting times to meet.
+            <p className="mt-2 max-w-sm text-center text-sm text-gray-500 leading-relaxed">
+              Share your invite link and Slotted will find the best times for you to hang out together.
             </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <button onClick={handleText} className="flex items-center gap-2 rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
+                📱 Text a friend
+              </button>
+              <button onClick={handleCopy} className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:border-gray-300">
+                {copied ? '✅ Copied!' : '📋 Copy invite link'}
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-gray-400">Or enter an email above to send a direct invite</p>
           </div>
         </div>
       ) : (

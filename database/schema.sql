@@ -312,8 +312,7 @@ CREATE TRIGGER trg_user_calendars_updated_at
 CREATE TABLE notifications (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type            TEXT NOT NULL
-    CHECK (type IN ('friend_accepted', 'friend_request', 'meetup_request', 'meetup_confirmed', 'meetup_reminder', 'calendar_match')),
+  type            TEXT NOT NULL,  -- validated at application level (friend_accepted, friend_request, meetup_request, meetup_confirmed, meetup_reminder, calendar_match, meetup_rsvp_changed, meetup_time_changed, meetup_counter_propose)
   title           TEXT NOT NULL,
   body            TEXT NOT NULL,
   related_user_id UUID REFERENCES users(id) ON DELETE SET NULL,   -- e.g. the friend who accepted

@@ -5,6 +5,7 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import * as admin from "firebase-admin";
 import { google } from "googleapis";
+import type { calendar_v3 } from "googleapis";
 import { createDAVClient, DAVCalendar, DAVObject } from "tsdav";
 import { getSupabase } from "./supabase";
 
@@ -1551,16 +1552,34 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
       const googleCalIds = selectedGoogleCals?.map((c: any) => c.calendar_id) || [];
 
       const googleFetchPromises = googleCalIds.map(async (calId: string) => {
+        const isPrimaryCal = calId === "primary" || calId === dbUser.email;
+        const listParams: calendar_v3.Params$Resource$Events$List = {
+          calendarId: calId,
+          timeMin: now.toISOString(),
+          timeMax: windowEnd.toISOString(),
+          singleEvents: true,
+          orderBy: "startTime",
+          maxResults: 500,
+          fields: "items(start,end,status,transparency),nextSyncToken",
+        };
+
+        const fetchEvents = async (useSyncToken: boolean) => {
+          const params: calendar_v3.Params$Resource$Events$List = { ...listParams };
+          if (useSyncToken && dbUser.calendar_sync_token) {
+            params.syncToken = dbUser.calendar_sync_token;
+          }
+          const eventsRes = await calendarApi.events.list(params);
+          if (isPrimaryCal && eventsRes.data.nextSyncToken) {
+            await sb
+              .from("users")
+              .update({ calendar_sync_token: eventsRes.data.nextSyncToken })
+              .eq("id", dbUser.id);
+          }
+          return eventsRes;
+        };
+
         try {
-          const eventsRes = await calendarApi.events.list({
-            calendarId: calId,
-            timeMin: now.toISOString(),
-            timeMax: windowEnd.toISOString(),
-            singleEvents: true,
-            orderBy: "startTime",
-            maxResults: 500,
-            fields: "items(start,end,status,transparency)",
-          });
+          const eventsRes = await fetchEvents(isPrimaryCal && !!dbUser.calendar_sync_token);
 
           for (const event of eventsRes.data.items || []) {
             if (event.status === "cancelled") continue;
@@ -1579,8 +1598,37 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
               end: endDt.toISOString(),
             });
           }
-        } catch (err) {
-          console.error(`Failed to fetch Google calendar ${calId}:`, err);
+        } catch (err: any) {
+          if (isPrimaryCal && dbUser.calendar_sync_token && err?.code === 410) {
+            await sb
+              .from("users")
+              .update({ calendar_sync_token: null })
+              .eq("id", dbUser.id);
+            try {
+              const retryRes = await fetchEvents(false);
+              for (const event of retryRes.data.items || []) {
+                if (event.status === "cancelled") continue;
+                if (event.transparency === "transparent") continue;
+
+                const start = event.start?.dateTime || event.start?.date;
+                const end = event.end?.dateTime || event.end?.date;
+                if (!start || !end) continue;
+
+                const startDt = new Date(start);
+                const endDt = new Date(end);
+                if (startDt >= endDt) continue;
+
+                allBusyBlocks.push({
+                  start: startDt.toISOString(),
+                  end: endDt.toISOString(),
+                });
+              }
+            } catch (retryErr) {
+              console.error(`Failed to fetch Google calendar ${calId}:`, retryErr);
+            }
+          } else {
+            console.error(`Failed to fetch Google calendar ${calId}:`, err);
+          }
         }
       });
 
@@ -3460,7 +3508,7 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
 
     const { data, error } = await getSupabase()
       .from("meetup_participants")
-      .update({ rsvp })
+      .update({ rsvp, rsvp_source: "app" })
       .eq("meetup_id", meetupId)
       .eq("user_id", me.id)
       .select()
@@ -6410,6 +6458,31 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
             });
         }
       }
+
+      // Set up push notification channel for real-time sync
+      try {
+        const channelId = `slotted-${dbUser.id}-${Date.now()}`;
+        const watchRes = await calendar.events.watch({
+          calendarId: "primary",
+          requestBody: {
+            id: channelId,
+            type: "web_hook",
+            address: `${process.env.WEBHOOK_BASE_URL || "https://slotted-ai.web.app/api"}/webhooks/google-calendar`,
+            token: GOOGLE_WEBHOOK_SECRET,
+            expiration: String(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          },
+        });
+        await getSupabase()
+          .from("users")
+          .update({
+            calendar_watch_channel: channelId,
+            calendar_watch_expiry: new Date(Number(watchRes.data.expiration)).toISOString(),
+            calendar_watch_resource_id: watchRes.data.resourceId,
+          })
+          .eq("id", dbUser.id);
+      } catch (watchErr) {
+        console.error("Failed to set up calendar watch:", watchErr);
+      }
     }
 
     // Redirect back to the frontend dashboard (not settings — avoids overwhelming new users)
@@ -6442,6 +6515,24 @@ app.get("/calendar/status", requireAuth, async (req: AuthRequest, res: Response)
 /** POST /calendar/disconnect — remove stored Google tokens */
 app.post("/calendar/disconnect", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
+    const dbUser = await getDbUser(req.uid!);
+    if (dbUser?.calendar_watch_channel && dbUser.calendar_watch_resource_id) {
+      try {
+        const oauth2 = await getAuthedCalendarClient(req.uid!);
+        if (oauth2) {
+          const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+          await calendarApi.channels.stop({
+            requestBody: {
+              id: dbUser.calendar_watch_channel,
+              resourceId: dbUser.calendar_watch_resource_id,
+            },
+          });
+        }
+      } catch (stopErr) {
+        console.error("Failed to stop calendar watch:", stopErr);
+      }
+    }
+
     await getSupabase()
       .from("users")
       .update({
@@ -6452,7 +6543,6 @@ app.post("/calendar/disconnect", requireAuth, async (req: AuthRequest, res: Resp
       .eq("firebase_uid", req.uid!);
 
     // Only remove Google calendars (not Apple)
-    const dbUser = await getDbUser(req.uid!);
     if (dbUser) {
       await getSupabase()
         .from("user_calendars")
@@ -7489,6 +7579,191 @@ app.put("/calendar/selected", requireAuth, async (req: AuthRequest, res: Respons
 });
 
 // ---------------------------------------------------------------------------
+// Google Calendar change processing (Phase 2)
+// ---------------------------------------------------------------------------
+
+async function processCalendarChanges(
+  firebaseUid: string,
+  changedEvents: calendar_v3.Schema$Event[],
+): Promise<void> {
+  const sb = getSupabase();
+  const dbUser = await getDbUser(firebaseUid);
+  if (!dbUser) return;
+
+  for (const event of changedEvents) {
+    if (!event.id) continue;
+
+    const { data: participant } = await sb
+      .from("meetup_participants")
+      .select("id, meetup_id, user_id, rsvp, rsvp_source, gcal_etag")
+      .eq("google_event_id", event.id)
+      .eq("user_id", dbUser.id)
+      .single();
+
+    if (!participant) continue;
+
+    if (event.etag && participant.gcal_etag === event.etag) continue;
+
+    const { data: meetup } = await sb
+      .from("meetups")
+      .select("id, title, status, start_time, end_time, created_by")
+      .eq("id", participant.meetup_id)
+      .single();
+
+    if (!meetup || ["cancelled", "completed"].includes(meetup.status)) continue;
+
+    if (event.status === "cancelled") {
+      if (participant.rsvp !== "declined") {
+        await updateRsvpFromCalendar(participant, meetup, dbUser, "declined");
+      }
+      continue;
+    }
+
+    const myAttendee = (event.attendees || []).find(
+      (a) => a.email === dbUser.email || a.self,
+    );
+    if (myAttendee?.responseStatus) {
+      const mappedRsvp = mapGoogleRsvp(myAttendee.responseStatus);
+      if (mappedRsvp && mappedRsvp !== participant.rsvp) {
+        await updateRsvpFromCalendar(participant, meetup, dbUser, mappedRsvp);
+      }
+    }
+
+    // --- TIME CHANGE ---
+    if (event.start && event.end) {
+      const eventStart = event.start.dateTime || event.start.date;
+      const eventEnd = event.end.dateTime || event.end.date;
+
+      if (eventStart && eventEnd) {
+        const meetupStart = new Date(meetup.start_time).toISOString();
+        const meetupEnd = new Date(meetup.end_time).toISOString();
+        const newStart = new Date(eventStart).toISOString();
+        const newEnd = new Date(eventEnd).toISOString();
+
+        if (newStart !== meetupStart || newEnd !== meetupEnd) {
+          if (participant.user_id === meetup.created_by) {
+            // Creator moved the event — update meetup for everyone
+            await sb.from("meetups").update({
+              start_time: newStart,
+              end_time: newEnd,
+            }).eq("id", meetup.id);
+
+            // Notify all other participants
+            const { data: allParts } = await sb
+              .from("meetup_participants")
+              .select("user_id")
+              .eq("meetup_id", meetup.id)
+              .neq("user_id", participant.user_id);
+
+            for (const p of (allParts || [])) {
+              await createNotification({
+                userId: p.user_id,
+                type: "meetup_time_changed",
+                title: `🕐 ${dbUser.display_name || "Someone"} updated the time`,
+                body: meetup.title || "Hangout",
+                relatedUserId: dbUser.id,
+                relatedId: meetup.id,
+              });
+            }
+          } else {
+            // Non-creator moved their calendar event — counter-propose
+            await createNotification({
+              userId: meetup.created_by,
+              type: "meetup_counter_propose",
+              title: `💡 ${dbUser.display_name || "Someone"} suggests a different time`,
+              body: `${meetup.title || "Hangout"} — they moved it to ${new Date(newStart).toLocaleString()}`,
+              relatedUserId: dbUser.id,
+              relatedId: meetup.id,
+            });
+          }
+        }
+      }
+    }
+
+    await sb.from("meetup_participants").update({
+      gcal_etag: event.etag,
+      gcal_last_synced_at: new Date().toISOString(),
+    }).eq("id", participant.id);
+  }
+}
+
+function mapGoogleRsvp(googleStatus: string): string | null {
+  switch (googleStatus) {
+    case "accepted":
+      return "accepted";
+    case "declined":
+      return "declined";
+    case "tentative":
+      return "maybe";
+    case "needsAction":
+      return null;
+    default:
+      return null;
+  }
+}
+
+async function updateRsvpFromCalendar(
+  participant: any,
+  meetup: any,
+  dbUser: any,
+  newRsvp: string,
+): Promise<void> {
+  const sb = getSupabase();
+
+  await sb.from("meetup_participants").update({
+    rsvp: newRsvp,
+    rsvp_source: "google_calendar",
+  }).eq("id", participant.id);
+
+  if (newRsvp === "declined") {
+    const { data: allParticipants } = await sb
+      .from("meetup_participants")
+      .select("user_id, rsvp")
+      .eq("meetup_id", meetup.id);
+
+    if (allParticipants && allParticipants.length <= 2) {
+      await sb
+        .from("meetups")
+        .update({ status: "cancelled" })
+        .eq("id", meetup.id);
+    }
+
+    for (const p of (allParticipants || [])) {
+      if (p.user_id !== dbUser.id) {
+        await createNotification({
+          userId: p.user_id,
+          type: "meetup_rsvp_changed",
+          title: `${dbUser.display_name || "Someone"} is no longer available`,
+          body: meetup.title || "Hangout",
+          relatedUserId: dbUser.id,
+          relatedId: meetup.id,
+        });
+      }
+    }
+  } else if (newRsvp === "maybe") {
+    if (meetup.created_by !== dbUser.id) {
+      await createNotification({
+        userId: meetup.created_by,
+        type: "meetup_rsvp_changed",
+        title: `🤔 ${dbUser.display_name || "Someone"} is now a maybe`,
+        body: meetup.title || "Hangout",
+        relatedUserId: dbUser.id,
+        relatedId: meetup.id,
+      });
+    }
+  } else if (newRsvp === "accepted" && meetup.created_by !== dbUser.id) {
+    await createNotification({
+      userId: meetup.created_by,
+      type: "meetup_confirmed",
+      title: `✅ ${dbUser.display_name || "Someone"} accepted`,
+      body: meetup.title || "Hangout",
+      relatedUserId: dbUser.id,
+      relatedId: meetup.id,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Google Calendar webhook receiver (public — Google sends POST here)
 // ---------------------------------------------------------------------------
 app.post("/webhooks/google-calendar", async (req: Request, res: Response) => {
@@ -7519,6 +7794,39 @@ app.post("/webhooks/google-calendar", async (req: Request, res: Response) => {
 
       if (user?.firebase_uid) {
         await syncUserCalendar(user.firebase_uid);
+        const oauth2 = await getAuthedCalendarClient(user.firebase_uid);
+        if (oauth2) {
+          const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+          const dbUser = await getDbUser(user.firebase_uid);
+          try {
+            const eventsRes = await calendarApi.events.list({
+              calendarId: "primary",
+              syncToken: dbUser?.calendar_sync_token || undefined,
+              maxResults: 50,
+            });
+            if (eventsRes.data.items) {
+              await processCalendarChanges(user.firebase_uid, eventsRes.data.items);
+            }
+            if (eventsRes.data.nextSyncToken) {
+              await getSupabase()
+                .from("users")
+                .update({
+                  calendar_sync_token: eventsRes.data.nextSyncToken,
+                })
+                .eq("firebase_uid", user.firebase_uid);
+            }
+          } catch (syncErr: any) {
+            if (syncErr?.code === 410) {
+              await getSupabase()
+                .from("users")
+                .update({
+                  calendar_sync_token: null,
+                })
+                .eq("firebase_uid", user.firebase_uid);
+            }
+            console.error("Incremental sync error:", syncErr);
+          }
+        }
         console.log(`🔄 Webhook-triggered sync for channel ${channelId}`);
       }
     } catch (err) {
@@ -7641,6 +7949,55 @@ app.post("/admin/migrate", requireAdmin, async (_req: Request, res: Response) =>
 // ---------------------------------------------------------------------------
 // Scheduled Functions
 // ---------------------------------------------------------------------------
+
+export const renewCalendarWatchChannels = onSchedule("every 6 hours", async () => {
+  const sb = getSupabase();
+  const cutoff = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: users } = await sb.from("users")
+    .select("id, firebase_uid, calendar_watch_channel, calendar_watch_resource_id")
+    .not("google_refresh_token", "is", null)
+    .lt("calendar_watch_expiry", cutoff);
+
+  for (const user of (users || [])) {
+    try {
+      const oauth2 = await getAuthedCalendarClient(user.firebase_uid);
+      if (!oauth2) continue;
+      const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+
+      if (user.calendar_watch_channel && user.calendar_watch_resource_id) {
+        await calendarApi.channels.stop({
+          requestBody: {
+            id: user.calendar_watch_channel,
+            resourceId: user.calendar_watch_resource_id,
+          },
+        }).catch(() => {});
+      }
+
+      const channelId = `slotted-${user.id}-${Date.now()}`;
+      const watchRes = await calendarApi.events.watch({
+        calendarId: "primary",
+        requestBody: {
+          id: channelId,
+          type: "web_hook",
+          address: `${process.env.WEBHOOK_BASE_URL || "https://slotted-ai.web.app/api"}/webhooks/google-calendar`,
+          token: GOOGLE_WEBHOOK_SECRET,
+          expiration: String(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      await sb.from("users").update({
+        calendar_watch_channel: channelId,
+        calendar_watch_expiry: new Date(Number(watchRes.data.expiration)).toISOString(),
+        calendar_watch_resource_id: watchRes.data.resourceId,
+      }).eq("id", user.id);
+
+      console.log(`Renewed watch channel for user ${user.id}`);
+    } catch (err) {
+      console.error(`Failed to renew watch for user ${user.id}:`, err);
+    }
+  }
+});
 
 /** 
  * Scheduled function to send meetup reminders
