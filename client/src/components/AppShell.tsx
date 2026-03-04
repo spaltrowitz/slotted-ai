@@ -94,11 +94,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3">
             <button
               onClick={signOut}
+              aria-label="Sign out"
               className="hidden md:inline-flex rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:border-gray-300 shadow-sm"
             >
               Sign out
             </button>
-            <Link to="/settings" className="cursor-pointer rounded-full p-1 -m-1">
+            <Link to="/settings" aria-label="Settings" className="cursor-pointer rounded-full p-1 -m-1">
               {user?.photoURL ? (
                 <img src={user.photoURL} alt="" className="h-8 w-8 rounded-full ring-2 ring-slotted-100 transition-opacity hover:opacity-80" />
               ) : (

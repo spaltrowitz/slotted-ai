@@ -511,28 +511,32 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-4 pl-4 sm:pl-10">
-            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-3 sm:p-4 shadow-sm">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 {[
-                  { value: 'spontaneous', emoji: '\u26A1', label: 'Spontaneous', desc: 'Same-day & next-day plans, "are you free tonight?" nudges' },
-                  { value: 'flexible', emoji: '\uD83D\uDD04', label: 'Flexible', desc: 'Adapts per friendship \u2014 books ahead with planners, last-minute with spontaneous friends' },
-                  { value: 'planner', emoji: '\uD83D\uDCCB', label: 'Planner', desc: 'Plans 1\u20134 weeks out, recurring hangouts, early confirmations' },
+                  { value: 'spontaneous', emoji: '⚡', label: 'Spontaneous' },
+                  { value: 'flexible', emoji: '🔄', label: 'Flexible' },
+                  { value: 'planner', emoji: '📋', label: 'Planner' },
                 ].map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => setPlanningStyle(opt.value)}
-                    className={`rounded-xl border px-4 py-4 text-center transition-all ${
+                    className={`rounded-xl border px-2 sm:px-4 py-2.5 sm:py-4 text-center transition-all ${
                       planningStyle === opt.value
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 shadow-md ring-1 ring-slotted-200'
                         : 'border-gray-200 text-gray-600 hover:border-slotted-200 hover:bg-gray-50'
                     }`}
                   >
-                    <span className="text-2xl">{opt.emoji}</span>
-                    <p className={`mt-1.5 text-xs font-bold ${planningStyle === opt.value ? 'text-slotted-700' : 'text-gray-800'}`}>{opt.label}</p>
-                    <p className={`mt-1 text-[10px] leading-snug ${planningStyle === opt.value ? 'text-slotted-600' : 'text-gray-400'}`}>{opt.desc}</p>
+                    <span className="text-lg sm:text-2xl">{opt.emoji}</span>
+                    <p className={`mt-1 text-[11px] sm:text-xs font-bold ${planningStyle === opt.value ? 'text-slotted-700' : 'text-gray-800'}`}>{opt.label}</p>
                   </button>
                 ))}
               </div>
+              <p className="mt-2 text-[10px] sm:text-xs text-gray-500 text-center leading-relaxed">
+                {planningStyle === 'spontaneous' && 'Same-day plans, "are you free tonight?" nudges'}
+                {planningStyle === 'flexible' && 'Adapts per friendship \u2014 books ahead with planners, last-minute with spontaneous'}
+                {planningStyle === 'planner' && 'Plans 1\u20134 weeks out, recurring hangouts, early confirmations'}
+              </p>
             </div>
           </div>
         </section>
@@ -547,29 +551,26 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-4 pl-4 sm:pl-10">
-            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-3 sm:p-4 shadow-sm">
               <label className="block text-[11px] font-semibold text-gray-700 mb-2">How often do you want to see friends?</label>
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
-                  { value: 'daily', emoji: '🥳', label: 'Every day', desc: "I'm happy to see any friend on any day — no limit" },
-                  { value: '2-3-week', emoji: '😊', label: '2–3 plans per week', desc: 'I like being social but need a couple days between any plans' },
-                  { value: 'weekly', emoji: '🧘', label: 'About 1 plan per week', desc: 'One hangout (with anyone) per week is my sweet spot' },
-                  { value: 'biweekly', emoji: '🏡', label: '1–2 plans per month', desc: 'I prefer lots of downtime between any social plans' },
+                  { value: 'daily', emoji: '🥳', label: 'Every day' },
+                  { value: '2-3-week', emoji: '😊', label: '2–3 / week' },
+                  { value: 'weekly', emoji: '🧘', label: '~1 / week' },
+                  { value: 'biweekly', emoji: '🏡', label: '1–2 / month' },
                 ].map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => setSocialRecharge(opt.value)}
-                    className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-left transition-all ${
+                    className={`rounded-xl border px-2 py-2 text-center transition-all ${
                       socialRecharge === opt.value
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 shadow-sm'
                         : 'border-gray-200 hover:border-slotted-200 hover:bg-gray-50'
                     }`}
                   >
                     <span className="text-lg">{opt.emoji}</span>
-                    <div className="min-w-0">
-                      <p className={`text-xs font-semibold ${socialRecharge === opt.value ? 'text-slotted-700' : 'text-gray-800'}`}>{opt.label}</p>
-                      <p className="text-[10px] text-gray-400">{opt.desc}</p>
-                    </div>
+                    <p className={`mt-0.5 text-[10px] font-semibold leading-tight ${socialRecharge === opt.value ? 'text-slotted-700' : 'text-gray-600'}`}>{opt.label}</p>
                   </button>
                 ))}
               </div>
@@ -624,23 +625,23 @@ export default function SettingsPage() {
                 <label className="block text-[11px] font-semibold text-gray-700">
                   Social goal
                 </label>
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="mt-2 grid grid-cols-3 gap-2">
                   {[
-                    { value: 'increase', emoji: '📈', label: 'See people more' },
-                    { value: 'maintain', emoji: '⚖️', label: 'Stay the same' },
-                    { value: 'decrease', emoji: '📉', label: 'More downtime' },
+                    { value: 'increase', emoji: '📈', label: 'See more' },
+                    { value: 'maintain', emoji: '⚖️', label: 'Same' },
+                    { value: 'decrease', emoji: '📉', label: 'Less' },
                   ].map((opt) => (
                     <button
                       key={opt.value}
                       onClick={() => setSocialGoal(opt.value)}
-                      className={`rounded-lg border px-3 py-3 sm:py-2 text-center text-xs transition-all ${
+                      className={`rounded-lg border px-2 py-2 text-center text-xs transition-all ${
                         socialGoal === opt.value
                           ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm font-semibold'
                           : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-gray-50'
                       }`}
                     >
                       <span className="text-base">{opt.emoji}</span>
-                      <p className="mt-1 text-[10px] leading-tight">{opt.label}</p>
+                      <p className="mt-0.5 text-[10px] leading-tight">{opt.label}</p>
                     </button>
                   ))}
                 </div>

@@ -6881,7 +6881,13 @@ function getOAuth2Client() {
 /** Build an authenticated OAuth2 client for a user who has stored tokens */
 async function getAuthedCalendarClient(firebaseUid: string) {
   const user = await getDbUser(firebaseUid);
-  if (!user?.google_refresh_token) return null;
+  const hasRefreshToken = !!user?.google_refresh_token;
+  const hasAccessToken = !!user?.google_access_token;
+  if (!hasRefreshToken && !hasAccessToken) return null;
+  if (!hasRefreshToken && user?.google_token_expires_at) {
+    const expiryMs = new Date(user.google_token_expires_at).getTime();
+    if (!Number.isNaN(expiryMs) && expiryMs <= Date.now()) return null;
+  }
 
   const oauth2 = getOAuth2Client();
   oauth2.setCredentials({
@@ -7004,11 +7010,13 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
     // Store tokens in the users table
     const updates: Record<string, unknown> = {
       google_access_token: tokens.access_token,
-      google_refresh_token: tokens.refresh_token,
       google_token_expires_at: tokens.expiry_date
         ? new Date(tokens.expiry_date).toISOString()
         : null,
     };
+    if (tokens.refresh_token) {
+      updates.google_refresh_token = tokens.refresh_token;
+    }
 
     await getSupabase()
       .from("users")
@@ -7096,7 +7104,11 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
 app.get("/calendar/status", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const user = await getDbUser(req.uid!);
-    const googleConnected = !!(user?.google_refresh_token);
+    const googleAccessValid = !!(
+      user?.google_access_token &&
+      (!user?.google_token_expires_at || new Date(user.google_token_expires_at).getTime() > Date.now() - 60_000)
+    );
+    const googleConnected = !!user?.google_refresh_token || googleAccessValid;
     const appleConnected = !!(user?.apple_calendar_connected && user?.apple_caldav_username);
     const outlookConnected = !!(user?.outlook_calendar_connected && user?.outlook_refresh_token);
     res.json({

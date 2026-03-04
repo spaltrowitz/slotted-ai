@@ -18,14 +18,22 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
   if (mobileOnly && !isMobile) return null;
 
   if (!isSupported) {
+    const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isNonSafariBrowser = isMobile && !isStandalone && (
+      /CriOS|FxiOS|OPiOS|EdgiOS/i.test(navigator.userAgent) || isIOS
+    );
+
     return (
       <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🔕</span>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-gray-700">Notifications not supported</p>
+            <p className="text-sm font-semibold text-gray-700">Notifications not available here</p>
             <p className="text-xs text-gray-500">
-              Your browser doesn't support push notifications. For the best experience, install Slotted.ai as an app on your phone.
+              {isNonSafariBrowser
+                ? 'Push notifications only work when you open Slotted.ai from your home screen. Tap the Slotted.ai icon on your home screen to get started.'
+                : "Your browser doesn't support push notifications. For the best experience, install Slotted.ai as an app on your phone."}
             </p>
           </div>
         </div>

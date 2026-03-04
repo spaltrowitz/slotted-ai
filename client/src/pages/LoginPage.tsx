@@ -91,8 +91,8 @@ export default function LoginPage() {
         <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4 sm:mb-6">
           How it works
         </h2>
-        {/* Mobile: horizontal scroll strip */}
-        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide sm:hidden">
+        {/* Mobile: equal-width row that always fits */}
+        <div className="grid grid-cols-3 gap-2 sm:hidden">
           {[
             { step: '1', emoji: '📅', title: 'Connect calendar', color: 'from-blue-50 to-cyan-50', border: 'border-blue-100' },
             { step: '2', emoji: '👋', title: 'Invite friends', color: 'from-violet-50 to-fuchsia-50', border: 'border-violet-100' },
@@ -100,15 +100,15 @@ export default function LoginPage() {
           ].map((item) => (
             <div
               key={item.step}
-              className={`flex-shrink-0 w-[140px] rounded-xl border ${item.border} bg-gradient-to-br ${item.color} p-3 shadow-sm`}
+              className={`rounded-xl border ${item.border} bg-gradient-to-br ${item.color} p-2 shadow-sm`}
             >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[10px] font-bold text-gray-900 shadow-sm ring-1 ring-gray-200/60">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[9px] font-bold text-gray-900 shadow-sm ring-1 ring-gray-200/60">
                   {item.step}
                 </span>
-                <span className="text-lg">{item.emoji}</span>
+                <span className="text-base">{item.emoji}</span>
               </div>
-              <h3 className="font-display text-xs font-bold text-gray-900">{item.title}</h3>
+              <h3 className="font-display text-[11px] font-bold text-gray-900 leading-tight">{item.title}</h3>
             </div>
           ))}
         </div>
@@ -170,8 +170,8 @@ export default function LoginPage() {
             { emoji: '🔔', text: "Gentle nudge when it's been a while since you hung out" },
             { emoji: '⚡', text: "Connect calendars. Slotted finds when everyone's free" },
             { emoji: '🔒', text: 'Your calendar stays private. We only see free or busy' },
-          ].map((item, i) => (
-            <div key={i} className="flex items-center gap-2.5 rounded-lg bg-white/60 px-3 py-2">
+          ].map((item) => (
+            <div key={item.emoji} className="flex items-center gap-2.5 rounded-lg bg-white/60 px-3 py-2">
               <span className="text-sm shrink-0">{item.emoji}</span>
               <p className="text-xs text-gray-600">{item.text}</p>
             </div>
@@ -210,9 +210,9 @@ export default function LoginPage() {
               desc: 'We only see free or busy, never details. You control what friends can see.',
               accent: 'border-l-cyan-400',
             },
-          ].map((item, i) => (
+          ].map((item) => (
             <div
-              key={i}
+              key={item.emoji}
               className={`rounded-xl border border-gray-200/60 border-l-[3px] ${item.accent} bg-white/70 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md`}
             >
               <div className="flex items-center gap-2">

@@ -135,8 +135,8 @@ function HowItWorks() {
 
       {open && (
         <div className="mt-2 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-4 animate-in slide-in-from-top-2 fade-in">
-          {steps.map((s, i) => (
-            <div key={i} className="flex gap-3">
+          {steps.map((s) => (
+            <div key={s.title} className="flex gap-3">
               <span className="text-lg flex-shrink-0 mt-0.5">{s.emoji}</span>
               <div>
                 <p className="text-sm font-semibold text-gray-900">{s.title}</p>
@@ -691,10 +691,6 @@ export default function DashboardPage() {
   })();
 
   /* ─── should show history section? ─── */
-  // const hasHistory = pastConfirmed.filter((m) => m.status !== 'didnt_happen').length > 0;
-
-  console.log('[Dashboard render]', { dashboardLoading, calEventsLoading, friendsToSee: friendsToSee.length, calEvents: calEvents.length, meetups: meetups.length });
-
   return (
     <AppShell>
       {/* ─── HEADER ─── */}

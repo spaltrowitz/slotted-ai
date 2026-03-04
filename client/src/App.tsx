@@ -1,19 +1,20 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Component, type ReactNode } from 'react';
+import { Component, Suspense, lazy, type ReactNode } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import FriendsPage from './pages/FriendsPage';
-import OnboardingPage from './pages/OnboardingPage';
-import SettingsPage from './pages/SettingsPage';
-import NotificationsPage from './pages/NotificationsPage';
-import EventsPage from './pages/EventsPage';
-import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
-import TermsOfServicePage from './pages/TermsOfServicePage';
-import InvitePage from './pages/InvitePage';
-import EventSharePage from './pages/EventSharePage';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const FriendsPage = lazy(() => import('./pages/FriendsPage'));
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
+const EventsPage = lazy(() => import('./pages/EventsPage'));
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
+const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'));
+const InvitePage = lazy(() => import('./pages/InvitePage'));
+const EventSharePage = lazy(() => import('./pages/EventSharePage'));
 
 /* ─── Error boundary ─── */
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -54,33 +55,43 @@ const queryClient = new QueryClient({
   },
 });
 
+function RouteLoadingFallback() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-[#faf9f7]">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<LoginPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/privacy" element={<PrivacyPolicyPage />} />
-            <Route path="/terms" element={<TermsOfServicePage />} />
-            <Route path="/invite/:code" element={<InvitePage />} />
-            <Route path="/e/:code" element={<EventSharePage />} />
+          <Suspense fallback={<RouteLoadingFallback />}>
+            <Routes>
+              <Route path="/" element={<LoginPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/privacy" element={<PrivacyPolicyPage />} />
+              <Route path="/terms" element={<TermsOfServicePage />} />
+              <Route path="/invite/:code" element={<InvitePage />} />
+              <Route path="/e/:code" element={<EventSharePage />} />
 
-            {/* Protected routes */}
-            <Route element={<ProtectedRoute />}>
-              <Route path="/onboarding" element={<OnboardingPage />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/friends" element={<FriendsPage />} />
-              <Route path="/events" element={<EventsPage />} />
-              <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-            </Route>
+              {/* Protected routes */}
+              <Route element={<ProtectedRoute />}>
+                <Route path="/onboarding" element={<OnboardingPage />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/friends" element={<FriendsPage />} />
+                <Route path="/events" element={<EventsPage />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+              </Route>
 
-            {/* Catch-all */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+              {/* Catch-all */}
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>
