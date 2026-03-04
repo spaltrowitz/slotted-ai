@@ -57,6 +57,8 @@ export default function SettingsPage() {
   // Display name / nickname
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [editingName, setEditingName] = useState(false);
+  const [nameBeforeEdit, setNameBeforeEdit] = useState(user?.displayName || '');
+  const [activeTab, setActiveTab] = useState<'profile' | 'availability' | 'privacy'>('profile');
 
   useEffect(() => {
     if (!user) return;
@@ -178,25 +180,44 @@ export default function SettingsPage() {
   return (
     <AppShell>
       {/* ── Header ── */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="sticky top-14 z-20 mb-4 border-b border-gray-200/60 bg-[#f8f7f4]/95 pb-3 pt-1 backdrop-blur">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">Settings</h1>
         </div>
-        <button
-          onClick={handleSave}
-          className={`rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
-            saved ? 'bg-emerald-500' : 'gradient-btn'
-          }`}
-        >
-          {saved ? 'Saved! \u2713' : 'Save Changes'}
-        </button>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="flex rounded-xl border border-gray-200 bg-white p-1">
+            {[
+              { key: 'profile', label: 'Profile' },
+              { key: 'availability', label: 'Availability' },
+              { key: 'privacy', label: 'Privacy' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key as 'profile' | 'availability' | 'privacy')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                  activeTab === tab.key
+                    ? 'bg-slotted-50 text-slotted-700'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={handleSave}
+            className={`rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
+              saved ? 'bg-emerald-500' : 'gradient-btn'
+            }`}
+          >
+            {saved ? 'Saved! \u2713' : 'Save Changes'}
+          </button>
+        </div>
       </div>
 
       <div className="space-y-6">
 
-        {/* ═══════════════════════════════════════════════ */}
-        {/* STEP 1: ACCOUNT & CALENDARS                    */}
-        {/* ═══════════════════════════════════════════════ */}
+        {activeTab === 'profile' && (
         <section>
           <div className="flex items-center gap-3 mb-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">1</span>
@@ -232,12 +253,25 @@ export default function SettingsPage() {
                       >
                         Done
                       </button>
+                      <button
+                        onClick={() => {
+                          setDisplayName(nameBeforeEdit);
+                          setEditingName(false);
+                        }}
+                        className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                        title="Cancel editing name"
+                      >
+                        ✕
+                      </button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-gray-900">{displayName || user?.displayName}</p>
                       <button
-                        onClick={() => setEditingName(true)}
+                        onClick={() => {
+                          setNameBeforeEdit(displayName);
+                          setEditingName(true);
+                        }}
                         className="rounded-md p-1 text-gray-400 hover:text-slotted-500 hover:bg-slotted-50 transition-all"
                         title="Edit display name"
                       >
@@ -464,43 +498,12 @@ export default function SettingsPage() {
             <InstallPrompt alwaysShow desktopOnly />
             <PushNotificationPrompt mobileOnly />
 
-            {/* Share hangout activity */}
-            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs">👥</span>
-                    <label className="text-[11px] font-semibold text-gray-700">
-                      Share hangout activity
-                    </label>
-                  </div>
-                  <p className="mt-0.5 text-[10px] text-gray-400">
-                    {shareHangouts
-                      ? 'Friends see "You caught up with [Name]" when both have this on'
-                      : 'Your hangouts are completely private'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={shareHangouts}
-                  onClick={() => setShareHangouts(!shareHangouts)}
-                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                    shareHangouts ? 'bg-slotted-500' : 'bg-gray-200'
-                  }`}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                    shareHangouts ? 'translate-x-[18px]' : 'translate-x-[3px]'
-                  }`} />
-                </button>
-              </div>
-            </div>
           </div>
         </section>
+        )}
 
-        {/* ═══════════════════════════════════════════════ */}
-        {/* STEP 2: PLANNING STYLE                         */}
-        {/* ═══════════════════════════════════════════════ */}
+        {activeTab === 'availability' && (
+        <>
         <section>
           <div className="flex items-center gap-3 mb-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">2</span>
@@ -577,7 +580,7 @@ export default function SettingsPage() {
                   No-plans days
                 </label>
                 <p className="mt-0.5 text-[10px] text-gray-400">Slotted.ai won't suggest hangouts on these days</p>
-                <div className="mt-2 grid grid-cols-7 gap-2">
+                <div className="mt-2 grid grid-cols-7 gap-1 sm:gap-2">
                   {[
                     { day: 0, label: 'Sun' },
                     { day: 1, label: 'Mon' },
@@ -1063,10 +1066,11 @@ export default function SettingsPage() {
             </div>
           </div>
         </section>
+        </>
+        )}
 
-        {/* ═══════════════════════════════════════════════ */}
-        {/* STEP 5: EVENT INTERESTS                        */}
-        {/* ═══════════════════════════════════════════════ */}
+        {activeTab === 'profile' && (
+        <>
         <section>
           <div className="flex items-center gap-3 mb-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">5</span>
@@ -1187,6 +1191,54 @@ export default function SettingsPage() {
           </div>
         </div>
         </div>
+        </>
+        )}
+
+        {activeTab === 'privacy' && (
+          <section>
+            <div className="flex items-center gap-3 mb-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">1</span>
+              <h2 className="text-sm font-bold text-gray-800">Privacy & Sharing</h2>
+            </div>
+            <div className="space-y-4 pl-4 sm:pl-10">
+              <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs">👥</span>
+                      <label className="text-[11px] font-semibold text-gray-700">
+                        Share hangout activity
+                      </label>
+                    </div>
+                    <p className="mt-0.5 text-[10px] text-gray-400">
+                      {shareHangouts
+                        ? 'Friends only see a simple "You caught up with [Name]" signal when both people enable sharing.'
+                        : 'Your hangouts stay private.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={shareHangouts}
+                    onClick={() => setShareHangouts(!shareHangouts)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                      shareHangouts ? 'bg-slotted-500' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                      shareHangouts ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                    }`} />
+                  </button>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
+                <p className="text-[11px] leading-relaxed text-gray-500">
+                  Slotted uses calendar busy/free to suggest times and does not share event titles, attendees, or descriptions with friends.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
       </div>
     </AppShell>
   );

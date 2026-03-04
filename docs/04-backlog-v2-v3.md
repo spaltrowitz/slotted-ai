@@ -91,6 +91,18 @@
 - **Effort:** 4 weeks (data pipeline, model training)
 - **RICE Score:** (800 users × 7 impact × 60% confidence) / 4 = **840**
 
+#### 6b. Dashboard "Ideal Time" Suggestions (Private)
+
+- **Description:** Show 1–3 private "ideal time to make plans" windows on Dashboard, combining friend cadence (time since last hangout), user interests, and overlap availability.
+- **User Value:** Helps users act at the right moment without opening multiple tabs or feeling social pressure.
+- **Requirements:**
+  - Compute lightweight weekly suggestion windows from existing availability + friendship cadence signals
+  - Keep suggestions private to the user (never visible to friends)
+  - One-tap CTA from each suggestion to Friends "Find times" flow
+  - Soft language ("good window to reach out") with no ranking/pressure score UI
+- **Effort:** 2 weeks
+- **RICE Score:** TBD
+
 #### 7. Recurring Social Commitments
 
 - **Description:** Set up standing hangouts ("Coffee with Sarah every other Saturday 10am")

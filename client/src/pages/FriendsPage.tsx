@@ -44,60 +44,6 @@ interface SavedGroup {
   pendingEmails?: string[];
 }
 
-/** Collapsible "How it works" explainer */
-function HowItWorks() {
-  const [open, setOpen] = useState(false);
-
-  const steps = [
-    { emoji: '1️⃣', title: 'Invite a friend', desc: 'Share your invite link via text, email, or copy link. They\'ll get a friend request when they sign up.' },
-    { emoji: '2️⃣', title: 'Connect calendars', desc: 'Both you and your friend connect a Google or Apple calendar in Settings so Slotted.ai can find free times. Tip: Ask your friends to connect their calendar too — Slotted.ai works best when both sides are synced!' },
-    { emoji: '3️⃣', title: 'Find times', desc: 'Tap "Find times" on a friend — then choose In Person, Phone Call, or Video Call. Slotted.ai finds the best slots for each type (calls can be shorter and skip travel time).' },
-    { emoji: '4️⃣', title: 'Book it', desc: 'Pick a time and hit "Book it." Your friend gets a notification in their inbox to accept or decline.' },
-    { emoji: '5️⃣', title: 'Add to calendar', desc: 'After booking (or accepting), you\'ll both be prompted to save the event to a specific Google or Apple calendar.' },
-  ];
-
-  return (
-    <div className="mb-6">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between rounded-2xl border border-slotted-100 bg-gradient-to-r from-slotted-50/40 to-purple-50/30 px-5 py-3 text-left transition-all hover:shadow-sm"
-      >
-        <div className="flex items-center gap-2.5">
-          <span className="text-base">💡</span>
-          <span className="text-sm font-semibold text-gray-800">How Slotted.ai works</span>
-        </div>
-        <svg
-          className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-
-      {open && (
-        <div className="mt-2 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-4 animate-in slide-in-from-top-2 fade-in">
-          {steps.map((s, i) => (
-            <div key={i} className="flex gap-3">
-              <span className="text-lg flex-shrink-0 mt-0.5">{s.emoji}</span>
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{s.title}</p>
-                <p className="text-xs text-gray-500 leading-relaxed">{s.desc}</p>
-              </div>
-            </div>
-          ))}
-          <div className="rounded-xl bg-slotted-50 border border-slotted-200 px-4 py-2.5">
-            <p className="text-[11px] text-slotted-700 leading-relaxed">
-              <span className="font-semibold">📲 Install the app:</span> Add Slotted.ai to your home screen for the best experience. Go to{' '}
-              <a href="/settings" className="underline font-medium hover:text-slotted-800">Settings</a>{' '}
-              to see install instructions for your device.
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function FriendsPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -127,6 +73,9 @@ export default function FriendsPage() {
   // Remove friend state
   const [removingFriend, setRemovingFriend] = useState<FriendRecord | null>(null);
   const [removeLoading, setRemoveLoading] = useState(false);
+  const [showAddLongDistancePicker, setShowAddLongDistancePicker] = useState(false);
+  const [deletingGroup, setDeletingGroup] = useState<{ id: string; name: string } | null>(null);
+  const [deleteGroupLoading, setDeleteGroupLoading] = useState(false);
 
 
 
@@ -366,15 +315,20 @@ export default function FriendsPage() {
 
   const handleDeleteGroup = async (groupId: string) => {
     if (!user) return;
+    setDeleteGroupLoading(true);
     try {
       const token = await user.getIdToken();
       await fetch(`/api/groups/${groupId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
+      setDeletingGroup(null);
+      setAddMemberGroupId((current) => (current === groupId ? null : current));
       fetchGroups();
-    } catch {
-      // silent
+    } catch (err) {
+      console.error('Failed to delete group:', err);
+    } finally {
+      setDeleteGroupLoading(false);
     }
   };
 
@@ -549,16 +503,6 @@ export default function FriendsPage() {
           🎟️ Go together
         </a>
         <button
-          onClick={() => handleToggleFriendshipType(
-            f,
-            (f.friendshipType || 'local') === 'local' ? 'long_distance' : 'local'
-          )}
-          className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-          title={(f.friendshipType || 'local') === 'local' ? 'Move to long distance' : 'Move to local'}
-        >
-          <span className="text-sm">{(f.friendshipType || 'local') === 'local' ? '✈️' : '🏠'}</span>
-        </button>
-        <button
           onClick={() => setRemovingFriend(f)}
           className="rounded-lg p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
           title="Remove friend"
@@ -579,9 +523,6 @@ export default function FriendsPage() {
           Your people. See who's around and feeling social 🫶
         </p>
       </div>
-
-      {/* How it works — collapsible */}
-      <HowItWorks />
 
       {/* FIND TIMES panel (1:1) */}
       {selectedFriendId && (
@@ -675,7 +616,7 @@ export default function FriendsPage() {
                         +
                       </button>
                       <button
-                        onClick={() => handleDeleteGroup(group.id)}
+                        onClick={() => setDeletingGroup({ id: group.id, name: group.name })}
                         className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-400 hover:text-red-500 hover:border-red-200 transition-all"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
@@ -997,9 +938,40 @@ export default function FriendsPage() {
 
           {/* Long-distance friends section — always visible */}
           <div className="mb-6">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-              ✈️ Long Distance {longDistanceFriends.length > 0 ? `· ${longDistanceFriends.length}` : ''}
-            </h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                Long Distance {longDistanceFriends.length > 0 ? `· ${longDistanceFriends.length}` : ''}
+              </h2>
+              <button
+                onClick={() => setShowAddLongDistancePicker((prev) => !prev)}
+                disabled={localFriends.length === 0}
+                title="Add a friend to Long Distance mode for optimized call/video call times"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-500 transition-all hover:border-slotted-300 hover:text-slotted-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                +
+              </button>
+            </div>
+
+            {showAddLongDistancePicker && localFriends.length > 0 && (
+              <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50/30 p-3">
+                <p className="mb-2 text-[11px] font-medium text-gray-600">Move a friend to Long Distance mode:</p>
+                <div className="flex flex-wrap gap-2">
+                  {localFriends.map((friend) => (
+                    <button
+                      key={friend.friendshipId}
+                      onClick={() => {
+                        void handleToggleFriendshipType(friend, 'long_distance');
+                        setShowAddLongDistancePicker(false);
+                      }}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-blue-300 hover:text-blue-700"
+                    >
+                      + {friend.friend.displayName.split(' ')[0]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {longDistanceFriends.length > 0 ? (
               <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
                 {longDistanceFriends.map((f, i) => renderFriendCard(f, i, longDistanceFriends))}
@@ -1048,6 +1020,44 @@ export default function FriendsPage() {
                 className="flex-1 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50"
               >
                 {removeLoading ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete group confirmation modal */}
+      {deletingGroup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onClick={() => !deleteGroupLoading && setDeletingGroup(null)}
+        >
+          <div className="w-full max-w-[calc(100vw-1.5rem)] sm:max-w-sm rounded-2xl bg-white px-4 py-5 sm:p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
+                <svg className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Delete group?</h3>
+              <p className="mt-2 text-sm text-gray-500">
+                Are you sure you want to delete <span className="font-medium text-gray-700">{deletingGroup.name}</span>?
+              </p>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setDeletingGroup(null)}
+                disabled={deleteGroupLoading}
+                className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteGroup(deletingGroup.id)}
+                disabled={deleteGroupLoading}
+                className="flex-1 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {deleteGroupLoading ? 'Deleting…' : 'Confirm'}
               </button>
             </div>
           </div>

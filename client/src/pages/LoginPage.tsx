@@ -32,24 +32,24 @@ export default function LoginPage() {
       </nav>
 
       {/* Hero section */}
-      <div className="relative z-10 mx-auto max-w-3xl px-6 pt-16 pb-10 text-center">
-        <div className="mb-5 inline-flex items-center rounded-full border border-amber-200/60 bg-gradient-to-r from-amber-50/90 to-orange-50/90 px-4 py-1.5 text-xs font-semibold text-amber-800 shadow-sm backdrop-blur-sm">
+      <div className="relative z-10 mx-auto max-w-3xl px-6 pt-6 sm:pt-16 pb-6 sm:pb-10 text-center">
+        <div className="mb-3 sm:mb-5 inline-flex items-center rounded-full border border-amber-200/60 bg-gradient-to-r from-amber-50/90 to-orange-50/90 px-4 py-1.5 text-xs font-semibold text-amber-800 shadow-sm backdrop-blur-sm">
           Early access — limited spots
         </div>
-        <h1 className="font-display text-5xl font-extrabold tracking-tight text-gray-900 sm:text-6xl leading-[1.1]">
+        <h1 className="font-display text-3xl sm:text-5xl font-extrabold tracking-tight text-gray-900 sm:leading-[1.1] leading-[1.15]">
           Stop texting back and forth.{' '}
           <span className="gradient-text">Just hang out.</span>
         </h1>
-        <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-gray-500">
-          Slotted.ai connects to your calendar, finds when you and your friends are both free, and makes it ridiculously easy to actually make plans.
+        <p className="mx-auto mt-3 sm:mt-5 max-w-xl text-sm sm:text-base leading-relaxed text-gray-500">
+          Slotted.ai connects to your calendar, finds when you and your friends are both free, and makes it easy to actually make plans.
         </p>
 
         {/* CTA */}
-        <div className="mt-8 flex flex-col items-center gap-3">
+        <div className="mt-5 sm:mt-8 flex flex-col items-center gap-3">
           {user ? (
             <Link
               to="/dashboard"
-              className="flex items-center justify-center gap-3 rounded-2xl gradient-btn px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+              className="flex items-center justify-center gap-3 rounded-2xl gradient-btn px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
             >
               Go to Dashboard →
             </Link>
@@ -58,7 +58,7 @@ export default function LoginPage() {
               <button
                 onClick={signInWithGoogle}
                 disabled={isSigningIn}
-                className="flex items-center justify-center gap-3 rounded-2xl gradient-btn px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-3 rounded-2xl gradient-btn px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#fff" fillOpacity=".7" />
@@ -86,12 +86,34 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* How it works — compact 3-column */}
-      <section className="relative z-10 mx-auto max-w-4xl px-6 pb-10">
-        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-6">
+      {/* How it works */}
+      <section className="relative z-10 mx-auto max-w-4xl px-6 pb-6 sm:pb-10">
+        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4 sm:mb-6">
           How it works
         </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Mobile: horizontal scroll strip */}
+        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide sm:hidden">
+          {[
+            { step: '1', emoji: '📅', title: 'Connect calendar', color: 'from-blue-50 to-cyan-50', border: 'border-blue-100' },
+            { step: '2', emoji: '👋', title: 'Invite friends', color: 'from-violet-50 to-fuchsia-50', border: 'border-violet-100' },
+            { step: '3', emoji: '✨', title: 'Get suggestions', color: 'from-amber-50 to-orange-50', border: 'border-amber-100' },
+          ].map((item) => (
+            <div
+              key={item.step}
+              className={`flex-shrink-0 w-[140px] rounded-xl border ${item.border} bg-gradient-to-br ${item.color} p-3 shadow-sm`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[10px] font-bold text-gray-900 shadow-sm ring-1 ring-gray-200/60">
+                  {item.step}
+                </span>
+                <span className="text-lg">{item.emoji}</span>
+              </div>
+              <h3 className="font-display text-xs font-bold text-gray-900">{item.title}</h3>
+            </div>
+          ))}
+        </div>
+        {/* Desktop: full grid */}
+        <div className="hidden sm:grid grid-cols-3 gap-4">
           {[
             {
               step: '1',
@@ -135,23 +157,39 @@ export default function LoginPage() {
         </div>
       </section>
 
-      {/* Why it matters — single-column, left-accent cards */}
-      <section className="relative z-10 mx-auto max-w-md px-6 pb-10">
-        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-6">
+      {/* Why it matters */}
+      <section className="relative z-10 mx-auto max-w-lg px-6 pb-6 sm:pb-10">
+        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3 sm:mb-6">
           Why it matters
         </h2>
-        <div className="flex flex-col gap-3">
+        {/* Mobile: compact list */}
+        <div className="flex flex-col gap-2 sm:hidden">
+          {[
+            { emoji: '🗓️', text: 'Find times that actually work for the whole group' },
+            { emoji: '💬', text: "Turn \"let's hang\" into a real plan, no back and forth" },
+            { emoji: '🔔', text: "Gentle nudge when it's been a while since you hung out" },
+            { emoji: '⚡', text: "Connect calendars. Slotted finds when everyone's free" },
+            { emoji: '🔒', text: 'Your calendar stays private. We only see free or busy' },
+          ].map((item, i) => (
+            <div key={i} className="flex items-center gap-2.5 rounded-lg bg-white/60 px-3 py-2">
+              <span className="text-sm shrink-0">{item.emoji}</span>
+              <p className="text-xs text-gray-600">{item.text}</p>
+            </div>
+          ))}
+        </div>
+        {/* Desktop: full accent cards */}
+        <div className="hidden sm:flex flex-col gap-3">
           {[
             {
               emoji: '🗓️',
               title: 'Plans, not promises',
-              desc: 'Find times that actually work — for a friend or the whole group.',
+              desc: 'Find times that actually work for a friend or the whole group.',
               accent: 'border-l-teal-400',
             },
             {
               emoji: '💬',
               title: 'Skip the group text',
-              desc: "Turn \"let's hang\" into a real plan without the back-and-forth.",
+              desc: "Turn \"let's hang\" into a real plan without the back and forth.",
               accent: 'border-l-violet-400',
             },
             {
