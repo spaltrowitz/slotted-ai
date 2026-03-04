@@ -8278,11 +8278,27 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
         return daySpan >= 2; // 2+ calendar days (end is exclusive, so span ≥ 2 means at least a 2-day trip)
       });
 
+      // Build a set of every calendar day occupied by a trip.
+      // This prevents creating "pre-trip" or "recovery" markers while the user is still traveling.
+      const tripDays = new Set<string>();
+      for (const trip of trips) {
+        const cursor = new Date(trip.start + "T00:00:00");
+        const endExclusive = new Date(trip.end + "T00:00:00");
+        while (cursor < endExclusive) {
+          tripDays.add(cursor.toISOString().slice(0, 10));
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      }
+
       for (const trip of trips) {
         if (tripBufferBefore) {
           const dayBefore = new Date(trip.start + "T00:00:00");
           dayBefore.setDate(dayBefore.getDate() - 1);
           const bufferDate = dayBefore.toISOString().slice(0, 10);
+          if (tripDays.has(bufferDate)) {
+            // Already traveling this day; skip pre-trip buffer.
+            continue;
+          }
           const nextDate = trip.start; // the trip start itself
           allEvents.push({
             id: `buffer_before_${trip.id}`,
@@ -8299,6 +8315,10 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
         if (tripBufferAfter) {
           // trip.end is already exclusive (day after last day), so that IS the recovery day
           const recoveryDate = trip.end;
+          if (tripDays.has(recoveryDate)) {
+            // Still traveling this day due to another overlapping/adjacent trip.
+            continue;
+          }
           const dayAfterRecovery = new Date(recoveryDate + "T00:00:00");
           dayAfterRecovery.setDate(dayAfterRecovery.getDate() + 1);
           const recoveryEndDate = dayAfterRecovery.toISOString().slice(0, 10);
@@ -8349,11 +8369,21 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
 
     // Deduplicate events that appear across multiple calendars
     // Match on normalized title + start + end (keep the first occurrence)
+    // Also collapse synthetic trip buffers to max 1 per day+type.
     const seen = new Set<string>();
+    const seenBufferDay = new Set<string>();
     const dedupedEvents: CalEvent[] = [];
     for (const ev of allEvents) {
-      // Skip dedup for synthetic events (buffers, manual blocks)
-      if (ev.id.startsWith("buffer_") || ev.id.startsWith("manual_")) {
+      if (ev.id.startsWith("buffer_")) {
+        const key = `${ev.title.toLowerCase().trim()}|${ev.start.slice(0, 10)}`;
+        if (!seenBufferDay.has(key)) {
+          seenBufferDay.add(key);
+          dedupedEvents.push(ev);
+        }
+        continue;
+      }
+      // Skip dedup for manual blocks
+      if (ev.id.startsWith("manual_")) {
         dedupedEvents.push(ev);
         continue;
       }

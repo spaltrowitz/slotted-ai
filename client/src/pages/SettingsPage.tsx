@@ -660,10 +660,13 @@ export default function SettingsPage() {
 
         {/* Share hangout activity (moved from Privacy) */}
         <section>
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3 mb-1">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">4</span>
             <h2 className="text-sm font-bold text-gray-800">Sharing</h2>
           </div>
+          <p className="text-[10px] text-gray-400 pl-4 sm:pl-10 mb-3">
+            Slotted uses calendar busy/free to suggest times and does not share event titles, attendees, or descriptions with friends.
+          </p>
           <div className="space-y-4 pl-4 sm:pl-10">
             <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
@@ -694,11 +697,6 @@ export default function SettingsPage() {
                   }`} />
                 </button>
               </div>
-            </div>
-            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
-              <p className="text-[11px] leading-relaxed text-gray-500">
-                Slotted uses calendar busy/free to suggest times and does not share event titles, attendees, or descriptions with friends.
-              </p>
             </div>
           </div>
         </section>
@@ -1153,7 +1151,7 @@ export default function SettingsPage() {
                               : [...prev, interest.value]
                           );
                         }}
-                        className={`rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
+                        className={`rounded-xl border px-2 py-1.5 text-[11px] font-medium whitespace-nowrap transition-all ${
                           selected
                             ? 'border-slotted-400 bg-slotted-50 text-slotted-700 shadow-sm'
                             : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-slotted-50/30'

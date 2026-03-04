@@ -5,6 +5,18 @@ import AddToCalendarModal from '../components/AddToCalendarModal';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 
+/** Responsive breakpoint — true when viewport < 640px */
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return isMobile;
+}
+
 /* ─── types ─── */
 interface ActivityFeedItem {
   type: 'overdue_friends' | 'recent_activity' | 'free_weekend';
@@ -162,11 +174,13 @@ function HowItWorks() {
 /* ─── component ─── */
 export default function DashboardPage() {
   const { user, calendarConnected, calendarJustConnected } = useAuth();
+  const isMobile = useIsMobile();
 
-  // Calendar view state — persist preference in localStorage
+  // Calendar view state — week on mobile, month on desktop
   const [calView, setCalView] = useState<'agenda' | 'week' | 'month'>(() => {
     const saved = localStorage.getItem('slotted_cal_view');
-    return saved === 'agenda' || saved === 'week' || saved === 'month' ? saved : 'month';
+    if (saved === 'agenda' || saved === 'week' || saved === 'month') return saved;
+    return window.innerWidth < 640 ? 'week' : 'month';
   });
   const handleSetCalView = (v: 'agenda' | 'week' | 'month') => {
     setCalView(v);
@@ -613,24 +627,24 @@ export default function DashboardPage() {
   };
 
   /* ─── week view helpers ─── */
+  const VISIBLE_DAYS = isMobile ? 3 : 7;
   const weekDays = useMemo(() => {
     const today = new Date();
-    // Start from today + offset (so today is always on the left)
     const startDay = new Date(today);
-    startDay.setDate(today.getDate() + (weekOffset * 7));
+    startDay.setDate(today.getDate() + (weekOffset * VISIBLE_DAYS));
     const days: string[] = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < VISIBLE_DAYS; i++) {
       const d = new Date(startDay);
       d.setDate(startDay.getDate() + i);
       days.push(d.toLocaleDateString('en-CA'));
     }
     return days;
-  }, [weekOffset]);
+  }, [weekOffset, VISIBLE_DAYS]);
 
   const weekLabel = useMemo(() => {
     if (weekDays.length === 0) return '';
     const s = new Date(weekDays[0] + 'T12:00:00');
-    const e = new Date(weekDays[6] + 'T12:00:00');
+    const e = new Date(weekDays[weekDays.length - 1] + 'T12:00:00');
     if (s.getMonth() === e.getMonth()) {
       return `${s.toLocaleDateString('en-US', { month: 'long' })} ${s.getDate()}–${e.getDate()}, ${s.getFullYear()}`;
     }
@@ -641,7 +655,7 @@ export default function DashboardPage() {
     calEvents.filter((ev) => eventOnDate(ev, dateStr));
 
   /* ─── time-grid helpers for week view ─── */
-  const HOUR_HEIGHT = 48; // px per hour in time grid
+  const HOUR_HEIGHT = isMobile ? 36 : 48;
   const START_HOUR = 7; // 7 AM
   const END_HOUR = 23; // 11 PM
   const TOTAL_HOURS = END_HOUR - START_HOUR;
@@ -775,22 +789,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ─── NO UPCOMING HANGOUTS (when user has friends but nothing scheduled) ─── */}
-      {!dashboardLoading && allFriends.length > 0 && upcoming.length === 0 && (
-        <div className="hidden sm:block mb-4 sm:mb-6 rounded-2xl border border-dashed border-slotted-200 bg-slotted-50/30 p-4 sm:p-6 text-center">
-          <span className="text-2xl sm:text-3xl">📅</span>
-          <h3 className="mt-1.5 sm:mt-2 font-display text-sm sm:text-base font-bold text-gray-900">No hangouts coming up</h3>
-          <p className="mt-1 sm:mt-1.5 text-xs sm:text-sm text-gray-500 leading-relaxed max-w-sm mx-auto">
-            Find a time that works for everyone and book something fun.
-          </p>
-          <Link
-            to="/friends"
-            className="mt-3 sm:mt-4 inline-flex items-center gap-2 rounded-xl gradient-btn px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
-          >
-            👋 Find a time with a friend
-          </Link>
-        </div>
-      )}
+      {/* ─── NO UPCOMING HANGOUTS — moved below calendar/activity for both mobile and desktop ─── */}
 
       {/* ─── PENDING HANGOUTS (needs action) ─── */}
       {pendingHangouts.length > 0 && (
@@ -1073,7 +1072,7 @@ export default function DashboardPage() {
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
               </button>
               <button onClick={() => setWeekOffset(0)} className="text-xs font-semibold text-gray-600 hover:text-slotted-600 transition-colors">
-                {weekOffset === 0 ? 'This Week' : weekLabel}
+                {weekOffset === 0 ? (isMobile ? 'Today' : 'This Week') : weekLabel}
               </button>
               <button onClick={() => setWeekOffset((o) => o + 1)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
@@ -1091,7 +1090,7 @@ export default function DashboardPage() {
             <div>
               {/* All-day events row */}
               {weekDays.some((d) => allDayEventsForDate(d).length > 0) && (
-                <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
+                <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: `48px repeat(${VISIBLE_DAYS}, 1fr)` }}>
                   <div className="border-r border-gray-100 flex items-center justify-center">
                     <span className="text-[10px] text-gray-300">ALL DAY</span>
                   </div>
@@ -1119,7 +1118,7 @@ export default function DashboardPage() {
                 </div>
               )}
               {/* Day headers */}
-              <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
+              <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: `48px repeat(${VISIBLE_DAYS}, 1fr)` }}>
                 <div className="border-r border-gray-100" />
                 {weekDays.map((dateStr) => {
                   const d = new Date(dateStr + 'T12:00:00');
@@ -1137,8 +1136,8 @@ export default function DashboardPage() {
                 })}
               </div>
               {/* Time grid */}
-              <div className="overflow-y-auto max-h-[360px] sm:max-h-[520px]" style={{ scrollbarWidth: 'thin', ...(markBusyMode && isDragging ? { overflowY: 'hidden' } : {}) }}>
-                <div className="grid relative" style={{ gridTemplateColumns: '48px repeat(7, 1fr)', height: `${TOTAL_HOURS * HOUR_HEIGHT}px`, ...(markBusyMode ? { touchAction: 'none' } : {}) }}>
+              <div className={`${isMobile ? '' : 'overflow-y-auto max-h-[520px]'}`} style={{ ...(isMobile ? {} : { scrollbarWidth: 'thin' as const }), ...(markBusyMode && isDragging ? { overflowY: 'hidden' as const } : {}) }}>
+                <div className="grid relative" style={{ gridTemplateColumns: `48px repeat(${VISIBLE_DAYS}, 1fr)`, height: `${TOTAL_HOURS * HOUR_HEIGHT}px`, ...(markBusyMode ? { touchAction: 'none' } : {}) }}>
                   {/* Hour labels + grid lines */}
                   <div className="relative border-r border-gray-100">
                     {hours.map((h) => (
@@ -1574,15 +1573,15 @@ export default function DashboardPage() {
       )}
 
       {!dashboardLoading && allFriends.length > 0 && upcoming.length === 0 && (
-        <div className="sm:hidden mb-6 rounded-2xl border border-dashed border-slotted-200 bg-slotted-50/30 p-4 text-center">
-          <span className="text-2xl">📅</span>
-          <h3 className="mt-1.5 font-display text-sm font-bold text-gray-900">No hangouts coming up</h3>
-          <p className="mt-1 text-xs text-gray-500 leading-relaxed max-w-sm mx-auto">
+        <div className="mb-6 rounded-2xl border border-dashed border-slotted-200 bg-slotted-50/30 p-4 sm:p-6 text-center">
+          <span className="text-2xl sm:text-3xl">📅</span>
+          <h3 className="mt-1.5 sm:mt-2 font-display text-sm sm:text-base font-bold text-gray-900">No hangouts coming up</h3>
+          <p className="mt-1 sm:mt-1.5 text-xs sm:text-sm text-gray-500 leading-relaxed max-w-sm mx-auto">
             Find a time that works for everyone and book something fun.
           </p>
           <Link
             to="/friends"
-            className="mt-3 inline-flex items-center gap-2 rounded-xl gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+            className="mt-3 sm:mt-4 inline-flex items-center gap-2 rounded-xl gradient-btn px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
           >
             👋 Find a time with a friend
           </Link>

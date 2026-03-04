@@ -140,6 +140,21 @@ export default function FriendsPage() {
     fetchGroups();
   }, [fetchFriends, fetchGroups]);
 
+  // Keep list fresh across devices: when user returns to this page/app, refetch.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchFriends();
+      }
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [fetchFriends]);
+
   // Auto-open FriendAvailability from URL param
   useEffect(() => {
     const findTimesId = searchParams.get('findTimes');

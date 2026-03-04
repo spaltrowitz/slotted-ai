@@ -118,6 +118,9 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
 
   // On mobile, hide if desktopOnly (unless already installed — show that confirmation)
   if (desktopOnly && isMobile && !standalone) return null;
+  // On desktop, only show desktopOnly prompt when browser can actually prompt install.
+  // This avoids showing "install" to users who already installed or can't install from this browser.
+  if (desktopOnly && !isMobile && !deferredPrompt) return null;
 
   // Already installed as PWA — hide completely
   if (standalone) {
