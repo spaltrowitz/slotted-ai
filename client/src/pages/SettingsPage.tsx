@@ -321,24 +321,13 @@ export default function SettingsPage() {
                 ) : null}
 
                 {!googleCalendarConnected && (
-                  <div className="mt-1.5 space-y-1">
-                    <p className="text-[11px] text-gray-400">
-                      We only read busy/free times — never event names or details
-                    </p>
-                    <p className="text-[11px] text-amber-600 font-medium">
-                      ⚠️ When Google asks for permissions, please select all 3 checkboxes so Slotted.ai can work properly.
-                    </p>
-                  </div>
+                  <p className="mt-1.5 text-[11px] text-gray-400">
+                    We only read busy/free times — never event names or details.
+                    When connecting, select all 3 permission checkboxes so Slotted.ai can work properly.
+                  </p>
                 )}
 
-                {/* Calendar privacy note — shown when at least one calendar is connected */}
-                {(googleCalendarConnected || appleCalendarConnected) && (
-                  <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/40 px-3 py-2">
-                    <p className="text-[11px] text-blue-700 leading-relaxed">
-                      🔒 <strong>Your calendar is private.</strong> Friends only see free or busy. You control which calendars to share and can disconnect anytime.
-                    </p>
-                  </div>
-                )}
+                {/* Calendar privacy note — shown once below all providers when any is connected */}
 
                 {/* Apple Calendar */}
                 <div className="mt-2 flex items-center justify-between">
@@ -518,11 +507,17 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 )}
-            </div>
 
-            {/* Install as app + Push Notifications */}
-            <InstallPrompt alwaysShow />
-            <PushNotificationPrompt />
+                {(googleCalendarConnected || appleCalendarConnected || outlookCalendarConnected) && (
+                  <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/40 px-3 py-2">
+                    <p className="text-[11px] text-blue-700 leading-relaxed">
+                      🔒 Friends only see free or busy — never event details. You control which calendars to share and can disconnect anytime.
+                    </p>
+                  </div>
+                )}
+            </div>
+            <InstallPrompt alwaysShow desktopOnly />
+            <PushNotificationPrompt mobileOnly />
 
             {/* Share hangout activity */}
             <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
@@ -553,7 +548,7 @@ export default function SettingsPage() {
               <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
                 <p className="text-[11px] text-gray-500">
                   {shareHangouts
-                    ? '✅ Friends will see "You caught up with [Name]" in their activity feed. Only shows when both friends have this turned on.'
+                    ? '✅ Friends will see "You caught up with [Name]" in their activity feed. Only shows when both friends (or everyone in a group hangout) have this turned on.'
                     : '\uD83D\uDD12 Your hangouts are completely private \u2014 only you can see them'}
                 </p>
               </div>

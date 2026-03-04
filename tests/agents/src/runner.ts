@@ -20,6 +20,11 @@ import friendsScenario from "./scenarios/friends.js";
 import meetupsScenario from "./scenarios/meetups.js";
 import notificationsScenario from "./scenarios/notifications.js";
 import dashboardScenario from "./scenarios/dashboard.js";
+import busyBlocksScenario from "./scenarios/busy-blocks.js";
+import groupsScenario from "./scenarios/groups.js";
+import availabilityScenario from "./scenarios/availability.js";
+import errorsScenario from "./scenarios/errors.js";
+import calendarEventsScenario from "./scenarios/calendar-events.js";
 
 // ---------------------------------------------------------------------------
 // All available scenarios
@@ -29,6 +34,11 @@ const ALL_SCENARIOS: Scenario[] = [
   meetupsScenario,
   notificationsScenario,
   dashboardScenario,
+  busyBlocksScenario,
+  groupsScenario,
+  availabilityScenario,
+  errorsScenario,
+  calendarEventsScenario,
 ].sort((a, b) => a.priority - b.priority);
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,12 @@
     "scenario:friends": "tsx src/runner.ts --scenario friends",
     "scenario:meetups": "tsx src/runner.ts --scenario meetups",
     "scenario:notifications": "tsx src/runner.ts --scenario notifications",
+    "scenario:dashboard": "tsx src/runner.ts --scenario dashboard",
+    "scenario:busy-blocks": "tsx src/runner.ts --scenario busy-blocks",
+    "scenario:groups": "tsx src/runner.ts --scenario groups",
+    "scenario:availability": "tsx src/runner.ts --scenario availability",
+    "scenario:errors": "tsx src/runner.ts --scenario errors",
+    "scenario:calendar-events": "tsx src/runner.ts --scenario calendar-events",
     "scenario:all": "tsx src/runner.ts --scenario all",
     "setup": "tsx src/setup.ts",
     "teardown": "tsx src/teardown.ts"

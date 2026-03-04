@@ -35,7 +35,7 @@ function getDeviceInfo() {
   return { isIOS, isAndroid, isMobile };
 }
 
-export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boolean }) {
+export default function InstallPrompt({ alwaysShow = false, desktopOnly = false }: { alwaysShow?: boolean; desktopOnly?: boolean }) {
   const [visible, setVisible] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstructions, setShowInstructions] = useState(false);
@@ -100,6 +100,9 @@ export default function InstallPrompt({ alwaysShow = false }: { alwaysShow?: boo
   };
 
   if (!visible) return null;
+
+  // On mobile, hide if desktopOnly (unless already installed — show that confirmation)
+  if (desktopOnly && isMobile && !standalone) return null;
 
   // Already installed as PWA
   if (standalone) {

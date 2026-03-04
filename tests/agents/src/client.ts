@@ -372,8 +372,44 @@ export class SlottedClient {
     return data;
   }
 
+  async updateGroup(groupId: string, updates: { name?: string; emoji?: string }): Promise<unknown> {
+    const { data } = await this.put(`/groups/${groupId}`, updates);
+    return data;
+  }
+
+  async addGroupMembers(groupId: string, memberIds: string[]): Promise<unknown> {
+    const { data } = await this.post(`/groups/${groupId}/members`, { memberIds });
+    return data;
+  }
+
+  async deleteGroup(groupId: string): Promise<{ status: number; data: unknown }> {
+    return this.request("DELETE", `/groups/${groupId}`);
+  }
+
   // -------------------------------------------------------------------------
-  // Calendar
+  // Busy Blocks
+  // -------------------------------------------------------------------------
+  async getBusyBlocks(): Promise<unknown> {
+    const { data } = await this.get("/busy-blocks");
+    return data;
+  }
+
+  async createBusyBlock(block: { start_time: string; end_time: string; label?: string }): Promise<unknown> {
+    const { data } = await this.post("/busy-blocks", block);
+    return data;
+  }
+
+  async batchBusyBlocks(blocks: { start_time: string; end_time: string; label?: string }[]): Promise<unknown> {
+    const { data } = await this.post("/busy-blocks/batch", { blocks });
+    return data;
+  }
+
+  async deleteBusyBlock(blockId: string): Promise<{ status: number; data: unknown }> {
+    return this.request("DELETE", `/busy-blocks/${blockId}`);
+  }
+
+  // -------------------------------------------------------------------------
+  // Calendar (extended)
   // -------------------------------------------------------------------------
   async getCalendarStatus(): Promise<unknown> {
     const { data } = await this.get("/calendar/status");
@@ -383,6 +419,76 @@ export class SlottedClient {
   async syncCalendar(): Promise<unknown> {
     const { data } = await this.post("/calendar/sync");
     return data;
+  }
+
+  async getCalendarEvents(days?: number): Promise<unknown> {
+    const query: Record<string, string> = {};
+    if (days) query.days = String(days);
+    const { data } = await this.get("/calendar/events", { query });
+    return data;
+  }
+
+  async getCalendarList(): Promise<unknown> {
+    const { data } = await this.get("/calendar/list");
+    return data;
+  }
+
+  async getSelectedCalendars(): Promise<unknown> {
+    const { data } = await this.get("/calendar/selected");
+    return data;
+  }
+
+  async updateSelectedCalendars(calendars: unknown): Promise<unknown> {
+    const { data } = await this.put("/calendar/selected", calendars);
+    return data;
+  }
+
+  // -------------------------------------------------------------------------
+  // Events (saved & invites)
+  // -------------------------------------------------------------------------
+  async getSavedEvents(): Promise<unknown[]> {
+    const { data } = await this.get<unknown[]>("/events/saved");
+    return data;
+  }
+
+  async saveEvent(event: Record<string, unknown>): Promise<unknown> {
+    const { data } = await this.post("/events/save", { event });
+    return data;
+  }
+
+  async deleteSavedEvent(eventId: string): Promise<{ status: number; data: unknown }> {
+    return this.request("DELETE", `/events/saved/${eventId}`);
+  }
+
+  async updateSavedEvent(eventId: string, updates: Record<string, unknown>): Promise<unknown> {
+    const { data } = await this.patch(`/events/saved/${eventId}`, updates);
+    return data;
+  }
+
+  async inviteToEvent(friendIds: string[], event: Record<string, unknown>, message?: string): Promise<unknown> {
+    const { data } = await this.post("/events/invite", { friendIds, event, message });
+    return data;
+  }
+
+  async getEventInvites(): Promise<unknown[]> {
+    const { data } = await this.get<unknown[]>("/events/invites");
+    return data;
+  }
+
+  async respondToEventInvite(inviteId: string, rsvp: "accepted" | "declined"): Promise<unknown> {
+    const { data } = await this.patch(`/events/invites/${inviteId}`, { rsvp });
+    return data;
+  }
+
+  // -------------------------------------------------------------------------
+  // Raw request access (for error handling tests)
+  // -------------------------------------------------------------------------
+  async rawRequest<T = unknown>(
+    method: string,
+    path: string,
+    opts?: { body?: unknown; query?: Record<string, string>; auth?: "user" | "admin" | "none" },
+  ): Promise<{ status: number; data: T }> {
+    return this.request<T>(method, path, opts);
   }
 
   // -------------------------------------------------------------------------

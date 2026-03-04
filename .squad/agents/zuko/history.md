@@ -62,3 +62,19 @@ Code review identified 15/30 test scenarios fully covered, 9/30 partial, 4/30 mi
 - **Pattern:** The `cors` package's `origin` callback takes `(Error | null, boolean)`. Use `callback(new Error("Not allowed by CORS"))` to reject unknown origins — this is the standard rejection pattern from the cors docs.
 - **No-origin requests** (mobile apps, curl, server-to-server) are allowed through via `!origin` check — this is intentional and standard.
 - **Security note:** The original code had `callback(null, true)` in the else branch, meaning ANY domain could make authenticated cross-origin requests. This was a security hole.
+
+### HIGH Severity Fixes from Sokka's QA Review (Phase 4)
+
+**Both fixes in `functions/src/index.ts`. Build passes.**
+
+#### HIGH-1: Group Meetup Time Change Protection (~line 8342)
+- **Problem:** Creator dragging a meetup event in Google Calendar auto-updated the meetup time for ALL participants, even in group meetups (3+). One person shouldn't unilaterally reschedule a group.
+- **Fix:** Added participant count check using `select("id", { count: "exact", head: true })`. If >2 participants (group meetup), time is NOT auto-updated — instead, a notification is sent: "wants to change the time" with the proposed time. For 1:1 meetups (≤2 participants), existing auto-update behavior is preserved.
+- **Pattern:** Use Supabase `{ count: "exact", head: true }` for efficient count-only queries — no data transfer, just the count header.
+- **Notification language:** Group uses "wants to change" (soft proposal). 1:1 uses "updated" (fait accompli). Matches Slotted's soft social dynamics principle.
+
+#### HIGH-2: 410 Stale Sync Token Immediate Retry (~line 8541)
+- **Problem:** When Google returned 410 for a stale sync token, the code cleared the token but exited. The current webhook's changes were lost — only the NEXT webhook would trigger a full sync.
+- **Fix:** After clearing the stale token, immediately retries `events.list` without `syncToken` (full sync). Processes the returned events and saves the new sync token. Wrapped in its own try/catch so a retry failure doesn't mask the original 410 handling.
+- **Guard against infinite loops:** Only one retry per webhook call — the retry doesn't use a sync token, so it can't get another 410. If the retry itself fails for a different reason, it logs and moves on.
+- **Pattern:** For Google Calendar sync, always handle 410 with clear-and-retry-immediately, not clear-and-wait.

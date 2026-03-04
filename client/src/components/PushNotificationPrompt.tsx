@@ -1,9 +1,21 @@
 import { useState } from 'react';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
-export default function PushNotificationPrompt() {
+export default function PushNotificationPrompt({ mobileOnly = false }: { mobileOnly?: boolean }) {
   const { permission, fcmToken, loading, error, requestPermission, isSupported } = usePushNotifications();
   const [verifyResult, setVerifyResult] = useState<'success' | 'fail' | null>(null);
+
+  const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true;
+
+  const isMobile = /iPad|iPhone|iPod|Android|Mobi/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  const isFullyEnabled = permission === 'granted' && !!fcmToken;
+
+  // On desktop, hide entirely unless already enabled (show success state)
+  if (mobileOnly && !isMobile && !isFullyEnabled) return null;
 
   if (!isSupported) {
     return (
@@ -13,23 +25,13 @@ export default function PushNotificationPrompt() {
           <div className="flex-1">
             <p className="text-sm font-semibold text-gray-700">Notifications not supported</p>
             <p className="text-xs text-gray-500">
-              Your browser doesn't support push notifications. For the best experience, install Slotted.ai as an app on your phone (see instructions above).
+              Your browser doesn't support push notifications. For the best experience, install Slotted.ai as an app on your phone.
             </p>
           </div>
         </div>
       </div>
     );
   }
-
-  const isStandalone =
-    window.matchMedia('(display-mode: standalone)').matches ||
-    (window.navigator as any).standalone === true;
-
-  const isMobile = /iPad|iPhone|iPod|Android|Mobi/i.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-  // Truly working = permission granted AND we have an FCM token
-  const isFullyEnabled = permission === 'granted' && !!fcmToken;
 
   // Permission granted but no token — partial/broken state
   const isPartial = permission === 'granted' && !fcmToken;
