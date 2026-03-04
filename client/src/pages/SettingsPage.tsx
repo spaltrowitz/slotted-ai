@@ -461,6 +461,7 @@ export default function SettingsPage() {
                   </p>
                 )}
               </div>
+            </div>
             <InstallPrompt alwaysShow desktopOnly />
             <PushNotificationPrompt mobileOnly />
 
