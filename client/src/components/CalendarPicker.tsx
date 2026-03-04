@@ -243,11 +243,13 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
         <button
           onClick={handleSave}
           disabled={saving}
-          className={`rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 ${
-            saved ? 'bg-emerald-500' : 'gradient-btn'
+          className={`rounded-lg px-4 py-1.5 text-[11px] font-semibold transition-all disabled:opacity-50 ${
+            saved
+              ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+              : 'border border-slotted-200 bg-slotted-50 text-slotted-700 hover:bg-slotted-100'
           }`}
         >
-          {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save Selection'}
+          {saving ? 'Saving...' : saved ? 'Calendars saved ✓' : 'Apply calendar selection'}
         </button>
       </div>
       </>

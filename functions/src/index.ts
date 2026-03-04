@@ -8167,17 +8167,35 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
       }
     }
 
-    // Sort by start time
-    allEvents.sort((a, b) => a.start.localeCompare(b.start));
+    // Deduplicate events that appear across multiple calendars
+    // Match on normalized title + start + end (keep the first occurrence)
+    const seen = new Set<string>();
+    const dedupedEvents: CalEvent[] = [];
+    for (const ev of allEvents) {
+      // Skip dedup for synthetic events (buffers, manual blocks)
+      if (ev.id.startsWith("buffer_") || ev.id.startsWith("manual_")) {
+        dedupedEvents.push(ev);
+        continue;
+      }
+      const key = `${ev.title.toLowerCase().trim()}|${ev.start}|${ev.end}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        dedupedEvents.push(ev);
+      }
+    }
 
-    const googleCount = allEvents.filter(e => e.source === "google" && !e.id.startsWith("manual_")).length;
-    const appleCount = allEvents.filter(e => e.source === "apple").length;
-    const bufferCount = allEvents.filter(e => e.id.startsWith("buffer_")).length;
-    const manualCount = allEvents.filter(e => e.id.startsWith("manual_")).length;
-    console.log(`Calendar events: ${allEvents.length} total (${googleCount} Google, ${appleCount} Apple, ${bufferCount} trip buffers, ${manualCount} manual blocks)`);
+    // Sort by start time
+    dedupedEvents.sort((a, b) => a.start.localeCompare(b.start));
+
+    const googleCount = dedupedEvents.filter(e => e.source === "google" && !e.id.startsWith("manual_")).length;
+    const appleCount = dedupedEvents.filter(e => e.source === "apple").length;
+    const bufferCount = dedupedEvents.filter(e => e.id.startsWith("buffer_")).length;
+    const manualCount = dedupedEvents.filter(e => e.id.startsWith("manual_")).length;
+    const dupCount = allEvents.length - dedupedEvents.length;
+    console.log(`Calendar events: ${dedupedEvents.length} total (${googleCount} Google, ${appleCount} Apple, ${bufferCount} trip buffers, ${manualCount} manual blocks${dupCount > 0 ? `, ${dupCount} duplicates removed` : ""})`);
 
     res.json({
-      events: allEvents,
+      events: dedupedEvents,
       sources: {
         google: hasGoogle,
         apple: hasApple,

@@ -119,19 +119,9 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
   // On mobile, hide if desktopOnly (unless already installed — show that confirmation)
   if (desktopOnly && isMobile && !standalone) return null;
 
-  // Already installed as PWA
+  // Already installed as PWA — hide completely
   if (standalone) {
-    return (
-      <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">📱</span>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-emerald-900">App installed</p>
-            <p className="text-xs text-emerald-600">You're using Slotted.ai as an installed app — great!</p>
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (

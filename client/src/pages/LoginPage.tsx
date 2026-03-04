@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
@@ -10,6 +10,10 @@ export default function LoginPage() {
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
       </div>
     );
+  }
+
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return (
@@ -46,14 +50,7 @@ export default function LoginPage() {
 
         {/* CTA */}
         <div className="mt-5 sm:mt-8 flex flex-col items-center gap-3">
-          {user ? (
-            <Link
-              to="/dashboard"
-              className="flex items-center justify-center gap-3 rounded-2xl gradient-btn px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
-            >
-              Go to Dashboard →
-            </Link>
-          ) : (
+          {
             <>
               <button
                 onClick={signInWithGoogle}
@@ -76,7 +73,7 @@ export default function LoginPage() {
                 Already have an account? Log in
               </button>
             </>
-          )}
+          }
 
           {authError && (
             <div className="mt-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-600">

@@ -532,10 +532,10 @@ export default function SettingsPage() {
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[10px] sm:text-xs text-gray-500 text-center leading-relaxed">
+              <p className="mt-1 text-[10px] sm:text-xs text-gray-500 text-center leading-snug">
                 {planningStyle === 'spontaneous' && 'Same-day plans, "are you free tonight?" nudges'}
-                {planningStyle === 'flexible' && 'Adapts per friendship \u2014 books ahead with planners, last-minute with spontaneous'}
-                {planningStyle === 'planner' && 'Plans 1\u20134 weeks out, recurring hangouts, early confirmations'}
+                {planningStyle === 'flexible' && 'Adapts per friend: plans ahead with planners, spontaneous with others'}
+                {planningStyle === 'planner' && 'Plans 1–4 weeks out, recurring hangouts, early confirmations'}
               </p>
             </div>
           </div>
@@ -624,10 +624,11 @@ export default function SettingsPage() {
               <div className="mt-3 border-t border-gray-100 pt-3">
                 <label className="block text-[11px] font-semibold text-gray-700">
                   Social goal
+                  <span className="ml-1 font-normal text-gray-400">— how often you want to see friends</span>
                 </label>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {[
-                    { value: 'increase', emoji: '📈', label: 'See more' },
+                    { value: 'increase', emoji: '📈', label: 'More' },
                     { value: 'maintain', emoji: '⚖️', label: 'Same' },
                     { value: 'decrease', emoji: '📉', label: 'Less' },
                   ].map((opt) => (

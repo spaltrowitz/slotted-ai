@@ -144,13 +144,15 @@ function HowItWorks() {
               </div>
             </div>
           ))}
-          <div className="rounded-xl bg-slotted-50 border border-slotted-200 px-4 py-2.5">
-            <p className="text-[11px] text-slotted-700 leading-relaxed">
-              <span className="font-semibold">📲 Install the app:</span> Add Slotted.ai to your home screen for the best experience. Go to{' '}
-              <Link to="/settings" className="underline font-medium hover:text-slotted-800">Settings</Link>{' '}
-              to see install instructions for your device.
-            </p>
-          </div>
+          {!window.matchMedia('(display-mode: standalone)').matches && !(window.navigator as any).standalone && (
+            <div className="rounded-xl bg-slotted-50 border border-slotted-200 px-4 py-2.5">
+              <p className="text-[11px] text-slotted-700 leading-relaxed">
+                <span className="font-semibold">📲 Install the app:</span> Add Slotted.ai to your home screen for the best experience. Go to{' '}
+                <Link to="/settings" className="underline font-medium hover:text-slotted-800">Settings</Link>{' '}
+                to see install instructions for your device.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1007,20 +1009,20 @@ export default function DashboardPage() {
                   setMarkBusyMode(next);
                   if (next && calView !== 'week') { handleSetCalView('week'); setWeekOffset(0); }
                 }}
-                className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all ${
+                className={`rounded-lg px-2 sm:px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-all ${
                   markBusyMode
                     ? 'bg-amber-500 text-white shadow-sm hover:bg-amber-600'
                     : 'border border-gray-200 text-gray-500 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50'
                 }`}
               >
-                {markBusyMode ? '✓ Done' : '✏️ Mark Busy'}
+                {markBusyMode ? '✓ Done' : '✏️ Busy'}
               </button>
               <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
                 {(['week', 'month', 'agenda'] as const).map((v) => (
                   <button
                     key={v}
                     onClick={() => { handleSetCalView(v); if (v === 'week') setWeekOffset(0); if (v !== 'week') setMarkBusyMode(false); }}
-                    className={`rounded-md px-3 py-1 text-[11px] font-semibold transition-all ${
+                    className={`rounded-md px-2 sm:px-3 py-1 text-[11px] font-semibold transition-all ${
                       calView === v
                         ? 'bg-white text-gray-900 shadow-sm'
                         : 'text-gray-400 hover:text-gray-600'
