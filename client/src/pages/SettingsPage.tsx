@@ -883,16 +883,24 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* ─── CALLS & FACETIME CARD (violet) ─── */}
-            <div className="rounded-2xl border-2 border-violet-200 bg-gradient-to-b from-violet-50/60 to-white p-4 shadow-sm">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-lg shadow-sm">📞</div>
-                <div>
-                  <h3 className="text-sm font-bold text-violet-900">Calls & FaceTime</h3>
-                  <p className="text-[10px] text-violet-600/80">For long-distance friends</p>
-                </div>
-              </div>
+          </div>
+        </section>
+        </>
+        )}
 
+        {activeTab === 'calls' && (
+        <>
+        <section>
+          <div className="flex items-center gap-3 mb-3">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-violet-600 text-xs font-bold text-white shadow-sm">📞</span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-800">Calls & FaceTime</h2>
+              <p className="text-[10px] text-gray-500">For long-distance friends</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 pl-4 sm:pl-10">
+            <div className="rounded-2xl border-2 border-violet-200 bg-gradient-to-b from-violet-50/60 to-white p-4 shadow-sm">
               {/* Default call duration */}
               <div className="mb-4">
                 <label className="block text-[11px] font-semibold text-violet-700 mb-2">Default call length</label>
