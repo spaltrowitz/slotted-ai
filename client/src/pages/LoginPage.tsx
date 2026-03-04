@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
-  const { user, loading, signInWithGoogle, authError } = useAuth();
+  const { user, loading, signInWithGoogle, isSigningIn, authError } = useAuth();
 
   if (loading) {
     return (
@@ -57,7 +57,8 @@ export default function LoginPage() {
             <>
               <button
                 onClick={signInWithGoogle}
-                className="flex items-center justify-center gap-3 rounded-2xl gradient-btn px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+                disabled={isSigningIn}
+                className="flex items-center justify-center gap-3 rounded-2xl gradient-btn px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#fff" fillOpacity=".7" />
@@ -69,7 +70,8 @@ export default function LoginPage() {
               </button>
               <button
                 onClick={signInWithGoogle}
-                className="text-sm text-gray-400 hover:text-gray-600 transition-colors underline underline-offset-2"
+                disabled={isSigningIn}
+                className="text-sm text-gray-400 hover:text-gray-600 transition-colors underline underline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Already have an account? Log in
               </button>
@@ -141,33 +143,33 @@ export default function LoginPage() {
         <div className="flex flex-col gap-3">
           {[
             {
-              emoji: '📅',
-              title: 'Hang out on your terms',
-              desc: 'Slotted.ai finds times that actually work for both of you.',
+              emoji: '🗓️',
+              title: 'Plans, not promises',
+              desc: 'Find times that actually work — for a friend or the whole group.',
               accent: 'border-l-teal-400',
             },
             {
               emoji: '💬',
-              title: 'Make it a real plan',
-              desc: "Turn \"let's catch up soon\" into something on the calendar, fast.",
+              title: 'Skip the group text',
+              desc: "Turn \"let's hang\" into a real plan without the back-and-forth.",
               accent: 'border-l-violet-400',
             },
             {
               emoji: '🔔',
-              title: 'Stay in touch',
-              desc: "Get a gentle nudge when it's been too long since you hung out.",
+              title: 'Stay in the loop',
+              desc: "Get a gentle nudge when it's been a while since you hung out.",
               accent: 'border-l-amber-400',
             },
             {
-              emoji: '🎫',
-              title: 'Find something fun',
-              desc: 'Discover things to do together, not just a time to meet.',
+              emoji: '⚡',
+              title: 'Zero scheduling hassle',
+              desc: "Connect your calendars and Slotted finds when everyone's free.",
               accent: 'border-l-pink-400',
             },
             {
               emoji: '🔒',
               title: 'Your calendar stays private',
-              desc: 'We only see free or busy. Never event titles, details, or who you\'re meeting with.',
+              desc: 'We only see free or busy, never details. You control what friends can see.',
               accent: 'border-l-cyan-400',
             },
           ].map((item, i) => (

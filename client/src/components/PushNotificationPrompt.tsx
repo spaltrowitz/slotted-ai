@@ -14,8 +14,8 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
 
   const isFullyEnabled = permission === 'granted' && !!fcmToken;
 
-  // On desktop, hide entirely unless already enabled (show success state)
-  if (mobileOnly && !isMobile && !isFullyEnabled) return null;
+  // On desktop, hide entirely when mobileOnly is set
+  if (mobileOnly && !isMobile) return null;
 
   if (!isSupported) {
     return (

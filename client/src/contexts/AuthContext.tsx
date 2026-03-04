@@ -39,6 +39,7 @@ interface AuthContextType {
   disconnectAppleCalendar: () => Promise<void>;
   connectOutlookCalendar: () => Promise<void>;
   disconnectOutlookCalendar: () => Promise<void>;
+  isSigningIn: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -167,7 +168,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
   const signInWithGoogle = async () => {
+    if (isSigningIn) return;
+    setIsSigningIn(true);
     setAuthError(null);
     try {
       const result = await signInWithPopup(auth, googleProvider);
@@ -202,6 +207,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setAuthError(`Sign-in failed: ${err.message || code}`);
       }
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
@@ -384,7 +391,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, authError, isNewUser, onboardingComplete, calendarConnected, googleCalendarConnected, calendarJustConnected, appleCalendarConnected, outlookCalendarConnected, clearNewUser, completeOnboarding, skipOnboarding, connectCalendar, disconnectCalendar, connectAppleCalendar, disconnectAppleCalendar, connectOutlookCalendar, disconnectOutlookCalendar, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, authError, isNewUser, isSigningIn, onboardingComplete, calendarConnected, googleCalendarConnected, calendarJustConnected, appleCalendarConnected, outlookCalendarConnected, clearNewUser, completeOnboarding, skipOnboarding, connectCalendar, disconnectCalendar, connectAppleCalendar, disconnectAppleCalendar, connectOutlookCalendar, disconnectOutlookCalendar, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );
