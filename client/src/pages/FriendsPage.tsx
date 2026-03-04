@@ -256,6 +256,34 @@ export default function FriendsPage() {
     }
   };
 
+  const handleToggleFriendshipType = async (friendship: FriendRecord, targetType: 'local' | 'long_distance') => {
+    if (!user) return;
+    const previousFriends = [...friends];
+    setFriends(prevFriends =>
+      prevFriends.map(f =>
+        f.friendshipId === friendship.friendshipId
+          ? { ...f, friendshipType: targetType }
+          : f
+      )
+    );
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/friends/${friendship.friendshipId}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ friendshipType: targetType }),
+      });
+      if (!res.ok) throw new Error('Failed to update friendship type');
+    } catch (err) {
+      console.error('Failed to update friendship type:', err);
+      setFriends(previousFriends);
+      alert('Failed to update friend location. Please try again.');
+    }
+  };
+
   const handleText = () => {
     trackFriendInvited('sms');
     window.open(`sms:?&body=${encodeURIComponent(message)}`, '_blank');
@@ -440,9 +468,10 @@ export default function FriendsPage() {
           <p className="text-sm font-medium text-gray-900 truncate">
             {f.friend.displayName}
             {f.friend.socialBattery && (
-              <span className="ml-1.5 relative group cursor-default">
+              <span className="ml-1.5 relative inline-flex items-center gap-1 group cursor-default">
                 {batteryEmoji(f.friend.socialBattery)}
-                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-800 px-2.5 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                <span className="text-[10px] text-gray-400 md:hidden">{batteryLabel(f.friend.socialBattery)}</span>
+                <span className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-800 px-2.5 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 md:block">
                   {batteryLabel(f.friend.socialBattery)}
                 </span>
               </span>
@@ -519,6 +548,16 @@ export default function FriendsPage() {
         >
           🎟️ Go together
         </a>
+        <button
+          onClick={() => handleToggleFriendshipType(
+            f,
+            (f.friendshipType || 'local') === 'local' ? 'long_distance' : 'local'
+          )}
+          className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+          title={(f.friendshipType || 'local') === 'local' ? 'Move to long distance' : 'Move to local'}
+        >
+          <span className="text-sm">{(f.friendshipType || 'local') === 'local' ? '✈️' : '🏠'}</span>
+        </button>
         <button
           onClick={() => setRemovingFriend(f)}
           className="rounded-lg p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
@@ -757,9 +796,9 @@ export default function FriendsPage() {
             className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100 mb-3"
           />
           <p className="text-xs font-medium text-gray-500 mb-2">Select members:</p>
-          <div className="space-y-1 mb-4 max-h-48 overflow-y-auto">
+          <div className="space-y-1.5 mb-4 max-h-48 overflow-y-auto">
             {acceptedFriends.map(f => (
-              <label key={f.friend.id} className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-purple-50/50 cursor-pointer transition-colors">
+              <label key={f.friend.id} className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-purple-50/50 cursor-pointer transition-colors">
                 <input
                   type="checkbox"
                   checked={createGroupSelectedIds.has(f.friend.id)}
@@ -924,7 +963,7 @@ export default function FriendsPage() {
       ) : acceptedFriends.length === 0 && incomingInvites.length === 0 && outgoingInvites.length === 0 ? (
         <div className="rounded-2xl border border-slotted-200/60 bg-gradient-to-br from-slotted-50/60 to-purple-50/40 shadow-sm overflow-hidden">
           <div className="flex flex-col items-center justify-center px-6 py-16">
-            <div className="text-5xl mb-2">🤝</div>
+            <div className="text-4xl sm:text-5xl mb-2">🤝</div>
             <h3 className="mt-3 font-display text-lg font-bold text-gray-900">
               Ready to connect?
             </h3>
@@ -983,7 +1022,7 @@ export default function FriendsPage() {
       {/* Remove friend confirmation modal */}
       {removingFriend && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => !removeLoading && setRemovingFriend(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-[calc(100vw-1.5rem)] sm:max-w-sm rounded-2xl bg-white px-4 py-5 sm:p-6 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="text-center">
               <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
                 <svg className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
