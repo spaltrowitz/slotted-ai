@@ -765,3 +765,36 @@ Default suggested meetup times should be: Friday evening (after work), Saturday 
 ### Notes
 
 Captured for team memory. Aligns with implemented hangout windows decision.
+# Decision: "Why It Matters" card copy rewrite
+
+**Author:** Suki (Designer)
+**Date:** 2025-07-25
+**Status:** Implemented
+
+## Context
+
+The 5 "Why it matters" feature cards on the landing page had copy issues:
+- Word orphaning on mobile ("out", "fast" landing alone on lines)
+- No mention of group support (copy said "both of you")
+- Privacy card was misleading (claimed we never see details, but newsfeed sharing exists)
+- "Find something fun" card promoted a tertiary feature instead of Slotted's core value
+
+## Decision
+
+Rewrote all 5 cards:
+
+| # | Emoji | Title | Description |
+|---|-------|-------|-------------|
+| 1 | 🗓️ | Plans, not promises | Find times that actually work — for a friend or the whole group. |
+| 2 | 💬 | Skip the group text | Turn "let's hang" into a real plan without the back-and-forth. |
+| 3 | 🔔 | Stay in the loop | Get a gentle nudge when it's been a while since you hung out. |
+| 4 | ⚡ | Zero scheduling hassle | Connect your calendars and Slotted finds when everyone's free. |
+| 5 | 🔒 | Your calendar stays private | We only see free or busy, never details. You control what friends can see. |
+
+## Key choices
+
+- **Replaced "Find something fun"** with "Zero scheduling hassle" — scheduling pain is the #1 reason people use Slotted, event discovery is not.
+- **Privacy card now honest:** Says "You control what friends can see" instead of claiming we never share anything.
+- **Emoji 📅 → 🗓️** on card 1 to avoid duplicating the "How It Works" section's emoji.
+- **All titles 3–4 words** to prevent orphaning at 320px mobile viewports.
+

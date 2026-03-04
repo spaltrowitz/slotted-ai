@@ -28,3 +28,12 @@
 **Settings cleanup:** Removed all verbose section subtitles, collapsed share-hangout toggle, removed Social Battery + Event Interests info boxes, tightened spacing from space-y-10 to space-y-6 and p-5 to p-4. Mobile vertical scroll reduced ~30%.
 
 **Login fix:** Removed duplicate "Get started with Google" button from footer. Kept single CTA in hero section.
+
+### 2025-07-25 — "Why It Matters" card copy rewrite (Suki)
+
+**Rewrote all 5 feature cards** in LoginPage.tsx (lines 142–172):
+- **Orphan fixes:** "Hang out on your terms" → "Plans, not promises"; "Make it a real plan" → "Skip the group text". No more short words orphaning on mobile.
+- **Groups support:** "both of you" replaced with "for a friend or the whole group" — covers 1:1 and group use cases.
+- **Privacy card honesty:** Removed "Never event titles, details, or who you're meeting with" (misleading given newsfeed sharing). New copy: "We only see free or busy, never details. You control what friends can see."
+- **Replaced weak card:** "Find something fun" (event discovery, tertiary feature) replaced with "Zero scheduling hassle" — speaks to Slotted's core value of eliminating back-and-forth scheduling.
+- **Emoji dedup:** Card 1 changed from 📅 to 🗓️ to avoid conflict with "How It Works" step 1. Card 4 changed from 🎫 to ⚡.
