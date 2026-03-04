@@ -4,17 +4,39 @@ import { Component, Suspense, lazy, type ReactNode } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const DashboardPage = lazy(() => import('./pages/DashboardPage'));
-const FriendsPage = lazy(() => import('./pages/FriendsPage'));
-const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
-const EventsPage = lazy(() => import('./pages/EventsPage'));
-const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
-const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'));
-const InvitePage = lazy(() => import('./pages/InvitePage'));
-const EventSharePage = lazy(() => import('./pages/EventSharePage'));
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  importer: () => Promise<{ default: T }>,
+  chunkKey: string,
+) {
+  return lazy(async () => {
+    try {
+      return await importer();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isChunkLoadError =
+        message.includes('Failed to fetch dynamically imported module') ||
+        message.includes('Importing a module script failed');
+      const reloadKey = `slotted_chunk_retry_${chunkKey}`;
+      if (isChunkLoadError && sessionStorage.getItem(reloadKey) !== '1') {
+        sessionStorage.setItem(reloadKey, '1');
+        window.location.reload();
+      }
+      throw error;
+    }
+  });
+}
+
+const LoginPage = lazyWithRetry(() => import('./pages/LoginPage'), 'login');
+const DashboardPage = lazyWithRetry(() => import('./pages/DashboardPage'), 'dashboard');
+const FriendsPage = lazyWithRetry(() => import('./pages/FriendsPage'), 'friends');
+const OnboardingPage = lazyWithRetry(() => import('./pages/OnboardingPage'), 'onboarding');
+const SettingsPage = lazyWithRetry(() => import('./pages/SettingsPage'), 'settings');
+const NotificationsPage = lazyWithRetry(() => import('./pages/NotificationsPage'), 'notifications');
+const EventsPage = lazyWithRetry(() => import('./pages/EventsPage'), 'events');
+const PrivacyPolicyPage = lazyWithRetry(() => import('./pages/PrivacyPolicyPage'), 'privacy');
+const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePage'), 'terms');
+const InvitePage = lazyWithRetry(() => import('./pages/InvitePage'), 'invite');
+const EventSharePage = lazyWithRetry(() => import('./pages/EventSharePage'), 'event-share');
 
 /* ─── Error boundary ─── */
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {

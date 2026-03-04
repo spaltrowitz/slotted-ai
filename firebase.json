@@ -21,6 +21,15 @@
     ],
     "headers": [
       {
+        "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
         "source": "/google616b7ea30eac2459.html",
         "headers": [
           {
