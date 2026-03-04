@@ -15,6 +15,7 @@
     "scenario:availability": "tsx src/runner.ts --scenario availability",
     "scenario:errors": "tsx src/runner.ts --scenario errors",
     "scenario:calendar-events": "tsx src/runner.ts --scenario calendar-events",
+    "scenario:notification-dedup": "tsx src/runner.ts --scenario notification-dedup",
     "scenario:all": "tsx src/runner.ts --scenario all",
     "setup": "tsx src/setup.ts",
     "teardown": "tsx src/teardown.ts"

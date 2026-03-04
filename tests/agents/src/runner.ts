@@ -25,6 +25,7 @@ import groupsScenario from "./scenarios/groups.js";
 import availabilityScenario from "./scenarios/availability.js";
 import errorsScenario from "./scenarios/errors.js";
 import calendarEventsScenario from "./scenarios/calendar-events.js";
+import notificationDedupScenario from "./scenarios/notification-dedup.js";
 
 // ---------------------------------------------------------------------------
 // All available scenarios
@@ -39,6 +40,7 @@ const ALL_SCENARIOS: Scenario[] = [
   availabilityScenario,
   errorsScenario,
   calendarEventsScenario,
+  notificationDedupScenario,
 ].sort((a, b) => a.priority - b.priority);
 
 // ---------------------------------------------------------------------------

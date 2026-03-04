@@ -63,16 +63,82 @@ app.use(
 );
 app.use(express.json());
 
-const inviteLookupHits = new Map<string, number[]>();
-function isInviteLookupRateLimited(clientKey: string): boolean {
-  const now = Date.now();
-  const windowMs = 60_000;
-  const maxHits = 30;
-  const hits = inviteLookupHits.get(clientKey) || [];
-  const recentHits = hits.filter((t) => now - t < windowMs);
-  recentHits.push(now);
-  inviteLookupHits.set(clientKey, recentHits);
-  return recentHits.length > maxHits;
+// ---------------------------------------------------------------------------
+// Rate limiting — generic per-key sliding-window limiter
+// ---------------------------------------------------------------------------
+function createRateLimiter(maxHits: number, windowMs: number) {
+  const hits = new Map<string, number[]>();
+  // Periodically clean up stale entries to prevent memory leaks
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, timestamps] of hits) {
+      const recent = timestamps.filter((t) => now - t < windowMs);
+      if (recent.length === 0) hits.delete(key);
+      else hits.set(key, recent);
+    }
+  }, windowMs * 2);
+
+  return (key: string): boolean => {
+    const now = Date.now();
+    const existing = hits.get(key) || [];
+    const recent = existing.filter((t) => now - t < windowMs);
+    recent.push(now);
+    hits.set(key, recent);
+    return recent.length > maxHits;
+  };
+}
+
+// Rate limiter tiers
+const rateLimitRead = createRateLimiter(100, 60_000);    // 100 req/min
+const rateLimitWrite = createRateLimiter(30, 60_000);     // 30 req/min
+const rateLimitExpensive = createRateLimiter(5, 60_000);  // 5 req/min
+const rateLimitPublic = createRateLimiter(30, 60_000);    // 30 req/min (unauthenticated)
+
+// Expensive endpoints that should be heavily throttled
+const EXPENSIVE_PATHS = new Set([
+  "/calendar/sync",
+  "/suggestions",
+  "/events/suggest",
+  "/events/discover",
+  "/events/match",
+  "/availability/group-overlap",
+]);
+
+function isExpensivePath(path: string): boolean {
+  for (const p of EXPENSIVE_PATHS) {
+    if (path === p || path.startsWith(p + "/")) return true;
+  }
+  return false;
+}
+
+function getClientIp(req: Request): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  return typeof forwarded === "string" ? forwarded.split(",")[0].trim() : req.ip || "unknown";
+}
+
+// Rate limit middleware — applied after auth so we have req.uid
+function rateLimitMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
+  const uid = req.uid || getClientIp(req);
+  const method = req.method;
+  const path = req.path;
+
+  if (isExpensivePath(path)) {
+    if (rateLimitExpensive(uid)) {
+      res.status(429).json({ error: "Too many requests to this endpoint. Please wait a minute." });
+      return;
+    }
+  } else if (method === "GET" || method === "HEAD") {
+    if (rateLimitRead(uid)) {
+      res.status(429).json({ error: "Too many requests. Please slow down." });
+      return;
+    }
+  } else {
+    if (rateLimitWrite(uid)) {
+      res.status(429).json({ error: "Too many write requests. Please slow down." });
+      return;
+    }
+  }
+  next();
 }
 
 // Strip /api prefix so routes work both directly and through Firebase Hosting rewrites
@@ -80,6 +146,25 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   if (req.path.startsWith("/api/")) {
     req.url = req.url.replace(/^\/api/, "");
   }
+  next();
+});
+
+// ---------------------------------------------------------------------------
+// Request logging middleware — logs method, path, status, and duration
+// ---------------------------------------------------------------------------
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const start = Date.now();
+  const originalEnd = res.end;
+  res.end = function (...args: Parameters<typeof res.end>) {
+    const duration = Date.now() - start;
+    const status = res.statusCode;
+    if (status >= 500) {
+      console.error(`[REQ] ${req.method} ${req.path} → ${status} (${duration}ms)`);
+    } else if (status >= 400 || duration > 5000) {
+      console.warn(`[REQ] ${req.method} ${req.path} → ${status} (${duration}ms)`);
+    }
+    return originalEnd.apply(res, args);
+  } as typeof res.end;
   next();
 });
 
@@ -104,7 +189,8 @@ async function requireAuth(
     const token = header.split("Bearer ")[1];
     const decoded = await admin.auth().verifyIdToken(token);
     req.uid = decoded.uid;
-    next();
+    // Apply per-user rate limiting after auth
+    rateLimitMiddleware(req, res, next);
   } catch {
     res.status(401).json({ error: "Invalid token" });
   }
@@ -360,11 +446,29 @@ async function createNotification(opts: {
   relatedUserId?: string;
   relatedId?: string;
 }) {
-  // Deduplication: skip if a very similar notification exists within the dedup window.
-  // Uses a 5-minute window for relatedId matches (covers retries/double-fires),
-  // and a 10-minute window for relatedUserId-only matches (covers scheduled jobs).
+  // Deduplication: check relatedUserId FIRST (broadest match), then relatedId,
+  // then title fallback. This prevents duplicates when different code paths
+  // create the same logical notification with/without a relatedId.
   const sb = getSupabase();
 
+  // Primary dedup: same user+type+relatedUserId within 1 hour
+  if (opts.relatedUserId) {
+    const cutoff = new Date(Date.now() - 60 * 60000).toISOString();
+    const { data: recent } = await sb
+      .from("notifications")
+      .select("id")
+      .eq("user_id", opts.userId)
+      .eq("type", opts.type)
+      .eq("related_user_id", opts.relatedUserId)
+      .gte("created_at", cutoff)
+      .limit(1);
+    if (recent && recent.length > 0) {
+      console.log(`Skipping duplicate notification: ${opts.type} for user ${opts.userId} (related_user_id=${opts.relatedUserId})`);
+      return;
+    }
+  }
+
+  // Secondary dedup: same user+type+relatedId within 5 minutes (covers retries)
   if (opts.relatedId) {
     const cutoff = new Date(Date.now() - 5 * 60000).toISOString();
     const { data: recent } = await sb
@@ -379,23 +483,10 @@ async function createNotification(opts: {
       console.log(`Skipping duplicate notification: ${opts.type} for user ${opts.userId} (related_id=${opts.relatedId})`);
       return;
     }
-  } else if (opts.relatedUserId) {
-    // Fallback dedup for notifications without a relatedId (e.g. group changes, calendar matches)
-    const cutoff = new Date(Date.now() - 10 * 60000).toISOString();
-    const { data: recent } = await sb
-      .from("notifications")
-      .select("id")
-      .eq("user_id", opts.userId)
-      .eq("type", opts.type)
-      .eq("related_user_id", opts.relatedUserId)
-      .gte("created_at", cutoff)
-      .limit(1);
-    if (recent && recent.length > 0) {
-      console.log(`Skipping duplicate notification: ${opts.type} for user ${opts.userId} (related_user_id=${opts.relatedUserId})`);
-      return;
-    }
-  } else {
-    // No relatedId or relatedUserId — dedup by user+type+title within 10 minutes
+  }
+
+  // Fallback dedup: same user+type+title within 10 minutes
+  if (!opts.relatedUserId && !opts.relatedId) {
     const cutoff = new Date(Date.now() - 10 * 60000).toISOString();
     const { data: recent } = await sb
       .from("notifications")
@@ -420,6 +511,11 @@ async function createNotification(opts: {
     related_id: opts.relatedId || null,
   });
   if (error) {
+    // Unique index violation = duplicate caught at DB level — not a real error
+    if (error.code === "23505") {
+      console.log(`Skipping duplicate notification (DB constraint): ${opts.type} for user ${opts.userId}`);
+      return;
+    }
     console.error("Failed to create notification:", error.message);
     return;
   }
@@ -842,11 +938,8 @@ app.get("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
 /** GET /users/invite/:code — look up a user by their invite code (public) */
 app.get("/users/invite/:code", async (req: Request, res: Response) => {
   try {
-    const forwardedFor = req.headers["x-forwarded-for"];
-    const clientKey = typeof forwardedFor === "string"
-      ? forwardedFor.split(",")[0].trim()
-      : req.ip || "unknown";
-    if (isInviteLookupRateLimited(clientKey)) {
+    const clientKey = getClientIp(req);
+    if (rateLimitPublic(clientKey)) {
       res.status(429).json({ error: "Too many invite lookups. Please try again shortly." });
       return;
     }
@@ -1376,27 +1469,16 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
       return;
     }
 
-    // Notify the referrer that the new user connected — but only if no notification was already sent
+    // Notify the referrer — createNotification handles dedup internally
     if (data) {
-      // Check if a notification was already created for this connection (e.g. from pending_invites auto-connect)
-      const { data: existingNotif } = await getSupabase()
-        .from("notifications")
-        .select("id")
-        .eq("user_id", referrer.id)
-        .eq("type", "friend_accepted")
-        .eq("related_user_id", me.id)
-        .single();
-
-      if (!existingNotif) {
-        await createNotification({
-          userId: referrer.id,
-          type: "friend_accepted",
-          title: "New friend connected!",
-          body: `${me.display_name || me.email} joined Slotted via your invite and you're now connected.`,
-          relatedUserId: me.id,
-          relatedId: data.id,
-        });
-      }
+      await createNotification({
+        userId: referrer.id,
+        type: "friend_accepted",
+        title: "New friend connected!",
+        body: `${me.display_name || me.email} joined Slotted via your invite and you're now connected.`,
+        relatedUserId: me.id,
+        relatedId: data.id,
+      });
     }
 
     res.json(data);
@@ -1470,29 +1552,18 @@ app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: R
       return;
     }
 
-    // Notify the inviter when their invite is accepted
+    // Notify the inviter when their invite is accepted — createNotification handles dedup
     if (data && action === "accept") {
       const inviterId = data.invited_by;
       if (inviterId && inviterId !== me.id) {
-        const { data: existingNotif } = await getSupabase()
-          .from("notifications")
-          .select("id")
-          .eq("user_id", inviterId)
-          .eq("type", "friend_accepted")
-          .eq("related_user_id", me.id)
-          .eq("related_id", data.id)
-          .limit(1);
-
-        if (!existingNotif || existingNotif.length === 0) {
-          await createNotification({
-            userId: inviterId,
-            type: "friend_accepted",
-            title: "Friend request accepted!",
-            body: `${me.display_name || me.email} accepted your friend invite. You can now see each other's availability!`,
-            relatedUserId: me.id,
-            relatedId: data.id,
-          });
-        }
+        await createNotification({
+          userId: inviterId,
+          type: "friend_accepted",
+          title: "Friend request accepted!",
+          body: `${me.display_name || me.email} accepted your friend invite. You can now see each other's availability!`,
+          relatedUserId: me.id,
+          relatedId: data.id,
+        });
       }
     }
 
@@ -1551,6 +1622,7 @@ const SYNC_WINDOW_DAYS = 14; // look 2 weeks ahead
  * computes the inverse as free blocks within 8am–10pm each day.
  */
 async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean; slots: number }> {
+  const syncStart = Date.now();
   const dbUser = await getDbUser(firebaseUid);
   if (!dbUser) return { synced: false, slots: 0 };
 
@@ -1565,6 +1637,10 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
   const windowEnd = new Date(now.getTime() + SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
   const allBusyBlocks: { start: string; end: string }[] = [];
+  const syncProviders: string[] = [];
+  if (hasGoogle) syncProviders.push("google");
+  if (hasApple) syncProviders.push("apple");
+  if (hasOutlook) syncProviders.push("outlook");
 
   // --- Google Calendar sync ---
   if (hasGoogle) {
@@ -1890,7 +1966,20 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
     }
   }
 
-  console.log(`📅 Synced ${freeBlocks.length} free blocks for user ${dbUser.id}`);
+  console.log(`📅 Synced ${freeBlocks.length} free blocks for user ${dbUser.id} (${Date.now() - syncStart}ms)`);
+
+  // Log sync outcome per provider
+  const durationMs = Date.now() - syncStart;
+  for (const provider of syncProviders) {
+    sb.from("sync_log").insert({
+      user_id: dbUser.id,
+      provider,
+      status: "success",
+      slots_synced: freeBlocks.length,
+      duration_ms: durationMs,
+    }).then(null, () => { /* best-effort logging */ });
+  }
+
   return { synced: true, slots: freeBlocks.length };
 }
 
@@ -2258,6 +2347,67 @@ function clampOverlapsToPreferences(
     }
 
     result = newResult;
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Default Hangout Windows — restricts suggestions to socially appropriate times
+// Adjust these to change when Slotted suggests meetup times.
+// Day-of-week: 0=Sun, 1=Mon … 5=Fri, 6=Sat. Empty array = no suggestions.
+// ---------------------------------------------------------------------------
+const DEFAULT_HANGOUT_WINDOWS: Record<number, { startHour: number; endHour: number }[]> = {
+  0: [{ startHour: 9, endHour: 17 }],   // Sunday 9 AM – 5 PM
+  1: [],                                  // Monday — none
+  2: [],                                  // Tuesday — none
+  3: [],                                  // Wednesday — none
+  4: [],                                  // Thursday — none
+  5: [{ startHour: 17, endHour: 23 }],   // Friday 5 PM – 11 PM
+  6: [{ startHour: 9, endHour: 23 }],    // Saturday 9 AM – 11 PM
+};
+
+/**
+ * Filter overlap slots to only include portions within the default hangout windows.
+ * Uses the provided timezone (or America/New_York fallback) to determine day-of-week.
+ */
+function filterOverlapsToHangoutWindows(
+  overlaps: { start: string; end: string }[],
+  timezone?: string | null,
+): { start: string; end: string }[] {
+  const tz = timezone || "America/New_York";
+  const result: { start: string; end: string }[] = [];
+
+  for (const slot of overlaps) {
+    const startDt = new Date(slot.start);
+    const endDt = new Date(slot.end);
+
+    const weekdayNum = new Date(
+      startDt.toLocaleString("en-US", { timeZone: tz }),
+    ).getDay();
+
+    const windows = DEFAULT_HANGOUT_WINDOWS[weekdayNum];
+    if (!windows || windows.length === 0) continue;
+
+    const dateStr = startDt.toLocaleDateString("en-CA", { timeZone: tz });
+
+    for (const win of windows) {
+      const winStartUtc = zonedToUtc(dateStr, `${String(win.startHour).padStart(2, "0")}:00`, tz);
+      const winEndUtc = zonedToUtc(dateStr, `${String(win.endHour).padStart(2, "0")}:00`, tz);
+
+      const clampedStart = startDt > winStartUtc ? startDt : winStartUtc;
+      const clampedEnd = endDt < winEndUtc ? endDt : winEndUtc;
+
+      if (clampedStart < clampedEnd) {
+        const durMin = (clampedEnd.getTime() - clampedStart.getTime()) / 60000;
+        if (durMin >= 30) {
+          result.push({
+            start: clampedStart.toISOString(),
+            end: clampedEnd.toISOString(),
+          });
+        }
+      }
+    }
   }
 
   return result;
@@ -2631,6 +2781,17 @@ app.post("/calendar/sync", requireAuth, async (req: AuthRequest, res: Response) 
     res.json({ success: true, freeSlots: result.slots });
   } catch (err: any) {
     console.error("Calendar sync error:", err);
+    // Log sync failure
+    const dbUser = await getDbUser(req.uid!).catch(() => null);
+    if (dbUser) {
+      getSupabase().from("sync_log").insert({
+        user_id: dbUser.id,
+        provider: "google",
+        status: "error",
+        error_message: String(err.message || err).slice(0, 500),
+        duration_ms: 0,
+      }).then(null, () => { /* best-effort */ });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -2765,8 +2926,11 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
       { preferred_times: friendUser?.preferred_times, timezone: friendUser?.timezone },
     ]);
 
+    // Restrict to default hangout windows (Fri evening, Sat all day, Sun until 5 PM)
+    const hangoutFiltered = filterOverlapsToHangoutWindows(clampedOverlaps, me.timezone);
+
     // Round to clean :00/:30 boundaries
-    const overlaps = roundOverlaps(clampedOverlaps, isCallMode ? 15 : 30);
+    const overlaps = roundOverlaps(hangoutFiltered, isCallMode ? 15 : 30);
 
     // AI-score the overlaps (pass mode for call-specific scoring)
     const suggestions = await scoreOverlaps(me.id, friendId, overlaps, 8, mode);
@@ -2910,6 +3074,9 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
       timezone: u?.timezone,
     }));
     currentOverlaps = clampOverlapsToPreferences(currentOverlaps, allParticipantProfiles);
+
+    // Restrict to default hangout windows (Fri evening, Sat all day, Sun until 5 PM)
+    currentOverlaps = filterOverlapsToHangoutWindows(currentOverlaps, me.timezone);
 
     // Round to clean :00/:30 boundaries
     currentOverlaps = roundOverlaps(currentOverlaps, 30);
@@ -9120,6 +9287,11 @@ export const findCalendarMatches = onSchedule("every day 09:00", async (event) =
 
           if (!bestOverlap) continue;
 
+          // Filter through hangout windows before sending notifications
+          const hangoutOverlaps = filterOverlapsToHangoutWindows([bestOverlap]);
+          if (hangoutOverlaps.length === 0) continue;
+          const filteredOverlap = hangoutOverlaps[0];
+
           // Throttle: skip if we already sent a calendar_match to either user about the other in the last 7 days
           const throttleCutoff = new Date(now.getTime() - 7 * 86400000).toISOString();
           for (const [userId, friendId] of [[f.user_a_id, f.user_b_id], [f.user_b_id, f.user_a_id]]) {
@@ -9140,7 +9312,12 @@ export const findCalendarMatches = onSchedule("every day 09:00", async (event) =
             if (!friendUser || !recipient) continue;
             if (friendUser.social_battery === "recharging") continue;
 
-            const overlapStart = new Date(bestOverlap.start);
+            // Re-filter using recipient's timezone for accurate day-of-week
+            const recipientOverlaps = filterOverlapsToHangoutWindows([filteredOverlap], recipient.timezone);
+            if (recipientOverlaps.length === 0) continue;
+            const finalOverlap = recipientOverlaps[0];
+
+            const overlapStart = new Date(finalOverlap.start);
             const windowStr = overlapStart.toLocaleDateString("en-US", { weekday: "long" }) +
               " " + overlapStart.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
@@ -9432,6 +9609,44 @@ app.get("/admin/stats", requireAdmin, async (_req: Request, res: Response) => {
   }
 });
 
+/** GET /admin/sync-logs — query calendar sync outcomes for monitoring */
+app.get("/admin/sync-logs", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const sb = getSupabase();
+    const hours = parseInt(req.query.hours as string) || 24;
+    const status = req.query.status as string;
+    const userId = req.query.user_id as string;
+
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    let query = sb
+      .from("sync_log")
+      .select("*, users!inner(email, display_name)")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (status) query = query.eq("status", status);
+    if (userId) query = query.eq("user_id", userId);
+
+    const { data, error } = await query;
+    if (error) { res.status(500).json({ error: error.message }); return; }
+
+    // Summary stats
+    const total = data?.length ?? 0;
+    const errors = data?.filter((r: any) => r.status === "error").length ?? 0;
+    const avgDuration = total > 0
+      ? Math.round(data!.reduce((sum: number, r: any) => sum + (r.duration_ms || 0), 0) / total)
+      : 0;
+
+    res.json({
+      summary: { total, errors, avgDurationMs: avgDuration, hoursQueried: hours },
+      logs: data,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // POST /admin/friendships — create or fix a friendship between two users
 // Body: { userAId, userBId, status? }
@@ -9465,6 +9680,16 @@ app.post("/admin/friendships", requireAdmin, async (req: Request, res: Response)
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Global error handler — catches unhandled errors in routes
+// ---------------------------------------------------------------------------
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+  console.error(`[UNHANDLED] ${req.method} ${req.path}: ${err.message}`, err.stack?.split("\n").slice(0, 3).join("\n"));
+  if (!res.headersSent) {
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

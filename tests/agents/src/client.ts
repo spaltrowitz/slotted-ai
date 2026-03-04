@@ -253,6 +253,18 @@ export class SlottedClient {
     return data;
   }
 
+  async connectReferral(referrerEmail: string): Promise<{ status: number; data: unknown }> {
+    return this.request("POST", "/friends/connect-referral", {
+      body: { referrerEmail },
+    });
+  }
+
+  async acceptFriendshipAction(friendshipId: string): Promise<{ status: number; data: unknown }> {
+    return this.request("PATCH", `/friends/${friendshipId}`, {
+      body: { action: "accept" },
+    });
+  }
+
   // -------------------------------------------------------------------------
   // Notifications
   // -------------------------------------------------------------------------

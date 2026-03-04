@@ -178,10 +178,10 @@ export default function SettingsPage() {
   return (
     <AppShell>
       {/* ── Header ── */}
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">Settings</h1>
-          <p className="mt-1 text-sm text-gray-500">Set up your preferences step by step</p>
+          <p className="mt-0.5 text-xs text-gray-400">Customize how Slotted.ai works for you</p>
         </div>
         <button
           onClick={handleSave}
@@ -193,24 +193,20 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      <div className="space-y-10">
+      <div className="space-y-6">
 
         {/* ═══════════════════════════════════════════════ */}
         {/* STEP 1: ACCOUNT & CALENDARS                    */}
         {/* ═══════════════════════════════════════════════ */}
         <section>
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">1</span>
-            <div>
-              <h2 className="text-sm font-bold text-gray-800">Account & Calendars</h2>
-              <p className="text-[11px] text-gray-400">We use your calendar to find free windows — so we can suggest times that actually work for you and your friends</p>
-            </div>
+            <h2 className="text-sm font-bold text-gray-800">Account & Calendars</h2>
           </div>
 
           <div className="space-y-4 pl-4 sm:pl-10">
             {/* Profile & Calendar card */}
-            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-              {/* Profile row */}
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-3">
                 {user?.photoURL ? (
                   <img src={user.photoURL} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" />
@@ -256,50 +252,40 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Calendar status */}
-              <div className="mt-3 border-t border-gray-100 pt-3">
-                {/* Google Calendar */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-gray-100 shadow-sm">
+              {/* Calendar status — compact provider list */}
+              <div className="mt-3 border-t border-gray-100 pt-3 space-y-1.5">
+                {/* Google Calendar row */}
+                <div className="flex items-center justify-between py-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white border border-gray-100 shadow-sm">
                       {googleIcon}
                     </div>
-                    <span className="text-xs font-medium text-gray-700">Google Calendar</span>
+                    <span className="text-xs font-medium text-gray-700">Google</span>
                     {googleCalendarConnected && !googleCalendarStale ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
                         <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
                         Connected
                       </span>
                     ) : googleCalendarStale ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                        Reconnect needed
+                      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                        Reconnect
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500">
-                        Not connected
-                      </span>
-                    )}
+                    ) : null}
                   </div>
                   {googleCalendarConnected && !googleCalendarStale ? (
-                    <button
-                      onClick={() => setShowCalendarDetails(!showCalendarDetails)}
-                      className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700"
-                    >
+                    <button onClick={() => setShowCalendarDetails(!showCalendarDetails)} className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700">
                       {showCalendarDetails ? 'Hide' : 'Manage'}
                     </button>
-                  ) : !googleCalendarStale ? (
-                    <button
-                      onClick={connectCalendar}
-                      className="rounded-lg gradient-btn px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md"
-                    >
+                  ) : (
+                    <button onClick={connectCalendar} className="rounded-lg gradient-btn px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md">
                       Connect
                     </button>
-                  ) : null}
+                  )}
                 </div>
 
-                {/* Expandable Google calendar details */}
+                {/* Google calendar details (expandable) */}
                 {(showCalendarDetails && googleCalendarConnected) || googleCalendarStale ? (
-                  <div className="mt-3 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
+                  <div className="ml-8 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
                     <CalendarPicker source="google" onDisconnected={() => setGoogleCalendarStale(true)} />
                     {!googleCalendarStale && (
                     <div className="flex gap-2 pt-1">
@@ -307,7 +293,7 @@ export default function SettingsPage() {
                         onClick={async () => { disconnectCalendar(); await signOut(); signInWithGoogle(); }}
                         className="flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-50"
                       >
-                        Switch calendar
+                        Switch
                       </button>
                       <button
                         onClick={disconnectCalendar}
@@ -320,70 +306,46 @@ export default function SettingsPage() {
                   </div>
                 ) : null}
 
-                {!googleCalendarConnected && (
-                  <p className="mt-1.5 text-[11px] text-gray-400">
-                    We only read busy/free times — never event names or details.
-                    When connecting, select all 3 permission checkboxes so Slotted.ai can work properly.
-                  </p>
-                )}
-
-                {/* Calendar privacy note — shown once below all providers when any is connected */}
-
-                {/* Apple Calendar */}
-                <div className="mt-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-gray-100 shadow-sm text-sm">
-                      🍎
-                    </div>
-                    <span className="text-xs font-medium text-gray-700">Apple Calendar</span>
-                    {appleCalendarConnected ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                {/* Apple Calendar row */}
+                <div className="flex items-center justify-between py-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white border border-gray-100 shadow-sm text-sm">{'\u{1F34E}'}</div>
+                    <span className="text-xs font-medium text-gray-700">Apple</span>
+                    {appleCalendarConnected && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
                         <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
                         Connected
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500">
-                        Not connected
                       </span>
                     )}
                   </div>
                   {appleCalendarConnected ? (
-                    <button
-                      onClick={() => setShowAppleCalendarDetails(!showAppleCalendarDetails)}
-                      className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700"
-                    >
+                    <button onClick={() => setShowAppleCalendarDetails(!showAppleCalendarDetails)} className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700">
                       {showAppleCalendarDetails ? 'Hide' : 'Manage'}
                     </button>
                   ) : (
-                    <button
-                      onClick={() => setShowAppleConnect(!showAppleConnect)}
-                      className="rounded-lg gradient-btn px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md"
-                    >
+                    <button onClick={() => setShowAppleConnect(!showAppleConnect)} className="rounded-lg gradient-btn px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md">
                       Connect
                     </button>
                   )}
                 </div>
 
-                {/* Expandable Apple calendar details */}
+                {/* Apple calendar details (expandable) */}
                 {showAppleCalendarDetails && appleCalendarConnected && (
-                  <div className="mt-2 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
+                  <div className="ml-8 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
                     <CalendarPicker source="apple" />
                     <div className="pt-1">
-                      <button
-                        onClick={disconnectAppleCalendar}
-                        className="w-full rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50"
-                      >
-                        Disconnect Apple Calendar
+                      <button onClick={disconnectAppleCalendar} className="w-full rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50">
+                        Disconnect
                       </button>
                     </div>
                   </div>
                 )}
 
-                {/* Apple connect form */}
+                {/* Apple connect form (expandable) */}
                 {showAppleConnect && !appleCalendarConnected && (
-                  <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50/50 p-3 space-y-2">
+                  <div className="ml-8 rounded-xl border border-gray-200 bg-gray-50/50 p-3 space-y-2">
                     <p className="text-[11px] text-gray-600">
-                      Enter your Apple ID and an <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">app-specific password</a> to connect.
+                      Enter your Apple ID and an <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">app-specific password</a>.
                     </p>
                     <button
                       onClick={() => setShowAppleWhy(!showAppleWhy)}
@@ -396,23 +358,21 @@ export default function SettingsPage() {
                     </button>
                     {showAppleWhy && (
                       <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-2 text-[10px] text-gray-500 space-y-1">
-                        <p>Apple doesn't offer a calendar API like Google does, so all third-party apps (Calendly, Reclaim, etc.) use the same approach:</p>
+                        <p>Apple doesn{"\'"}t offer a calendar API like Google, so all third-party apps use the same approach:</p>
                         <ol className="list-decimal list-inside space-y-0.5">
-                          <li>Go to <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">appleid.apple.com</a> → Sign-In and Security</li>
-                          <li>Generate an App-Specific Password (name it "Slotted.ai")</li>
-                          <li>Paste it below — we only read busy/free times, never event details</li>
+                          <li>Go to <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">appleid.apple.com</a> {'\u{2192}'} Sign-In and Security</li>
+                          <li>Generate an App-Specific Password (name it {"\""}Slotted.ai{"\""})</li>
+                          <li>Paste it below</li>
                         </ol>
-                        <p className="text-gray-400">You can revoke this anytime from your Apple ID settings.</p>
                       </div>
                     )}
                     <input
                       type="email"
                       value={appleEmail}
                       onChange={(e) => { setAppleEmail(e.target.value); setAppleError(null); }}
-                      placeholder="Apple ID email (e.g. you@icloud.com)"
+                      placeholder="Apple ID email"
                       className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
                     />
-                    <p className="text-[10px] text-gray-400">Not sure? Check Settings → Apple ID on your iPhone, or go to appleid.apple.com</p>
                     <input
                       type="password"
                       value={applePassword}
@@ -420,12 +380,8 @@ export default function SettingsPage() {
                       placeholder="App-specific password"
                       className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
                     />
-                    {appleError && (
-                      <p className="text-[11px] text-red-600">{appleError}</p>
-                    )}
-                    {appleSuccess && (
-                      <p className="text-[11px] text-emerald-700">✓ Connected!</p>
-                    )}
+                    {appleError && <p className="text-[11px] text-red-600">{appleError}</p>}
+                    {appleSuccess && <p className="text-[11px] text-emerald-700">{'\u{2713}'} Connected!</p>}
                     <button
                       onClick={async () => {
                         if (!appleEmail || !applePassword) {
@@ -453,74 +409,63 @@ export default function SettingsPage() {
                     </button>
                   </div>
                 )}
-              </div>
 
-                {/* Outlook Calendar */}
-                <div className="mt-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-gray-100 shadow-sm">
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                {/* Outlook Calendar row */}
+                <div className="flex items-center justify-between py-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white border border-gray-100 shadow-sm">
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#0078d4"/>
                         <path d="M8 8h3.5v8H8V8zm4.5 0H16v8h-3.5V8z" fill="white" opacity="0.9"/>
                       </svg>
                     </div>
-                    <span className="text-xs font-medium text-gray-700">Outlook Calendar</span>
-                    {outlookCalendarConnected ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                    <span className="text-xs font-medium text-gray-700">Outlook</span>
+                    {outlookCalendarConnected && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
                         <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
                         Connected
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500">
-                        Not connected
                       </span>
                     )}
                   </div>
                   {outlookCalendarConnected ? (
-                    <button
-                      onClick={() => setShowOutlookCalendarDetails(!showOutlookCalendarDetails)}
-                      className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700"
-                    >
+                    <button onClick={() => setShowOutlookCalendarDetails(!showOutlookCalendarDetails)} className="text-[11px] font-medium text-slotted-600 hover:text-slotted-700">
                       {showOutlookCalendarDetails ? 'Hide' : 'Manage'}
                     </button>
                   ) : (
-                    <button
-                      onClick={connectOutlookCalendar}
-                      className="rounded-lg gradient-btn px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md"
-                    >
+                    <button onClick={connectOutlookCalendar} className="rounded-lg gradient-btn px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md">
                       Connect
                     </button>
                   )}
                 </div>
 
-                {/* Expandable Outlook calendar details */}
+                {/* Outlook calendar details (expandable) */}
                 {showOutlookCalendarDetails && outlookCalendarConnected && (
-                  <div className="mt-2 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
+                  <div className="ml-8 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
                     <CalendarPicker source="outlook" />
                     <div className="pt-1">
-                      <button
-                        onClick={disconnectOutlookCalendar}
-                        className="w-full rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50"
-                      >
-                        Disconnect Outlook Calendar
+                      <button onClick={disconnectOutlookCalendar} className="w-full rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50">
+                        Disconnect
                       </button>
                     </div>
                   </div>
                 )}
 
-                {(googleCalendarConnected || appleCalendarConnected || outlookCalendarConnected) && (
-                  <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/40 px-3 py-2">
-                    <p className="text-[11px] text-blue-700 leading-relaxed">
-                      🔒 Friends only see free or busy — never event details. You control which calendars to share and can disconnect anytime.
-                    </p>
-                  </div>
+                {/* Single privacy/help note */}
+                {(googleCalendarConnected || appleCalendarConnected || outlookCalendarConnected) ? (
+                  <p className="mt-2 text-[10px] text-gray-400 leading-relaxed">
+                    {'\u{1F512}'} Friends only see free or busy — never event details. You can disconnect anytime.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[10px] text-gray-400 leading-relaxed">
+                    Connect at least one calendar so Slotted.ai can find times that work. We only read busy/free — never event details.
+                  </p>
                 )}
-            </div>
+              </div>
             <InstallPrompt alwaysShow desktopOnly />
             <PushNotificationPrompt mobileOnly />
 
             {/* Share hangout activity */}
-            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
@@ -529,7 +474,11 @@ export default function SettingsPage() {
                       Share hangout activity
                     </label>
                   </div>
-                  <p className="mt-0.5 text-[10px] text-gray-400">Let friends see when you complete hangouts</p>
+                  <p className="mt-0.5 text-[10px] text-gray-400">
+                    {shareHangouts
+                      ? 'Friends see "You caught up with [Name]" when both have this on'
+                      : 'Your hangouts are completely private'}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -545,13 +494,6 @@ export default function SettingsPage() {
                   }`} />
                 </button>
               </div>
-              <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
-                <p className="text-[11px] text-gray-500">
-                  {shareHangouts
-                    ? '✅ Friends will see "You caught up with [Name]" in their activity feed. Only shows when both friends (or everyone in a group hangout) have this turned on.'
-                    : '\uD83D\uDD12 Your hangouts are completely private \u2014 only you can see them'}
-                </p>
-              </div>
             </div>
           </div>
         </section>
@@ -560,19 +502,13 @@ export default function SettingsPage() {
         {/* STEP 2: PLANNING STYLE                         */}
         {/* ═══════════════════════════════════════════════ */}
         <section>
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">2</span>
-            <div>
-              <h2 className="text-sm font-bold text-gray-800">Planning Style</h2>
-              <p className="text-[11px] text-gray-400">We use this to decide how far in advance to suggest plans — so Slotted.ai matches your vibe</p>
-            </div>
+            <h2 className="text-sm font-bold text-gray-800">Planning Style</h2>
           </div>
 
           <div className="space-y-4 pl-4 sm:pl-10">
-            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-              <p className="text-xs text-gray-500 mb-4">
-                Are you more of a planner or spontaneous person? This tells the AI how far in advance to suggest hangouts.
-              </p>
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[
                   { value: 'spontaneous', emoji: '\u26A1', label: 'Spontaneous', desc: 'Same-day & next-day plans, "are you free tonight?" nudges' },
@@ -602,19 +538,14 @@ export default function SettingsPage() {
         {/* STEP 3: SOCIAL BATTERY                         */}
         {/* ═══════════════════════════════════════════════ */}
         <section>
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">3</span>
-            <div>
-              <h2 className="text-sm font-bold text-gray-800">Social Battery</h2>
-              <p className="text-[11px] text-gray-400">We use this to limit how many plans we suggest per week — so you don't get overwhelmed</p>
-            </div>
+            <h2 className="text-sm font-bold text-gray-800">Social Battery</h2>
           </div>
 
           <div className="space-y-4 pl-4 sm:pl-10">
-            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
-              <p className="text-xs text-gray-500 mb-3">
-                How often do you want to hang out with <span className="font-semibold text-gray-700">anyone</span> — all friends combined, not per person?
-              </p>
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
+              <label className="block text-[11px] font-semibold text-gray-700 mb-2">How often do you want to see friends?</label>
               <div className="grid grid-cols-1 gap-2">
                 {[
                   { value: 'daily', emoji: '🥳', label: 'Every day', desc: "I'm happy to see any friend on any day — no limit" },
@@ -641,11 +572,11 @@ export default function SettingsPage() {
               </div>
 
               {/* Recharging days */}
-              <div className="mt-4 border-t border-gray-100 pt-4">
-                <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                  Always-recharge days
+              <div className="mt-3 border-t border-gray-100 pt-3">
+                <label className="block text-[11px] font-semibold text-gray-700">
+                  No-plans days
                 </label>
-                <p className="mt-0.5 text-[10px] text-gray-400">Select days you never want plans with anyone — Slotted.ai won't suggest hangouts on these days</p>
+                <p className="mt-0.5 text-[10px] text-gray-400">Slotted.ai won't suggest hangouts on these days</p>
                 <div className="mt-2 grid grid-cols-7 gap-1.5">
                   {[
                     { day: 0, label: 'Sun' },
@@ -677,26 +608,19 @@ export default function SettingsPage() {
               </div>
 
               {/* Summary */}
-              <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
-                <p className="text-[11px] text-gray-500">
-                  {rechargingDays.length > 0
-                    ? `💡 Slotted.ai will never suggest plans on ${rechargingDays.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}.`
-                    : socialRecharge === 'daily'
-                      ? '💡 Slotted.ai will look for every good opportunity to help you connect with friends.'
-                      : socialRecharge === '2-3-week'
-                        ? '💡 Slotted.ai will suggest plans with enough breathing room between hangouts.'
-                        : socialRecharge === 'weekly'
-                          ? '💡 Slotted.ai will space out suggestions and protect your downtime.'
-                          : '💡 Slotted.ai will be very selective, only suggesting the best opportunities.'}
+              {rechargingDays.length > 0 && (
+              <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-1.5">
+                <p className="text-[10px] text-gray-400">
+                  No plans on {rechargingDays.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}
                 </p>
               </div>
+              )}
 
               {/* Social goal */}
-              <div className="mt-4 border-t border-gray-100 pt-4">
-                <label className="block text-[11px] font-medium uppercase tracking-wider text-gray-400">
+              <div className="mt-3 border-t border-gray-100 pt-3">
+                <label className="block text-[11px] font-semibold text-gray-700">
                   Social goal
                 </label>
-                <p className="mt-0.5 text-[10px] text-gray-400">We use this to adjust how proactively Slotted.ai nudges you toward plans</p>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {[
                     { value: 'increase', emoji: '📈', label: 'See people more' },
@@ -726,30 +650,27 @@ export default function SettingsPage() {
         {/* STEP 4: HOW YOU CONNECT (THE CENTERPIECE)      */}
         {/* ═══════════════════════════════════════════════ */}
         <section>
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-3 mb-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">4</span>
-            <div>
-              <h2 className="text-sm font-bold text-gray-800">How You Connect</h2>
-              <p className="text-[11px] text-gray-400">We use these to tailor time suggestions — so in-person meetups and calls each get the right kind of slot</p>
-            </div>
+            <h2 className="text-sm font-bold text-gray-800">How You Connect</h2>
           </div>
 
-          <div className="pl-4 sm:pl-10 grid grid-cols-1 lg:grid-cols-2 gap-5 mt-4">
+          <div className="pl-4 sm:pl-10 grid grid-cols-1 lg:grid-cols-2 gap-4 mt-3">
 
             {/* ─── IN-PERSON HANGOUTS CARD (teal) ─── */}
-            <div className="rounded-2xl border-2 border-teal-200 bg-gradient-to-b from-teal-50/60 to-white p-5 shadow-sm">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-100 text-xl shadow-sm">📍</div>
+            <div className="rounded-2xl border-2 border-teal-200 bg-gradient-to-b from-teal-50/60 to-white p-4 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-100 text-lg shadow-sm">📍</div>
                 <div>
                   <h3 className="text-sm font-bold text-teal-900">In-Person Hangouts</h3>
-                  <p className="text-[10px] text-teal-600/80">For friends who live nearby</p>
+                  <p className="text-[10px] text-teal-600/80">For friends nearby</p>
                 </div>
               </div>
 
               {/* Neighborhoods */}
               <div className="space-y-3">
                 <div>
-                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Where are you based?</label>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Neighborhoods</label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="block text-[10px] font-medium uppercase tracking-wider text-gray-400">Home</label>
@@ -776,8 +697,7 @@ export default function SettingsPage() {
 
                 {/* Office days */}
                 <div className="border-t border-teal-100 pt-3">
-                  <label className="block text-[11px] font-semibold text-gray-700">Office days</label>
-                  <p className="text-[10px] text-gray-400 mb-2">Which days are you typically in the office?</p>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">Office days</label>
                   <div className="flex items-center gap-2 flex-wrap">
                     <div className="flex gap-1">
                       {['M', 'Tu', 'W', 'Th', 'F'].map((day) => {
@@ -816,8 +736,7 @@ export default function SettingsPage() {
 
                 {/* Preferred times for in-person */}
                 <div className="border-t border-teal-100 pt-3">
-                  <label className="block text-[11px] font-semibold text-gray-700">When are you free to hang out?</label>
-                  <p className="text-[10px] text-gray-400 mb-2">We'll prioritize suggesting times in these windows first</p>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">When are you free?</label>
                   <div className="grid grid-cols-2 gap-3">
                     {/* Weekdays */}
                     <div className="space-y-1.5">
@@ -872,8 +791,7 @@ export default function SettingsPage() {
 
                 {/* Default hangout duration */}
                 <div className="border-t border-teal-100 pt-3">
-                  <label className="block text-[11px] font-semibold text-gray-700">Default hangout length</label>
-                  <p className="text-[10px] text-gray-400 mb-2">We'll look for free windows that fit this length when suggesting meetups</p>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">Default hangout length</label>
                   <div className="grid grid-cols-2 gap-1.5">
                     {[
                       { value: 'quick', emoji: '⚡', label: '30–60 min' },
@@ -898,8 +816,7 @@ export default function SettingsPage() {
 
                 {/* Travel buffer */}
                 <div className="border-t border-teal-100 pt-3">
-                  <label className="block text-[11px] font-semibold text-gray-700">Travel buffer</label>
-                  <p className="text-[10px] text-gray-400 mb-2">We add this padding around meetups so you have time to get there and back</p>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">Travel buffer</label>
                   <div className="flex items-center gap-3">
                     <input
                       type="range"
@@ -919,18 +836,14 @@ export default function SettingsPage() {
             </div>
 
             {/* ─── CALLS & FACETIME CARD (violet) ─── */}
-            <div className="rounded-2xl border-2 border-violet-200 bg-gradient-to-b from-violet-50/60 to-white p-5 shadow-sm">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-xl shadow-sm">📞</div>
+            <div className="rounded-2xl border-2 border-violet-200 bg-gradient-to-b from-violet-50/60 to-white p-4 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-lg shadow-sm">📞</div>
                 <div>
                   <h3 className="text-sm font-bold text-violet-900">Calls & FaceTime</h3>
                   <p className="text-[10px] text-violet-600/80">For long-distance friends</p>
                 </div>
               </div>
-
-              <p className="text-xs text-gray-500 mb-3">
-                Set recurring windows when you're available for phone or video calls. These help Slotted.ai match you with long-distance friends.
-              </p>
 
               {/* Default call duration */}
               <div className="mb-4">
@@ -987,7 +900,7 @@ export default function SettingsPage() {
                     );
                   })}
                 </div>
-                <p className="mt-1.5 text-[10px] text-gray-400">Select all that you use — friends will see your preferences when scheduling a video call.</p>
+                <p className="mt-1.5 text-[10px] text-gray-400">Friends see your preferences when scheduling calls</p>
               </div>
 
               {/* Existing windows */}
@@ -1155,25 +1068,18 @@ export default function SettingsPage() {
         {/* STEP 5: EVENT INTERESTS                        */}
         {/* ═══════════════════════════════════════════════ */}
         <section>
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">5</span>
-            <div>
-              <h2 className="text-sm font-bold text-gray-800">Event Interests</h2>
-              <p className="text-[11px] text-gray-400">Surface events you'd actually want to go to with friends</p>
-            </div>
+            <h2 className="text-sm font-bold text-gray-800">Event Interests</h2>
           </div>
 
           <div className="space-y-4 pl-4 sm:pl-10">
-            <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
               {/* Event types */}
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs">🎭</span>
-                  <label className="text-[11px] font-semibold text-gray-700">
-                    What are you into?
-                  </label>
-                </div>
-                <p className="mt-0.5 text-[10px] text-gray-400">Select all that interest you</p>
+                <label className="text-[11px] font-semibold text-gray-700">
+                  What are you into?
+                </label>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {[
                     { value: 'theater', label: 'Theater & Broadway', emoji: '🎭' },
@@ -1210,14 +1116,10 @@ export default function SettingsPage() {
               </div>
 
               {/* Default city */}
-              <div className="mt-5 border-t border-gray-100 pt-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs">📍</span>
-                  <label className="text-[11px] font-semibold text-gray-700">
-                    Default city for event search
-                  </label>
-                </div>
-                <p className="mt-0.5 text-[10px] text-gray-400">We'll pre-fill this when you search for events</p>
+              <div className="mt-4 border-t border-gray-100 pt-3">
+                <label className="text-[11px] font-semibold text-gray-700">
+                  Default city for events
+                </label>
                 <input
                   type="text"
                   value={eventCity}
@@ -1226,28 +1128,21 @@ export default function SettingsPage() {
                   className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100 transition-all"
                 />
               </div>
-
-              {/* Info note */}
-              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3">
-                <p className="text-[11px] text-blue-700">
-                  💡 These preferences help Slotted.ai find events you'd enjoy. Search for shows, concerts, and more from a friend's profile and plan a time to go together.
-                </p>
-              </div>
             </div>
           </div>
         </section>
 
         {/* Feedback */}
         <div className="pl-4 sm:pl-10">
-          <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
             <div className="flex items-start gap-3">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-50 to-fuchsia-50 text-base">
                 💬
               </div>
               <div className="flex-1">
-                <h2 className="text-sm font-semibold text-gray-900">Share Feedback</h2>
-              <p className="mt-0.5 text-[11px] text-gray-400">
-                Found a bug? Have an idea? Every message goes straight to the developer.
+                <h2 className="text-sm font-semibold text-gray-900">Feedback</h2>
+              <p className="text-[10px] text-gray-400">
+                Bug or idea? Goes straight to the developer.
               </p>
             </div>
           </div>
