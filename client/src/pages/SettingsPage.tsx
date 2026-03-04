@@ -181,7 +181,6 @@ export default function SettingsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">Settings</h1>
-          <p className="mt-0.5 text-xs text-gray-400">Customize how Slotted.ai works for you</p>
         </div>
         <button
           onClick={handleSave}
@@ -277,7 +276,7 @@ export default function SettingsPage() {
                       {showCalendarDetails ? 'Hide' : 'Manage'}
                     </button>
                   ) : (
-                    <button onClick={connectCalendar} className="rounded-lg gradient-btn px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md">
+                    <button onClick={connectCalendar} className="rounded-lg gradient-btn px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md">
                       Connect
                     </button>
                   )}
@@ -291,13 +290,13 @@ export default function SettingsPage() {
                     <div className="flex gap-2 pt-1">
                       <button
                         onClick={async () => { disconnectCalendar(); await signOut(); signInWithGoogle(); }}
-                        className="flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-50"
+                        className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-[11px] font-medium text-gray-500 hover:bg-gray-50"
                       >
                         Switch
                       </button>
                       <button
                         onClick={disconnectCalendar}
-                        className="flex-1 rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50"
+                        className="flex-1 rounded-lg border border-red-100 bg-red-50/50 px-2 py-2 text-[11px] font-medium text-red-500 hover:bg-red-50"
                       >
                         Disconnect
                       </button>
@@ -323,7 +322,7 @@ export default function SettingsPage() {
                       {showAppleCalendarDetails ? 'Hide' : 'Manage'}
                     </button>
                   ) : (
-                    <button onClick={() => setShowAppleConnect(!showAppleConnect)} className="rounded-lg gradient-btn px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md">
+                    <button onClick={() => setShowAppleConnect(!showAppleConnect)} className="rounded-lg gradient-btn px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md">
                       Connect
                     </button>
                   )}
@@ -371,14 +370,14 @@ export default function SettingsPage() {
                       value={appleEmail}
                       onChange={(e) => { setAppleEmail(e.target.value); setAppleError(null); }}
                       placeholder="Apple ID email"
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
                     />
                     <input
                       type="password"
                       value={applePassword}
                       onChange={(e) => { setApplePassword(e.target.value); setAppleError(null); }}
                       placeholder="App-specific password"
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-1 focus:ring-slotted-100"
                     />
                     {appleError && <p className="text-[11px] text-red-600">{appleError}</p>}
                     {appleSuccess && <p className="text-[11px] text-emerald-700">{'\u{2713}'} Connected!</p>}
@@ -432,7 +431,7 @@ export default function SettingsPage() {
                       {showOutlookCalendarDetails ? 'Hide' : 'Manage'}
                     </button>
                   ) : (
-                    <button onClick={connectOutlookCalendar} className="rounded-lg gradient-btn px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md">
+                    <button onClick={connectOutlookCalendar} className="rounded-lg gradient-btn px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:shadow-md">
                       Connect
                     </button>
                   )}
@@ -578,7 +577,7 @@ export default function SettingsPage() {
                   No-plans days
                 </label>
                 <p className="mt-0.5 text-[10px] text-gray-400">Slotted.ai won't suggest hangouts on these days</p>
-                <div className="mt-2 grid grid-cols-7 gap-1.5">
+                <div className="mt-2 grid grid-cols-7 gap-2">
                   {[
                     { day: 0, label: 'Sun' },
                     { day: 1, label: 'Mon' },
@@ -595,7 +594,7 @@ export default function SettingsPage() {
                         onClick={() => setRechargingDays((prev) =>
                           prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
                         )}
-                        className={`flex items-center justify-center rounded-lg border py-2 text-xs font-medium transition-all ${
+                        className={`flex items-center justify-center rounded-lg border py-2.5 text-xs font-medium transition-all ${
                           selected
                             ? 'border-red-300 bg-red-50 text-red-700'
                             : 'border-gray-200 text-gray-500 hover:border-red-200 hover:bg-red-50/50'
@@ -622,7 +621,7 @@ export default function SettingsPage() {
                 <label className="block text-[11px] font-semibold text-gray-700">
                   Social goal
                 </label>
-                <div className="mt-2 grid grid-cols-3 gap-2">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {[
                     { value: 'increase', emoji: '📈', label: 'See people more' },
                     { value: 'maintain', emoji: '⚖️', label: 'Stay the same' },
@@ -631,7 +630,7 @@ export default function SettingsPage() {
                     <button
                       key={opt.value}
                       onClick={() => setSocialGoal(opt.value)}
-                      className={`rounded-lg border px-3 py-2 text-center text-xs transition-all ${
+                      className={`rounded-lg border px-3 py-3 sm:py-2 text-center text-xs transition-all ${
                         socialGoal === opt.value
                           ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm font-semibold'
                           : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-gray-50'

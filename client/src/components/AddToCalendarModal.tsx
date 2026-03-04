@@ -101,11 +101,11 @@ export default function AddToCalendarModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in"
+        className="w-full max-w-[calc(100vw-1.5rem)] sm:max-w-md rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="border-b border-gray-100 bg-gradient-to-r from-slotted-50/50 to-purple-50/50 px-6 py-4">
+        <div className="border-b border-gray-100 bg-gradient-to-r from-slotted-50/50 to-purple-50/50 px-4 py-4 sm:px-6">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-display text-base font-bold text-gray-900">📅 Add to Calendar</h3>
@@ -123,13 +123,13 @@ export default function AddToCalendarModal({
         </div>
 
         {/* Event summary */}
-        <div className="border-b border-gray-100 px-6 py-3 bg-gray-50/50">
+        <div className="border-b border-gray-100 bg-gray-50/50 px-4 py-3 sm:px-6">
           <p className="text-sm font-semibold text-gray-900">{meetupTitle}</p>
           <p className="text-xs text-gray-500">{formatTime(startTime)} → {formatTime(endTime)}</p>
         </div>
 
         {/* Content */}
-        <div className="px-6 py-4">
+        <div className="px-4 py-4 sm:px-6">
           {added ? (
             <div className="flex flex-col items-center justify-center py-8">
               <span className="text-4xl">✅</span>
@@ -185,7 +185,7 @@ export default function AddToCalendarModal({
 
         {/* Footer */}
         {!added && (
-          <div className="border-t border-gray-100 px-6 py-3 flex justify-end">
+          <div className="flex justify-end border-t border-gray-100 px-4 py-3 sm:px-6">
             <button
               onClick={onClose}
               className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all"

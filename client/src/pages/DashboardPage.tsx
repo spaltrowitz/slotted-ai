@@ -645,22 +645,22 @@ export default function DashboardPage() {
   return (
     <AppShell>
       {/* ─── HEADER ─── */}
-      <div className="mb-5">
+      <div className="mb-3 sm:mb-5">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900 min-w-0 truncate">
+          <h1 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-gray-900 min-w-0 truncate">
             {greeting}, {user?.displayName?.split(' ')[0]} {timeEmoji}
           </h1>
           {/* Quick actions */}
-          <div className="flex gap-2 shrink-0">
+          <div className="flex gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={() => { setShowLogForm(true); document.getElementById('log-section')?.scrollIntoView({ behavior: 'smooth' }); }}
-              className="rounded-xl gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+              className="rounded-xl gradient-btn px-3 sm:px-4 py-1.5 sm:py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
             >
               📝 Log
             </button>
             <Link
               to="/friends"
-              className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-slotted-300"
+              className="rounded-xl border border-gray-200 bg-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs font-semibold text-gray-700 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-slotted-300"
             >
               👋 Invite
             </Link>
@@ -703,15 +703,15 @@ export default function DashboardPage() {
 
       {/* ─── NO UPCOMING HANGOUTS (when user has friends but nothing scheduled) ─── */}
       {!dashboardLoading && allFriends.length > 0 && upcoming.length === 0 && (
-        <div className="mb-6 rounded-2xl border border-dashed border-slotted-200 bg-slotted-50/30 p-6 text-center">
-          <span className="text-3xl">📅</span>
-          <h3 className="mt-2 font-display text-base font-bold text-gray-900">No hangouts coming up</h3>
-          <p className="mt-1.5 text-sm text-gray-500 leading-relaxed max-w-sm mx-auto">
-            You've got friends on Slotted.ai — find a time that works for everyone and book something fun.
+        <div className="mb-4 sm:mb-6 rounded-2xl border border-dashed border-slotted-200 bg-slotted-50/30 p-4 sm:p-6 text-center">
+          <span className="text-2xl sm:text-3xl">📅</span>
+          <h3 className="mt-1.5 sm:mt-2 font-display text-sm sm:text-base font-bold text-gray-900">No hangouts coming up</h3>
+          <p className="mt-1 sm:mt-1.5 text-xs sm:text-sm text-gray-500 leading-relaxed max-w-sm mx-auto">
+            Find a time that works for everyone and book something fun.
           </p>
           <Link
             to="/friends"
-            className="mt-4 inline-flex items-center gap-2 rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+            className="mt-3 sm:mt-4 inline-flex items-center gap-2 rounded-xl gradient-btn px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
           >
             👋 Find a time with a friend
           </Link>
@@ -720,7 +720,7 @@ export default function DashboardPage() {
 
       {/* ─── PENDING HANGOUTS (needs action) ─── */}
       {pendingHangouts.length > 0 && (
-        <div className="mb-6 rounded-2xl border border-amber-200/60 bg-gradient-to-r from-amber-50/50 to-orange-50/30 p-5 shadow-sm">
+        <div className="mb-4 sm:mb-6 rounded-2xl border border-amber-200/60 bg-gradient-to-r from-amber-50/50 to-orange-50/30 p-3 sm:p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-base">⏳</span>
             <h2 className="font-display text-sm font-semibold text-gray-900">Pending</h2>
@@ -788,7 +788,7 @@ export default function DashboardPage() {
                         ))}
                       </div>
                       {/* Action buttons */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {iNeedToRespond && (
                           <>
                             <button
@@ -843,7 +843,7 @@ export default function DashboardPage() {
 
       {/* ─── CONFIRMED HANGOUTS ─── */}
       {confirmedHangouts.length > 0 && (
-        <div className="mb-6 rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/30 to-green-50/20 p-5 shadow-sm">
+        <div className="mb-4 sm:mb-6 rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/30 to-green-50/20 p-3 sm:p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-base">✅</span>
             <h2 className="font-display text-sm font-semibold text-gray-900">Confirmed</h2>
@@ -889,7 +889,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   {isExpanded && (
-                    <div className="border-t border-emerald-100 px-4 py-3 flex items-center gap-2 bg-white">
+                    <div className="border-t border-emerald-100 px-4 py-3 flex flex-wrap items-center gap-2 bg-white">
                       <button
                         onClick={(e) => { e.stopPropagation(); setCalendarModal({ meetupId: m.id, title: m.title, startTime: m.start_time, endTime: m.end_time }); }}
                         className="rounded-lg bg-slotted-500 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-slotted-600 shadow-sm"
@@ -940,8 +940,8 @@ export default function DashboardPage() {
 
       {/* ─── CALENDAR ─── */}
       {(calendarConnected || true) && (
-        <div id="cal-section" className={`mb-6 rounded-2xl border ${markBusyMode ? 'border-amber-300 ring-2 ring-amber-100' : 'border-gray-200/60'} bg-white shadow-sm overflow-hidden transition-all`}>
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+        <div id="cal-section" className={`mb-4 sm:mb-6 rounded-2xl border ${markBusyMode ? 'border-amber-300 ring-2 ring-amber-100' : 'border-gray-200/60'} bg-white shadow-sm overflow-hidden transition-all`}>
+          <div className="flex items-center justify-between border-b border-gray-100 px-3 sm:px-5 py-2 sm:py-3">
             <div className="flex items-center gap-2">
               <span className="text-base">📅</span>
               <h2 className="font-display text-sm font-semibold text-gray-900">My Calendar</h2>
@@ -1019,7 +1019,7 @@ export default function DashboardPage() {
               {weekDays.some((d) => allDayEventsForDate(d).length > 0) && (
                 <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
                   <div className="border-r border-gray-100 flex items-center justify-center">
-                    <span className="text-[9px] text-gray-300">ALL DAY</span>
+                    <span className="text-[10px] text-gray-300">ALL DAY</span>
                   </div>
                   {weekDays.map((dateStr) => {
                     const adEvents = allDayEventsForDate(dateStr);
@@ -1028,7 +1028,7 @@ export default function DashboardPage() {
                         {adEvents.map((ev) => (
                           <div
                             key={ev.id}
-                            className={`rounded px-1 py-0.5 text-[9px] font-medium truncate mb-0.5 ${isBufferEvent(ev) ? 'border border-dashed border-slate-400' : ''}`}
+                            className={`rounded px-1 py-0.5 text-[10px] md:text-[9px] font-medium whitespace-normal break-words md:truncate mb-0.5 ${isBufferEvent(ev) ? 'border border-dashed border-slate-400' : ''}`}
                             style={{
                               backgroundColor: isBufferEvent(ev) ? '#f1f5f9' : (ev.color || (ev.source === 'apple' ? '#ff3b30' : '#4285f4')),
                               color: isBufferEvent(ev) ? '#64748b' : '#fff',
@@ -1063,7 +1063,7 @@ export default function DashboardPage() {
                 })}
               </div>
               {/* Time grid */}
-              <div className="overflow-y-auto max-h-[520px]" style={{ scrollbarWidth: 'thin', ...(markBusyMode && isDragging ? { overflowY: 'hidden' } : {}) }}>
+              <div className="overflow-y-auto max-h-[360px] sm:max-h-[520px]" style={{ scrollbarWidth: 'thin', ...(markBusyMode && isDragging ? { overflowY: 'hidden' } : {}) }}>
                 <div className="grid relative" style={{ gridTemplateColumns: '48px repeat(7, 1fr)', height: `${TOTAL_HOURS * HOUR_HEIGHT}px`, ...(markBusyMode ? { touchAction: 'none' } : {}) }}>
                   {/* Hour labels + grid lines */}
                   <div className="relative border-r border-gray-100">
@@ -1155,17 +1155,17 @@ export default function DashboardPage() {
                               title={isManual ? `${ev.title} (tap to remove)` : `${ev.title}\n${formatEventTime(ev.start, ev.end, ev.allDay)}${ev.location ? '\n📍 ' + ev.location : ''}\n${isBuf ? '🗓️ Slotted.ai' : (ev.source === 'apple' ? '🍎' : '📧') + ' ' + ev.calendarName}`}
                               onClick={isManual ? () => handleRemoveBusyBlock(ev.id) : undefined}
                             >
-                              <p className={`text-[10px] font-semibold truncate leading-tight ${isManual ? 'text-amber-700' : isBuf ? 'text-slate-600' : 'text-white'}`}>
+                              <p className={`text-[11px] md:text-[10px] font-semibold whitespace-normal break-words md:truncate leading-tight ${isManual ? 'text-amber-700' : isBuf ? 'text-slate-600' : 'text-white'}`}>
                                 {isManual ? '✏️ ' : ''}{ev.title}
                               </p>
                               {height >= 36 && (
-                                <p className={`text-[9px] truncate ${isManual ? 'text-amber-600/70' : 'text-white/80'}`}>
+                                <p className={`text-[10px] md:text-[9px] whitespace-normal break-words md:truncate ${isManual ? 'text-amber-600/70' : 'text-white/80'}`}>
                                   {new Date(ev.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                                   {isManual && ' · tap to remove'}
                                 </p>
                               )}
                               {!isManual && height >= 52 && ev.location && (
-                                <p className="text-[9px] text-white/70 truncate">📍 {ev.location}</p>
+                                <p className="text-[10px] md:text-[9px] text-white/70 whitespace-normal break-words md:truncate">📍 {ev.location}</p>
                               )}
                             </div>
                           );
@@ -1294,15 +1294,15 @@ export default function DashboardPage() {
 
       {/* ─── PEOPLE TO SEE (compact avatar row) ─── */}
       {!dashboardLoading && friendsToSee.length === 0 && allFriends.length === 0 && (
-        <div className="mb-6 rounded-2xl border border-slotted-200/60 bg-gradient-to-br from-slotted-50/60 to-purple-50/40 p-6 shadow-sm text-center">
-          <span className="text-3xl">👋</span>
-          <h3 className="mt-3 font-display text-base font-bold text-gray-900">Welcome to Slotted.ai!</h3>
-          <p className="mt-1.5 text-sm text-gray-500 leading-relaxed max-w-sm mx-auto">
-            Invite a friend to get started — once they connect, Slotted.ai will find the best times for you to hang out.
+        <div className="mb-4 sm:mb-6 rounded-2xl border border-slotted-200/60 bg-gradient-to-br from-slotted-50/60 to-purple-50/40 p-4 sm:p-6 shadow-sm text-center">
+          <span className="text-2xl sm:text-3xl">👋</span>
+          <h3 className="mt-2 sm:mt-3 font-display text-sm sm:text-base font-bold text-gray-900">Welcome to Slotted.ai!</h3>
+          <p className="mt-1 sm:mt-1.5 text-xs sm:text-sm text-gray-500 leading-relaxed max-w-sm mx-auto">
+            Invite a friend to get started — Slotted.ai will find the best times to hang out.
           </p>
           <Link
             to="/friends"
-            className="mt-4 inline-flex items-center gap-2 rounded-xl gradient-btn px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
+            className="mt-3 sm:mt-4 inline-flex items-center gap-2 rounded-xl gradient-btn px-5 sm:px-6 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
           >
             👋 Invite a friend
           </Link>
@@ -1329,7 +1329,7 @@ export default function DashboardPage() {
                     {f.displayName?.[0] ?? '?'}
                   </div>
                 )}
-                <p className="text-[10px] font-medium text-gray-600 truncate w-full text-center group-hover:text-slotted-600 transition-colors">{f.displayName?.split(' ')[0]}</p>
+                <p className="w-full text-center text-xs font-medium leading-tight text-gray-600 group-hover:text-slotted-600 transition-colors">{f.displayName?.split(' ')[0]}</p>
               </Link>
             ))}
           </div>
@@ -1739,13 +1739,13 @@ export default function DashboardPage() {
 
       {/* Connect calendar CTA (only if no calendar) */}
       {!calendarConnected && (
-        <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50/50 p-5 text-center">
-          <span className="text-2xl">📅</span>
-          <p className="mt-1.5 text-sm font-medium text-gray-700">Connect your calendar for automatic availability</p>
-          <p className="mt-1 text-xs text-gray-400">Or use <button onClick={() => { setMarkBusyMode(true); handleSetCalView('week'); setWeekOffset(0); document.getElementById('cal-section')?.scrollIntoView({ behavior: 'smooth' }); }} className="font-semibold text-amber-600 hover:text-amber-700 underline underline-offset-2">Mark Busy</button> on the calendar above to set your availability manually</p>
+        <div className="mt-4 sm:mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50/50 p-4 sm:p-5 text-center">
+          <span className="text-xl sm:text-2xl">📅</span>
+          <p className="mt-1 sm:mt-1.5 text-xs sm:text-sm font-medium text-gray-700">Connect your calendar for automatic availability</p>
+          <p className="mt-1 text-[11px] sm:text-xs text-gray-400">Or use <button onClick={() => { setMarkBusyMode(true); handleSetCalView('week'); setWeekOffset(0); document.getElementById('cal-section')?.scrollIntoView({ behavior: 'smooth' }); }} className="font-semibold text-amber-600 hover:text-amber-700 underline underline-offset-2">Mark Busy</button> on the calendar above to set your availability manually</p>
           <Link
             to="/settings"
-            className="mt-3 inline-block rounded-xl gradient-btn px-5 py-2 text-xs font-semibold text-white shadow-sm"
+            className="mt-2.5 sm:mt-3 inline-block rounded-xl gradient-btn px-4 sm:px-5 py-1.5 sm:py-2 text-xs font-semibold text-white shadow-sm"
           >
             Connect Google Calendar →
           </Link>

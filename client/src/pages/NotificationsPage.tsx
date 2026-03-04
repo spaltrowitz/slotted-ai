@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
 import CounterProposePanel from '../components/CounterProposePanel';
@@ -24,6 +24,7 @@ interface Notification {
 
 export default function NotificationsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [rsvpLoading, setRsvpLoading] = useState<string | null>(null);
@@ -227,6 +228,30 @@ export default function NotificationsPage() {
     { key: 'reminders' as const, label: 'Reminders', count: notifications.filter((n) => reminderTypes.includes(n.type)).length },
   ];
 
+  const handleNotificationClick = (notification: Notification) => {
+    if (!notification.read) {
+      void markAsRead(notification.id);
+    }
+
+    const isSharedEvent = notification.body.startsWith('[EVENT_SHARE]');
+    const isGroupMembershipUpdate = /\bgroup\b|added to|removed from|left "/i.test(
+      `${notification.title} ${notification.body}`
+    );
+    const isFriendJoinedNotification =
+      notification.type === 'friend_accepted' &&
+      !!notification.related_user_id &&
+      !isGroupMembershipUpdate;
+
+    if (notification.type === 'calendar_match' && notification.related_user_id && !isSharedEvent) {
+      navigate(`/friends?findTimes=${encodeURIComponent(notification.related_user_id)}`);
+      return;
+    }
+
+    if (isFriendJoinedNotification) {
+      navigate(`/friends?findTimes=${encodeURIComponent(notification.related_user_id!)}`);
+    }
+  };
+
   return (
     <AppShell>
       <div className="mb-6 flex items-center justify-between gap-3">
@@ -282,7 +307,7 @@ export default function NotificationsPage() {
       ) : filteredNotifications.length === 0 ? (
         <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
           <div className="flex flex-col items-center justify-center px-6 py-20">
-            <div className="animate-float text-5xl mb-2">{activeTab === 'all' ? '🔔' : activeTab === 'unread' ? '✅' : activeTab === 'requests' ? '👋' : '⏰'}</div>
+            <div className="animate-float text-4xl sm:text-5xl mb-2">{activeTab === 'all' ? '🔔' : activeTab === 'unread' ? '✅' : activeTab === 'requests' ? '👋' : '⏰'}</div>
             <h3 className="mt-3 font-display text-lg font-bold text-gray-900">
               {activeTab === 'all' ? 'No notifications yet' : activeTab === 'unread' ? 'All caught up!' : `No ${activeTab}`}
             </h3>
@@ -302,7 +327,7 @@ export default function NotificationsPage() {
             return (
               <div
                 key={notification.id}
-                onClick={() => !notification.read && markAsRead(notification.id)}
+                onClick={() => handleNotificationClick(notification)}
                 className={`flex items-start gap-4 rounded-2xl border ${
                   notification.read ? 'border-gray-100 bg-white' : `${config.border} ${config.bg} cursor-pointer`
                 } p-5 shadow-sm transition-all hover:shadow-md`}
@@ -399,14 +424,14 @@ export default function NotificationsPage() {
                           <button
                             onClick={(e) => { e.stopPropagation(); handleFriendRequest(notification.id, notification.related_id!, 'accept'); }}
                             disabled={friendRequestLoading === notification.id}
-                            className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm disabled:opacity-50"
+                            className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm disabled:opacity-50"
                           >
                             {friendRequestLoading === notification.id ? '...' : '✅ Accept'}
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleFriendRequest(notification.id, notification.related_id!, 'decline'); }}
                             disabled={friendRequestLoading === notification.id}
-                            className="rounded-lg border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 disabled:opacity-50"
+                            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 disabled:opacity-50"
                           >
                             Decline
                           </button>
@@ -435,14 +460,14 @@ export default function NotificationsPage() {
                           <button
                             onClick={(e) => { e.stopPropagation(); handleRsvp(notification.id, notification.related_id!, 'accepted'); }}
                             disabled={rsvpLoading === notification.id}
-                            className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm disabled:opacity-50"
+                            className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm disabled:opacity-50"
                           >
                             {rsvpLoading === notification.id ? '...' : '✅ Accept'}
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleRsvp(notification.id, notification.related_id!, 'maybe'); }}
                             disabled={rsvpLoading === notification.id}
-                            className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-medium text-amber-700 transition-all hover:bg-amber-100 disabled:opacity-50"
+                            className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-700 transition-all hover:bg-amber-100 disabled:opacity-50"
                           >
                             🤔 Maybe
                           </button>
@@ -456,7 +481,7 @@ export default function NotificationsPage() {
                               }
                             }}
                             disabled={rsvpLoading === notification.id}
-                            className="rounded-lg border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 disabled:opacity-50"
+                            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 disabled:opacity-50"
                           >
                             Not this time
                           </button>

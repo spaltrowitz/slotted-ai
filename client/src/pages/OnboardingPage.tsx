@@ -155,7 +155,7 @@ export default function OnboardingPage() {
               When do you usually hang out?
             </h2>
             <p className="text-sm text-gray-500">Select all that apply — this helps Slotted.ai suggest the best times</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {[
                 { value: 'weekday-morning', emoji: '🌅', prefix: 'Weekday', suffix: 'mornings' },
                 { value: 'weekday-lunch', emoji: '☀️', prefix: 'Weekday', suffix: 'lunches' },
@@ -176,7 +176,7 @@ export default function OnboardingPage() {
                           : [...data.preferredTimes, opt.value],
                       })
                     }
-                    className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                    className={`rounded-xl border px-4 py-3.5 text-left text-sm transition-all ${
                       selected
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
                         : 'border-gray-200 text-gray-700 hover:border-slotted-200 hover:bg-gray-50'

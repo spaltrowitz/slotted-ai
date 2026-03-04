@@ -761,7 +761,7 @@ export default function EventsPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider transition-all hover:opacity-80 ${sourceColor(s)}`}
+                className={`rounded-full px-2.5 py-1 text-[10px] sm:text-[9px] font-semibold uppercase tracking-wider transition-all hover:opacity-80 ${sourceColor(s)}`}
                 title={`Buy on ${sourceLabel(s)}`}
               >
                 {allSources.length > 1 ? '🎟️' : ''} {sourceLabel(s)}
@@ -942,7 +942,7 @@ export default function EventsPage() {
                 )}
                 {/* Autocomplete dropdown */}
                 {showSuggestions && suggestions.length > 0 && (
-                  <div ref={suggestBoxRef} className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+                  <div ref={suggestBoxRef} className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 sm:max-h-80 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
                     {suggestions.map((s) => (
                       <button
                         key={s.id}
@@ -1193,7 +1193,7 @@ export default function EventsPage() {
           {!loading && searched && filteredEvents.length === 0 && (
             <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
               <div className="flex flex-col items-center justify-center px-6 py-16">
-                <span className="text-5xl mb-2">🎭</span>
+                <span className="text-4xl sm:text-5xl mb-2">🎭</span>
                 <h3 className="mt-3 font-display text-lg font-bold text-gray-900">No events found</h3>
                 <p className="mt-2 max-w-sm text-center text-sm text-gray-400 leading-relaxed">
                   {priceFilter !== 'any' && events.length > 0
@@ -1564,7 +1564,7 @@ export default function EventsPage() {
       {shareEvent && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !shareSending && setShareEvent(null)}>
           <div
-            className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden animate-slide-up"
+            className="w-full max-w-[calc(100vw-1rem)] sm:max-w-lg rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden animate-slide-up"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Event preview */}

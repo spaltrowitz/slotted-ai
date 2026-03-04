@@ -7,17 +7,23 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const DISMISSED_KEY = 'slotted_install_dismissed';
-const DISMISSED_EXPIRY_DAYS = 7;
+const FIRST_SEEN_KEY = 'slotted_install_first_seen';
+const PERMANENT_DISMISS_AFTER_DAYS = 3;
 
-function isDismissed(): boolean {
-  const raw = localStorage.getItem(DISMISSED_KEY);
-  if (!raw) return false;
-  const ts = parseInt(raw, 10);
-  if (Date.now() - ts > DISMISSED_EXPIRY_DAYS * 24 * 60 * 60 * 1000) {
-    localStorage.removeItem(DISMISSED_KEY);
-    return false;
+function isDismissedPermanently(): boolean {
+  return localStorage.getItem(DISMISSED_KEY) === 'permanent';
+}
+
+function getDaysSinceFirstSeen(): number {
+  const raw = localStorage.getItem(FIRST_SEEN_KEY);
+  if (!raw) return 0;
+  return (Date.now() - parseInt(raw, 10)) / (24 * 60 * 60 * 1000);
+}
+
+function markFirstSeen() {
+  if (!localStorage.getItem(FIRST_SEEN_KEY)) {
+    localStorage.setItem(FIRST_SEEN_KEY, Date.now().toString());
   }
-  return true;
 }
 
 function isStandalone(): boolean {
@@ -37,11 +43,12 @@ function getDeviceInfo() {
 
 export default function InstallPrompt({ alwaysShow = false, desktopOnly = false }: { alwaysShow?: boolean; desktopOnly?: boolean }) {
   const [visible, setVisible] = useState(false);
+  const [sessionDismissed, setSessionDismissed] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstructions, setShowInstructions] = useState(false);
   const { isIOS, isAndroid, isMobile } = getDeviceInfo();
+  const canPermanentlyDismiss = getDaysSinceFirstSeen() >= PERMANENT_DISMISS_AFTER_DAYS;
 
-  // Listen for the native install prompt (Chrome/Android)
   useEffect(() => {
     const handler = (e: Event) => {
       e.preventDefault();
@@ -49,6 +56,7 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
     };
     const installedHandler = () => {
       trackAppInstalled();
+      setVisible(false);
     };
     window.addEventListener('beforeinstallprompt', handler);
     window.addEventListener('appinstalled', installedHandler);
@@ -58,10 +66,8 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
     };
   }, []);
 
-  // Decide whether to show the banner
   useEffect(() => {
     if (isStandalone()) {
-      // If alwaysShow, still set visible so we can show "already installed" state
       if (alwaysShow) setVisible(true);
       return;
     }
@@ -69,10 +75,12 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
       setVisible(true);
       return;
     }
-    if (isDismissed()) return;
+    if (isDismissedPermanently()) return;
     if (!isMobile) return;
-    // Small delay so it doesn't flash on load
-    const t = setTimeout(() => setVisible(true), 1500);
+    const t = setTimeout(() => {
+      markFirstSeen();
+      setVisible(true);
+    }, 1500);
     return () => clearTimeout(t);
   }, [isMobile, alwaysShow]);
 
@@ -80,7 +88,6 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
 
   const handleInstall = async () => {
     if (deferredPrompt) {
-      // Native install flow (Chrome on Android)
       await deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       if (outcome === 'accepted') {
@@ -88,18 +95,26 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
       }
       setDeferredPrompt(null);
     } else {
-      // Show manual instructions (iOS / other browsers)
       setShowInstructions(true);
     }
   };
 
-  const handleDismiss = () => {
-    localStorage.setItem(DISMISSED_KEY, Date.now().toString());
+  const handleCloseInstructions = () => {
+    setShowInstructions(false);
+  };
+
+  const handleSessionDismiss = () => {
+    setSessionDismissed(true);
+    setShowInstructions(false);
+  };
+
+  const handlePermanentDismiss = () => {
+    localStorage.setItem(DISMISSED_KEY, 'permanent');
     setVisible(false);
     setShowInstructions(false);
   };
 
-  if (!visible) return null;
+  if (!visible || sessionDismissed) return null;
 
   // On mobile, hide if desktopOnly (unless already installed — show that confirmation)
   if (desktopOnly && isMobile && !standalone) return null;
@@ -150,11 +165,19 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
                   {deferredPrompt ? 'Install App' : 'Show Me How'}
                 </button>
                 <button
-                  onClick={handleDismiss}
+                  onClick={handleSessionDismiss}
                   className="rounded-lg px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:text-gray-600"
                 >
                   Maybe later
                 </button>
+                {canPermanentlyDismiss && (
+                  <button
+                    onClick={handlePermanentDismiss}
+                    className="rounded-lg px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:text-gray-500"
+                  >
+                    Don't show again
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -170,7 +193,7 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
                 Install Slotted.ai
               </h2>
               <button
-                onClick={handleDismiss}
+                onClick={handleCloseInstructions}
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600"
               >
                 ✕
@@ -304,10 +327,10 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
             )}
 
             <button
-              onClick={handleDismiss}
+              onClick={handleCloseInstructions}
               className="mt-6 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-600 transition-all hover:bg-gray-50"
             >
-              Got it
+              Got it, I'll do this now
             </button>
           </div>
         </div>

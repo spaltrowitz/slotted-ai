@@ -98,7 +98,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               Sign out
             </button>
-            <Link to="/settings" className="cursor-pointer">
+            <Link to="/settings" className="cursor-pointer rounded-full p-1 -m-1">
               {user?.photoURL ? (
                 <img src={user.photoURL} alt="" className="h-8 w-8 rounded-full ring-2 ring-slotted-100 transition-opacity hover:opacity-80" />
               ) : (
@@ -113,26 +113,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main content — extra bottom padding on mobile for tab bar */}
       <main className="flex-1">
-        <div className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 md:pb-8">{children}</div>
+        <div className="mx-auto max-w-6xl px-4 py-6 pb-28 sm:px-6 sm:py-8 md:pb-8">{children}</div>
       </main>
 
       {/* Mobile bottom tab bar — hidden on desktop */}
       <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-gray-200/80 bg-white/95 backdrop-blur-xl md:hidden">
-        <div className="mx-auto flex h-16 max-w-lg items-center justify-around px-2">
+        <div className="mx-auto flex h-16 max-w-lg items-center justify-around px-1">
           {navItems.map((item) => {
             const isActive = location.pathname.startsWith(item.path);
             return (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`relative flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 transition-all ${
+                className={`relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 transition-all ${
                   isActive
                     ? 'text-slotted-600'
                     : 'text-gray-400'
                 }`}
               >
                 <span className="h-6 w-6 [&>svg]:h-6 [&>svg]:w-6">{item.icon}</span>
-                <span className="text-[10px] font-medium">{item.label}</span>
+                <span className="max-w-full truncate px-0.5 text-[10px] font-medium">{item.label}</span>
               </Link>
             );
           })}
