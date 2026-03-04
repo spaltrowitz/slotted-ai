@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { trackSettingsSaved } from '../lib/analytics';
 
 export default function SettingsPage() {
-  const { user, onboardingComplete, googleCalendarConnected, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, outlookCalendarConnected, connectOutlookCalendar, disconnectOutlookCalendar, signInWithGoogle, signOut } = useAuth();
+  const { user, onboardingComplete, googleCalendarConnected, googleCalendarStale, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, outlookCalendarConnected, connectOutlookCalendar, disconnectOutlookCalendar, verifyCalendarHealth, signInWithGoogle, signOut } = useAuth();
   const [travelBuffer, setTravelBuffer] = useState(30);
   const [planningStyle, setPlanningStyle] = useState('flexible');
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['weekday-evening', 'weekend-afternoon']);
@@ -25,8 +25,14 @@ export default function SettingsPage() {
   const [showAppleCalendarDetails, setShowAppleCalendarDetails] = useState(false);
   const [showAppleWhy, setShowAppleWhy] = useState(false);
   const [showCalendarDetails, setShowCalendarDetails] = useState(false);
-  const [googleCalendarStale, setGoogleCalendarStale] = useState(false);
   const [showOutlookCalendarDetails, setShowOutlookCalendarDetails] = useState(false);
+
+  // Verify calendar token validity when Settings page loads
+  useEffect(() => {
+    if (googleCalendarConnected) {
+      verifyCalendarHealth();
+    }
+  }, [googleCalendarConnected, verifyCalendarHealth]);
 
   const [socialRecharge, setSocialRecharge] = useState('2-3-week');
   const [rechargingDays, setRechargingDays] = useState<number[]>([]);
@@ -58,7 +64,7 @@ export default function SettingsPage() {
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [editingName, setEditingName] = useState(false);
   const [nameBeforeEdit, setNameBeforeEdit] = useState(user?.displayName || '');
-  const [activeTab, setActiveTab] = useState<'profile' | 'availability' | 'privacy'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'about' | 'in-person' | 'calls'>('profile');
 
   useEffect(() => {
     if (!user) return;
@@ -188,13 +194,14 @@ export default function SettingsPage() {
           <div className="flex rounded-xl border border-gray-200 bg-white p-1">
             {[
               { key: 'profile', label: 'Profile' },
-              { key: 'availability', label: 'Availability' },
-              { key: 'privacy', label: 'Privacy' },
+              { key: 'about', label: 'About You' },
+              { key: 'in-person', label: 'In Person' },
+              { key: 'calls', label: 'Calls' },
             ].map((tab) => (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key as 'profile' | 'availability' | 'privacy')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                onClick={() => setActiveTab(tab.key as 'profile' | 'about' | 'in-person' | 'calls')}
+                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-all ${
                   activeTab === tab.key
                     ? 'bg-slotted-50 text-slotted-700'
                     : 'text-gray-500 hover:text-gray-700'
@@ -319,7 +326,7 @@ export default function SettingsPage() {
                 {/* Google calendar details (expandable) */}
                 {(showCalendarDetails && googleCalendarConnected) || googleCalendarStale ? (
                   <div className="ml-8 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
-                    <CalendarPicker source="google" onDisconnected={() => setGoogleCalendarStale(true)} />
+                    <CalendarPicker source="google" onDisconnected={() => disconnectCalendar()} />
                     {!googleCalendarStale && (
                     <div className="flex gap-2 pt-1">
                       <button
@@ -502,7 +509,7 @@ export default function SettingsPage() {
         </section>
         )}
 
-        {activeTab === 'availability' && (
+        {activeTab === 'about' && (
         <>
         <section>
           <div className="flex items-center gap-3 mb-3">
@@ -651,28 +658,66 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════════ */}
-        {/* STEP 4: HOW YOU CONNECT (THE CENTERPIECE)      */}
-        {/* ═══════════════════════════════════════════════ */}
+        {/* Share hangout activity (moved from Privacy) */}
         <section>
           <div className="flex items-center gap-3 mb-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">4</span>
-            <h2 className="text-sm font-bold text-gray-800">How You Connect</h2>
+            <h2 className="text-sm font-bold text-gray-800">Sharing</h2>
+          </div>
+          <div className="space-y-4 pl-4 sm:pl-10">
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs">👥</span>
+                    <label className="text-[11px] font-semibold text-gray-700">
+                      Share hangout activity
+                    </label>
+                  </div>
+                  <p className="mt-0.5 text-[10px] text-gray-400">
+                    {shareHangouts
+                      ? 'Friends only see a simple "You caught up with [Name]" signal when both people enable sharing.'
+                      : 'Your hangouts stay private.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={shareHangouts}
+                  onClick={() => setShareHangouts(!shareHangouts)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    shareHangouts ? 'bg-slotted-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                    shareHangouts ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                  }`} />
+                </button>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
+              <p className="text-[11px] leading-relaxed text-gray-500">
+                Slotted uses calendar busy/free to suggest times and does not share event titles, attendees, or descriptions with friends.
+              </p>
+            </div>
+          </div>
+        </section>
+        </>
+        )}
+
+        {activeTab === 'in-person' && (
+        <>
+        <section>
+          <div className="flex items-center gap-3 mb-3">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-teal-600 text-xs font-bold text-white shadow-sm">📍</span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-800">In-Person Hangouts</h2>
+              <p className="text-[10px] text-gray-500">For friends nearby</p>
+            </div>
           </div>
 
-          <div className="pl-4 sm:pl-10 grid grid-cols-1 lg:grid-cols-2 gap-4 mt-3">
-
-            {/* ─── IN-PERSON HANGOUTS CARD (teal) ─── */}
+          <div className="space-y-4 pl-4 sm:pl-10">
             <div className="rounded-2xl border-2 border-teal-200 bg-gradient-to-b from-teal-50/60 to-white p-4 shadow-sm">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-100 text-lg shadow-sm">📍</div>
-                <div>
-                  <h3 className="text-sm font-bold text-teal-900">In-Person Hangouts</h3>
-                  <p className="text-[10px] text-teal-600/80">For friends nearby</p>
-                </div>
-              </div>
-
-              {/* Neighborhoods */}
               <div className="space-y-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-700 mb-1">Neighborhoods</label>
@@ -1196,51 +1241,6 @@ export default function SettingsPage() {
         </>
         )}
 
-        {activeTab === 'privacy' && (
-          <section>
-            <div className="flex items-center gap-3 mb-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">1</span>
-              <h2 className="text-sm font-bold text-gray-800">Privacy & Sharing</h2>
-            </div>
-            <div className="space-y-4 pl-4 sm:pl-10">
-              <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs">👥</span>
-                      <label className="text-[11px] font-semibold text-gray-700">
-                        Share hangout activity
-                      </label>
-                    </div>
-                    <p className="mt-0.5 text-[10px] text-gray-400">
-                      {shareHangouts
-                        ? 'Friends only see a simple "You caught up with [Name]" signal when both people enable sharing.'
-                        : 'Your hangouts stay private.'}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={shareHangouts}
-                    onClick={() => setShareHangouts(!shareHangouts)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                      shareHangouts ? 'bg-slotted-500' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                      shareHangouts ? 'translate-x-[18px]' : 'translate-x-[3px]'
-                    }`} />
-                  </button>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
-                <p className="text-[11px] leading-relaxed text-gray-500">
-                  Slotted uses calendar busy/free to suggest times and does not share event titles, attendees, or descriptions with friends.
-                </p>
-              </div>
-            </div>
-          </section>
-        )}
       </div>
     </AppShell>
   );

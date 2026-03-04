@@ -29,6 +29,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
   const saveDebounceRef = useRef<number | null>(null);
   const hasLoadedRef = useRef(false);
   const lastSavedSelectionRef = useRef('');
+  const calendarsRef = useRef<CalendarInfo[]>([]);
   const { connectCalendar } = useAuth();
 
   const listEndpoint = source === 'apple' ? '/calendar/apple/list' : source === 'outlook' ? '/calendar/outlook/list' : '/calendar/list';
@@ -66,6 +67,10 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
   useEffect(() => {
     fetchCalendars();
   }, [fetchCalendars]);
+
+  useEffect(() => {
+    calendarsRef.current = calendars;
+  }, [calendars]);
 
   const toggleCalendar = (calendarId: string) => {
     setCalendars(prev =>
@@ -117,6 +122,22 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
       if (saveDebounceRef.current) window.clearTimeout(saveDebounceRef.current);
     };
   }, [calendars, handleSave]);
+
+  useEffect(() => {
+    return () => {
+      if (!hasLoadedRef.current) return;
+      const calendarIds = calendarsRef.current.filter((c) => c.is_selected).map((c) => c.calendar_id);
+      const selectedKey = [...calendarIds].sort().join('|');
+      if (selectedKey === lastSavedSelectionRef.current) return;
+      void api.put('/calendar/selected', { calendarIds, source })
+        .then(() => {
+          lastSavedSelectionRef.current = selectedKey;
+        })
+        .catch((err: any) => {
+          console.error('Failed to save calendar selection on close:', err?.response?.data?.error || err?.message || err);
+        });
+    };
+  }, [source]);
 
   const selectedCount = calendars.filter(c => c.is_selected).length;
 

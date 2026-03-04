@@ -1725,7 +1725,7 @@ export default function DashboardPage() {
                   <button
                     key={opt.value}
                     onClick={() => setLogActivity(logActivity === opt.value ? '' : opt.value)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                    className={`rounded-lg border px-2 py-1.5 text-[11px] font-medium whitespace-nowrap transition-all ${
                       logActivity === opt.value
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
                         : 'border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -1743,7 +1743,7 @@ export default function DashboardPage() {
                   <button
                     key={opt.value}
                     onClick={() => setLogDuration(logDuration === opt.value ? null : opt.value)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                    className={`rounded-lg border px-2 py-1.5 text-[11px] font-medium whitespace-nowrap transition-all ${
                       logDuration === opt.value
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
                         : 'border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -1756,12 +1756,12 @@ export default function DashboardPage() {
             </div>
             <div>
               <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Time</label>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex gap-1.5">
                 {TIME_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => setLogTimeOfDay(logTimeOfDay === opt.value ? '' : opt.value)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                    className={`flex-1 rounded-lg border px-1.5 py-1.5 text-[11px] font-medium whitespace-nowrap text-center transition-all ${
                       logTimeOfDay === opt.value
                         ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm'
                         : 'border-gray-200 text-gray-600 hover:bg-gray-50'

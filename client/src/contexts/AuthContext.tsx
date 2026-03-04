@@ -27,6 +27,7 @@ interface AuthContextType {
   onboardingComplete: boolean;
   calendarConnected: boolean;
   googleCalendarConnected: boolean;
+  googleCalendarStale: boolean;
   calendarJustConnected: boolean;
   appleCalendarConnected: boolean;
   outlookCalendarConnected: boolean;
@@ -39,6 +40,7 @@ interface AuthContextType {
   disconnectAppleCalendar: () => Promise<void>;
   connectOutlookCalendar: () => Promise<void>;
   disconnectOutlookCalendar: () => Promise<void>;
+  verifyCalendarHealth: () => Promise<void>;
   isSigningIn: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -80,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [outlookCalendarConnected, setOutlookCalendarConnected] = useState(() => {
     return localStorage.getItem('slotted_outlook_calendar_connected') === 'true';
   });
+  const [googleCalendarStale, setGoogleCalendarStale] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -361,6 +364,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Verify calendar tokens are actually valid (makes a real API call)
+  const verifyCalendarHealth = useCallback(async () => {
+    try {
+      const { data } = await api.get('/calendar/status?verify=true');
+      if (data?.googleStale) {
+        setGoogleCalendarStale(true);
+        setGoogleCalendarConnected(false);
+        localStorage.removeItem('slotted_google_calendar_connected');
+      } else if (data?.google) {
+        setGoogleCalendarStale(false);
+      }
+    } catch {
+      // silently fail
+    }
+  }, []);
+
   // Check calendar status after auth is confirmed
   useEffect(() => {
     if (user) {
@@ -391,7 +410,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, authError, isNewUser, isSigningIn, onboardingComplete, calendarConnected, googleCalendarConnected, calendarJustConnected, appleCalendarConnected, outlookCalendarConnected, clearNewUser, completeOnboarding, skipOnboarding, connectCalendar, disconnectCalendar, connectAppleCalendar, disconnectAppleCalendar, connectOutlookCalendar, disconnectOutlookCalendar, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, authError, isNewUser, isSigningIn, onboardingComplete, calendarConnected, googleCalendarConnected, googleCalendarStale, calendarJustConnected, appleCalendarConnected, outlookCalendarConnected, clearNewUser, completeOnboarding, skipOnboarding, connectCalendar, disconnectCalendar, connectAppleCalendar, disconnectAppleCalendar, connectOutlookCalendar, disconnectOutlookCalendar, verifyCalendarHealth, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );

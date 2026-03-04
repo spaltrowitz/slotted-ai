@@ -502,6 +502,33 @@ async function createNotification(opts: {
     }
   }
 
+  // Exact-match dedup: same payload within 24h (handles retries/races with identical content)
+  {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60000).toISOString();
+    let query = sb
+      .from("notifications")
+      .select("id")
+      .eq("user_id", opts.userId)
+      .eq("type", opts.type)
+      .eq("title", opts.title)
+      .eq("body", opts.body)
+      .gte("created_at", cutoff)
+      .limit(1);
+
+    query = opts.relatedUserId
+      ? query.eq("related_user_id", opts.relatedUserId)
+      : query.is("related_user_id", null);
+    query = opts.relatedId
+      ? query.eq("related_id", opts.relatedId)
+      : query.is("related_id", null);
+
+    const { data: exactRecent } = await query;
+    if (exactRecent && exactRecent.length > 0) {
+      console.log(`Skipping duplicate notification: ${opts.type} for user ${opts.userId} (exact payload match)`);
+      return;
+    }
+  }
+
   const { error } = await sb.from("notifications").insert({
     user_id: opts.userId,
     type: opts.type,
@@ -670,7 +697,22 @@ app.get("/notifications", requireAuth, async (req: AuthRequest, res: Response) =
       return true;
     });
 
-    res.json(filtered);
+    // Collapse accidental duplicates (same content/context) and keep the newest item only
+    const seen = new Set<string>();
+    const deduped = filtered.filter((n: any) => {
+      const key = [
+        n.type || "",
+        n.related_user_id || "",
+        n.related_id || "",
+        n.title || "",
+        n.body || "",
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    res.json(deduped);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1669,6 +1711,8 @@ app.delete("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: 
       return;
     }
 
+    const otherUserId = friendship.user_a_id === me.id ? friendship.user_b_id : friendship.user_a_id;
+
     // Delete the friendship
     const { error: delErr } = await getSupabase()
       .from("friendships")
@@ -1679,6 +1723,25 @@ app.delete("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: 
       res.status(500).json({ error: delErr.message });
       return;
     }
+
+    // Remove notifications that are specifically about this friendship/user pair
+    await getSupabase()
+      .from("notifications")
+      .delete()
+      .eq("user_id", me.id)
+      .eq("related_user_id", otherUserId);
+
+    await getSupabase()
+      .from("notifications")
+      .delete()
+      .eq("user_id", otherUserId)
+      .eq("related_user_id", me.id);
+
+    await getSupabase()
+      .from("notifications")
+      .delete()
+      .in("user_id", [me.id, otherUserId])
+      .eq("related_id", friendshipId);
 
     res.json({ success: true });
   } catch (err: any) {
@@ -7127,20 +7190,114 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
 app.get("/calendar/status", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const user = await getDbUser(req.uid!);
-    const googleAccessValid = !!(
-      user?.google_access_token &&
-      (!user?.google_token_expires_at || new Date(user.google_token_expires_at).getTime() > Date.now() - 60_000)
-    );
-    const googleConnected = !!user?.google_refresh_token || googleAccessValid;
+    const hasGoogleTokens = !!user?.google_refresh_token;
     const appleConnected = !!(user?.apple_calendar_connected && user?.apple_caldav_username);
     const outlookConnected = !!(user?.outlook_calendar_connected && user?.outlook_refresh_token);
+
+    // If ?verify=true, actually test the Google token with a lightweight API call
+    let googleConnected = hasGoogleTokens;
+    let googleStale = false;
+    if (req.query.verify === "true" && hasGoogleTokens) {
+      try {
+        const oauth2 = await getAuthedCalendarClient(req.uid!);
+        if (oauth2) {
+          const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+          await calendarApi.calendarList.list({ maxResults: 1 });
+        } else {
+          googleConnected = false;
+          googleStale = true;
+        }
+      } catch (verifyErr: any) {
+        const status = verifyErr?.code || verifyErr?.response?.status;
+        if (status === 401 || status === 403) {
+          googleConnected = false;
+          googleStale = true;
+        }
+      }
+    }
+
     res.json({
       connected: googleConnected || appleConnected || outlookConnected,
       google: googleConnected,
+      googleStale,
       apple: appleConnected,
       outlook: outlookConnected,
       appleUsername: user?.apple_caldav_username || null,
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /admin/calendar-health — check token validity for all connected users (admin only) */
+app.get("/admin/calendar-health", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    // Simple admin check: only allow the app owner
+    if (!me?.email || !["sharipaltrowitz@gmail.com"].includes(me.email)) {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+
+    const { data: users } = await getSupabase()
+      .from("users")
+      .select("id, email, display_name, google_refresh_token, apple_calendar_connected, apple_caldav_username, outlook_calendar_connected, outlook_refresh_token")
+      .or("google_refresh_token.not.is.null,apple_calendar_connected.eq.true,outlook_calendar_connected.eq.true");
+
+    const results: {
+      email: string;
+      name: string | null;
+      google: "valid" | "stale" | "none";
+      apple: "connected" | "none";
+      outlook: "connected" | "none";
+    }[] = [];
+
+    for (const u of users || []) {
+      let googleStatus: "valid" | "stale" | "none" = "none";
+      if (u.google_refresh_token) {
+        // Look up firebase_uid for this user to test their token
+        const { data: fullUser } = await getSupabase()
+          .from("users")
+          .select("firebase_uid")
+          .eq("id", u.id)
+          .single();
+
+        if (fullUser?.firebase_uid) {
+          try {
+            const oauth2 = await getAuthedCalendarClient(fullUser.firebase_uid);
+            if (oauth2) {
+              const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+              await calendarApi.calendarList.list({ maxResults: 1 });
+              googleStatus = "valid";
+            } else {
+              googleStatus = "stale";
+            }
+          } catch {
+            googleStatus = "stale";
+          }
+        } else {
+          googleStatus = "stale";
+        }
+      }
+
+      results.push({
+        email: u.email,
+        name: u.display_name,
+        google: googleStatus,
+        apple: u.apple_calendar_connected ? "connected" : "none",
+        outlook: u.outlook_calendar_connected ? "connected" : "none",
+      });
+    }
+
+    const summary = {
+      total: results.length,
+      googleValid: results.filter((r) => r.google === "valid").length,
+      googleStale: results.filter((r) => r.google === "stale").length,
+      appleConnected: results.filter((r) => r.apple === "connected").length,
+      outlookConnected: results.filter((r) => r.outlook === "connected").length,
+    };
+
+    res.json({ summary, users: results });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

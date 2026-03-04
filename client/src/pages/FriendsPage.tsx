@@ -226,10 +226,13 @@ export default function FriendsPage() {
         body: JSON.stringify({ friendshipType: targetType }),
       });
       if (!res.ok) throw new Error('Failed to update friendship type');
+      await fetchFriends();
+      return true;
     } catch (err) {
       console.error('Failed to update friendship type:', err);
       setFriends(previousFriends);
       alert('Failed to update friend location. Please try again.');
+      return false;
     }
   };
 
@@ -953,14 +956,14 @@ export default function FriendsPage() {
                 <p className="mb-2 text-[11px] font-medium text-gray-600">Move a friend to Long Distance mode:</p>
                 <div className="flex flex-wrap gap-2">
                   {localFriends.map((friend) => (
-                    <button
-                      key={friend.friendshipId}
-                      onClick={() => {
-                        void handleToggleFriendshipType(friend, 'long_distance');
-                        setShowAddLongDistancePicker(false);
-                      }}
-                      className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-blue-300 hover:text-blue-700"
-                    >
+                      <button
+                        key={friend.friendshipId}
+                        onClick={async () => {
+                          const success = await handleToggleFriendshipType(friend, 'long_distance');
+                          if (success) setShowAddLongDistancePicker(false);
+                        }}
+                        className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-blue-300 hover:text-blue-700"
+                      >
                       + {friend.friend.displayName.split(' ')[0]}
                     </button>
                   ))}
