@@ -78,3 +78,44 @@ Code review identified 15/30 test scenarios fully covered, 9/30 partial, 4/30 mi
 - **Fix:** After clearing the stale token, immediately retries `events.list` without `syncToken` (full sync). Processes the returned events and saves the new sync token. Wrapped in its own try/catch so a retry failure doesn't mask the original 410 handling.
 - **Guard against infinite loops:** Only one retry per webhook call — the retry doesn't use a sync token, so it can't get another 410. If the retry itself fails for a different reason, it logs and moves on.
 - **Pattern:** For Google Calendar sync, always handle 410 with clear-and-retry-immediately, not clear-and-wait.
+
+### Notification Dedup Review (2025-07-25)
+
+**Reviewed the duplicate notifications fix. Found and fixed a critical issue in the migration.**
+
+#### What Was Already Fixed (Confirmed Good) ✅
+- `createNotification` dedup logic: cascading checks (relatedUserId 1hr → relatedId 5min → title 10min). Correctly detects duplicates across code paths that use different field combinations.
+- Removed buggy `.single()` dedup in connect-referral and PATCH friends accept — both now rely on createNotification's internal dedup.
+- 23505 constraint violation handler silently catches DB-level dupes.
+
+#### Issue Found & Fixed: Unique Index Too Broad ❌→✅
+- **Problem:** The migration's unique partial index covered both `friend_accepted` AND `friend_request` types. But `friend_accepted` is **reused for group membership notifications** (added to group, removed from group) at lines 3298, 3319, 3408, 3428. These use the same `(user_id, type, related_user_id)` tuple as real friend acceptance notifications. The index would silently block legitimate group notifications via the 23505 handler.
+- **Fix:** Narrowed the unique index to `friend_request` only. App-level dedup handles `friend_accepted` correctly.
+- **Also fixed:** Step 1 DELETE was too aggressive — deduplicating ALL notification types including meetups and calendar_match. Scoped it to only `friend_request` (safe, single call site) and `friend_accepted` with title pattern matching to avoid deleting group notifications.
+
+#### Key Pattern: `friend_accepted` Type Overload
+- `friend_accepted` is used for: actual friend acceptances, group add notifications, group remove notifications. This type overloading is tech debt — a future `group_update` type would be cleaner.
+- **Never add DB unique constraints on `friend_accepted` notifications** without accounting for group usage.
+
+#### All createNotification("friend_accepted") Call Sites Verified
+- Line 838: auto-connect from pending invites (relatedUserId only)
+- Line 1474: connect-referral (relatedUserId + relatedId)
+- Line 1559: PATCH friends accept (relatedUserId + relatedId)
+- Lines 3298, 3319, 3408, 3430: group membership changes (relatedUserId only)
+- All covered by the 1-hour relatedUserId dedup window. No remaining race conditions.
+
+### Notification Dedup Review & Hardening (2026-03-04)
+
+**Session:** Zuko reviewed & hardened dedup migration; Sokka created comprehensive E2E test suite.
+
+#### Migration Hardening
+- Narrowed unique index from both `friend_accepted` AND `friend_request` to `friend_request` only
+- Root cause: `friend_accepted` overloaded for group membership changes; DB constraint would silently block legitimate group notifications
+- Scoped cleanup DELETE to title-matched friend acceptance patterns
+- Tech debt: future `group_update` type would enable proper unique index on friend_accepted
+
+#### Test Coverage (Sokka)
+- 6-test scenario suite in `tests/agents/src/scenarios/notification-dedup.ts`
+- Added `connectReferral()` and `acceptFriendshipAction()` to client SDK
+- Tests: single connect, rapid reconnect dedup, type coexistence, user pair independence, global invariants
+- Run: `npm run scenario:notification-dedup` from `tests/agents/`

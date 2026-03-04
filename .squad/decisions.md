@@ -558,3 +558,127 @@ This was the critical growth-loop fix — invite links were 404ing before this c
 **Next sprint:** Backend split + integration tests (unblock velocity)  
 **Following:** GDPR + email fallback + onboarding pipeline  
 **V2:** Two-way sync + recurring commitments
+
+---
+
+## Decision: Narrow Notification Dedup Index to friend_request Only (Zuko, 2026-03-04)
+
+| Field | Value |
+|---|---|
+| **Author** | Zuko (Backend Dev) |
+| **Date** | 2026-03-04 |
+| **Status** | Applied (migration updated) |
+| **Scope** | Notification deduplication hardening |
+
+### Context
+
+The `deduplicate_notifications.sql` migration originally created a unique partial index on `(user_id, type, related_user_id) WHERE type IN ('friend_accepted', 'friend_request')`. Root cause found during hardening review: `friend_accepted` type is **overloaded** — it's used for actual friend acceptances AND for group membership notifications (added/removed from groups at lines 3298, 3319, 3408, 3430).
+
+### Problem
+
+The unique index would silently block legitimate group notifications because the `(user_id, type, related_user_id)` tuple collides between friend and group contexts. The 23505 constraint handler catches these collisions and silently skips them, which is correct behavior for duplicates but wrong for group notifications.
+
+### Decision
+
+1. **Unique index only on `friend_request`** — safe because it has a single call site and should never have legitimate duplicates.
+2. **No DB constraint on `friend_accepted`** — app-level dedup (1-hour window on relatedUserId) handles it. The type overloading makes a DB constraint unsafe.
+3. **Scoped the cleanup DELETE** to only target `friend_request` and `friend_accepted` with title pattern matching, avoiding collateral deletion of group or meetup notifications.
+
+### Future Tech Debt
+
+The `friend_accepted` type should be split: actual friend acceptances vs. a new `group_update` type. This would allow a proper unique index on real friend_accepted notifications. Requires schema + frontend changes — flagging for a future sprint.
+
+### Impact
+
+- Migration file: `migrations/deduplicate_notifications.sql` (narrowed index + scoped cleanup)
+- No code changes to `functions/src/index.ts` (createNotification logic is correct as-is)
+
+---
+
+## Decision: Notification Dedup Test Coverage (Sokka, 2026-03-04)
+
+| Field | Value |
+|---|---|
+| **Author** | Sokka (Tester) |
+| **Date** | 2026-03-04 |
+| **Status** | Implemented |
+| **Scope** | E2E test suite for notification deduplication |
+
+### What
+
+Created `tests/agents/src/scenarios/notification-dedup.ts` with 6 E2E tests covering the cascading dedup fix in `createNotification()`. Added `connectReferral()` and `acceptFriendshipAction()` methods to the `SlottedClient`.
+
+### Tests
+
+1. **Single notification on referral connect** — cleans slate, connects via referral, asserts exactly 1 friend_accepted notification
+2. **No duplicate on rapid reconnect** — fires connect-referral twice in succession, asserts still only 1 notification
+3. **Different types coexist** — friend_accepted and other types for the same user pair are not cross-deduped
+4. **Different user pairs produce separate notifications** — planner gets friend_accepted from both spontaneous and flaky
+5. **Global invariant: no duplicate friend_accepted per user pair** — scans all agents
+6. **Global invariant: no duplicate friend_request per user pair** — scans all agents
+
+### Pre-existing Issue Noted
+
+`acceptFriendship()` in the client sends `{ status: "accepted" }` but the backend PATCH /friends/:friendshipId expects `{ action: "accept" }`. Added `acceptFriendshipAction()` with the correct payload rather than fixing the existing method (would break other scenarios that depend on it).
+
+### For Team
+
+- Run with: `npm run scenario:notification-dedup` from `tests/agents/`
+- Tests compile clean (`tsc --noEmit` passes)
+- Tests require live backend + credentials to actually execute
+
+---
+
+## Decision: Group Meetup Time Changes Require Consent (Zuko, 2026-03-04)
+
+| Field | Value |
+|---|---|
+| **Author** | Zuko (Backend Dev) |
+| **Date** | 2026-03-04 |
+| **Status** | Implemented |
+| **Scope** | `processCalendarChanges` in `functions/src/index.ts` |
+
+### Context
+
+Sokka's QA review (HIGH-1) identified that when a meetup creator drags a calendar event to a new time, the system auto-updated the meetup time for ALL participants — including group meetups. This violates Slotted's "no social pressure" principle: one person shouldn't unilaterally reschedule a group.
+
+### Decision
+
+- **Group meetups (3+ participants):** Creator time changes via Google Calendar do NOT auto-update the meetup. Instead, all other participants receive a notification: "wants to change the time" with the proposed new time. The meetup keeps its original time.
+- **1:1 meetups (2 participants):** Auto-update behavior is preserved. The other participant gets a "updated the time" notification (existing behavior).
+
+### Rationale
+
+- Group dynamics are fundamentally different from 1:1. Changing a group's schedule requires buy-in.
+- Notification language is intentionally soft ("wants to" vs "updated") per Slotted design principles.
+- Future work: a proper counter-propose/vote flow for group time changes. For now, notification-only is the safe default.
+
+### Trade-offs
+
+- The group's meetup time stays frozen until a proper reschedule mechanism exists. This is better than silently overriding everyone.
+- The creator's Google Calendar event may now be out of sync with the Slotted meetup time (their drag moved it, but Slotted didn't follow). Acceptable for now.
+
+---
+
+## Decision: 410 Stale Sync Token — Immediate Full Sync Retry (Zuko, 2026-03-04)
+
+| Field | Value |
+|---|---|
+| **Author** | Zuko (Backend Dev) |
+| **Date** | 2026-03-04 |
+| **Status** | Implemented |
+| **Scope** | Webhook handler in `functions/src/index.ts` |
+
+### Decision
+
+When Google returns a 410 (stale sync token), the webhook handler now:
+1. Clears the sync token in the database
+2. Immediately retries with a full sync (no syncToken)
+3. Processes all returned events and saves the new sync token
+
+Previously, it cleared the token and exited — causing a one-webhook delay before sync caught up.
+
+### Guard Rails
+
+- Max 1 retry per webhook call (full sync can't produce another 410)
+- Retry failure is caught separately and logged — doesn't affect the main error handling

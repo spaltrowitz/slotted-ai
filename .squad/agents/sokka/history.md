@@ -10,6 +10,39 @@
 
 <!-- Append learnings below -->
 
+### Notification Dedup Test Suite (2026-07-14)
+
+**Created:** `tests/agents/src/scenarios/notification-dedup.ts` — 6 tests covering the cascading dedup fix in `createNotification`.
+
+**Key patterns discovered:**
+- `SlottedClient` was missing `connectReferral()` and `acceptFriendshipAction()` — added both. The existing `acceptFriendship()` sends `{ status: "accepted" }` but the endpoint expects `{ action: "accept" }`. New method sends the correct payload.
+- The `createNotification` dedup logic is cascading (not if/else): checks `relatedUserId` first (1hr window), then `relatedId` (5min), then `title` (10min). DB unique index is the final safety net (catches 23505 errors silently).
+- Three code paths create `friend_accepted` notifications: POST /users/me (relatedUserId only, no relatedId), POST /friends/connect-referral (both), PATCH /friends/:friendshipId with action=accept (both). The primary dedup on relatedUserId is what prevents duplicates across paths 1 and 2 during signup.
+- Test scenario priority 35 — runs after notifications (30) but before errors (70).
+
+**Files modified:**
+- `tests/agents/src/scenarios/notification-dedup.ts` (new)
+- `tests/agents/src/client.ts` (added `connectReferral`, `acceptFriendshipAction`)
+- `tests/agents/src/runner.ts` (registered new scenario)
+- `tests/agents/package.json` (added npm script)
+
+### Notification Dedup Hardening & E2E Tests (2026-03-04)
+
+**Session:** Zuko reviewed & hardened migration; Sokka created comprehensive E2E test suite.
+
+#### Review & Hardening (Zuko)
+- Found critical issue: unique index on both `friend_accepted` AND `friend_request` types blocked legitimate group notifications (type overloading)
+- Fixed: narrowed to `friend_request` only, scoped cleanup DELETE to title-matched patterns
+- Decision merged: "Narrow Notification Dedup Index to friend_request Only"
+
+#### E2E Test Suite (Sokka)
+- 6 tests in `tests/agents/src/scenarios/notification-dedup.ts`
+- Tests: single connect, rapid reconnect dedup, type coexistence, user pair independence, global invariants
+- Added `connectReferral()` and `acceptFriendshipAction()` SDK methods
+- All tests compile clean; require live backend to execute
+- Run: `npm run scenario:notification-dedup` from `tests/agents/`
+- Decision merged: "Notification Dedup Test Coverage"
+
 ### Phase 4 Priority Recommendations (2026-03-03)
 
 **HIGH-1 (Creator time change override):** Medium-high urgency. Creator dragging a group meetup in GCal silently changes everyone's time with no consent. Fix: route group meetups (3+ participants) through counter-propose; allow direct update only for 1:1s. ~2 hours. Fix before Phase 4.
