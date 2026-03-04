@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -26,6 +26,9 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsReconnect, setNeedsReconnect] = useState(false);
+  const saveDebounceRef = useRef<number | null>(null);
+  const hasLoadedRef = useRef(false);
+  const lastSavedSelectionRef = useRef('');
   const { connectCalendar } = useAuth();
 
   const listEndpoint = source === 'apple' ? '/calendar/apple/list' : source === 'outlook' ? '/calendar/outlook/list' : '/calendar/list';
@@ -36,7 +39,14 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
     setNeedsReconnect(false);
     try {
       const { data } = await api.get(listEndpoint);
-      setCalendars(data.calendars || []);
+      const loadedCalendars: CalendarInfo[] = data.calendars || [];
+      setCalendars(loadedCalendars);
+      lastSavedSelectionRef.current = loadedCalendars
+        .filter((c) => c.is_selected)
+        .map((c) => c.calendar_id)
+        .sort()
+        .join('|');
+      hasLoadedRef.current = true;
     } catch (err: any) {
       const errCode = err.response?.data?.error;
       if (errCode === 'calendar_reconnect_required' || errCode === 'Calendar not connected') {
@@ -74,12 +84,13 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
     setSaved(false);
   };
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     setSaving(true);
     setError(null);
     try {
       const calendarIds = calendars.filter(c => c.is_selected).map(c => c.calendar_id);
-      await api.put('/calendar/selected', { calendarIds });
+      await api.put('/calendar/selected', { calendarIds, source });
+      lastSavedSelectionRef.current = [...calendarIds].sort().join('|');
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
       onSaved?.();
@@ -88,7 +99,24 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
     } finally {
       setSaving(false);
     }
-  };
+  }, [calendars, onSaved, source]);
+
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+    const selectedKey = calendars
+      .filter((c) => c.is_selected)
+      .map((c) => c.calendar_id)
+      .sort()
+      .join('|');
+    if (selectedKey === lastSavedSelectionRef.current) return;
+    if (saveDebounceRef.current) window.clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = window.setTimeout(() => {
+      void handleSave();
+    }, 450);
+    return () => {
+      if (saveDebounceRef.current) window.clearTimeout(saveDebounceRef.current);
+    };
+  }, [calendars, handleSave]);
 
   const selectedCount = calendars.filter(c => c.is_selected).length;
 

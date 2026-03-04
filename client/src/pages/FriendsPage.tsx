@@ -406,11 +406,11 @@ export default function FriendsPage() {
   const renderFriendCard = (f: FriendRecord, i: number, arr: FriendRecord[]) => (
     <div
       key={f.friendshipId}
-      className={`flex items-center justify-between gap-3 px-4 py-4 transition-colors hover:bg-gray-50/50 ${
+      className={`flex items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 transition-colors hover:bg-gray-50/50 ${
         i !== arr.length - 1 ? 'border-b border-gray-100' : ''
       }`}
     >
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         {f.friend.photoUrl ? (
           <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" />
         ) : (
@@ -418,11 +418,11 @@ export default function FriendsPage() {
             {f.friend.displayName?.[0] ?? '?'}
           </div>
         )}
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900 truncate">
+        <div className="min-w-0 w-full">
+          <p className="text-sm sm:text-sm font-medium text-gray-900 truncate">
             {f.friend.displayName}
             {f.friend.socialBattery && (
-              <span className="ml-1.5 relative inline-flex items-center gap-1 group cursor-default">
+              <span className="ml-1.5 relative hidden sm:inline-flex items-center gap-1 group cursor-default">
                 {batteryEmoji(f.friend.socialBattery)}
                 <span className="text-[10px] text-gray-400 md:hidden">{batteryLabel(f.friend.socialBattery)}</span>
                 <span className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-800 px-2.5 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 md:block">
@@ -431,7 +431,7 @@ export default function FriendsPage() {
               </span>
             )}
           </p>
-          <p className="text-xs text-gray-400 truncate">
+          <p className="hidden sm:block text-xs text-gray-400 truncate">
             {f.friend.email}
             <span className={`ml-2 inline-flex items-center gap-0.5 ${f.friend.calendarConnected ? 'text-green-500' : 'text-gray-300'}`}>
               {f.friend.calendarConnected ? '📅' : '📅'}
@@ -442,7 +442,7 @@ export default function FriendsPage() {
           {(() => {
             const shared = (f.friend.eventInterests || []).filter(i => myEventInterests.includes(i));
             return shared.length > 0 ? (
-              <div className="mt-1 flex flex-wrap gap-1">
+              <div className="mt-1 hidden sm:flex flex-wrap gap-1">
                 {shared.map(i => {
                   const info = INTEREST_LABELS[i];
                   return info ? (
@@ -461,7 +461,7 @@ export default function FriendsPage() {
             const isOverdue = cadence && days > cadence;
             const firstName = f.friend.displayName.split(' ')[0];
             return (
-              <div className={`mt-1.5 flex items-center gap-1.5 text-[11px] leading-tight ${
+              <div className={`mt-1.5 hidden sm:flex items-center gap-1.5 text-[11px] leading-tight ${
                 isOverdue ? 'text-amber-600' : 'text-gray-400'
               }`}>
                 <span>{isOverdue ? '⏰' : '📅'}</span>
@@ -483,10 +483,10 @@ export default function FriendsPage() {
           })()}
         </div>
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={() => handleFindTimes(f.friend.id, f.friend.displayName)}
-          className={`rounded-xl px-3 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
+          className={`rounded-xl px-2.5 py-2 sm:px-3 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
             selectedFriendId === f.friend.id
               ? 'bg-slotted-500 text-white'
               : 'gradient-btn text-white'
@@ -494,17 +494,9 @@ export default function FriendsPage() {
         >
           {selectedFriendId === f.friend.id ? '✨ Viewing' : '✨ Find times'}
         </button>
-        <a
-          href={`/events?friend=${f.friend.id}&name=${encodeURIComponent(f.friend.displayName?.split(' ')[0] || '')}`}
-          onClick={(e) => e.stopPropagation()}
-          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-slotted-200 hover:text-slotted-600"
-          title="Find an event to go to together"
-        >
-          🎟️ Go together
-        </a>
         <button
           onClick={() => setRemovingFriend(f)}
-          className="rounded-lg p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+          className="hidden sm:inline-flex rounded-lg p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
           title="Remove friend"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
@@ -938,7 +930,7 @@ export default function FriendsPage() {
 
           {/* Long-distance friends section — always visible */}
           <div className="mb-6">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex items-center">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
                 Long Distance {longDistanceFriends.length > 0 ? `· ${longDistanceFriends.length}` : ''}
               </h2>
@@ -946,7 +938,11 @@ export default function FriendsPage() {
                 onClick={() => setShowAddLongDistancePicker((prev) => !prev)}
                 disabled={localFriends.length === 0}
                 title="Add a friend to Long Distance mode for optimized call/video call times"
-                className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-500 transition-all hover:border-slotted-300 hover:text-slotted-600 disabled:cursor-not-allowed disabled:opacity-40"
+                className={`ml-2 rounded-lg border px-2 py-1.5 text-xs font-semibold transition-all ${
+                  showAddLongDistancePicker
+                    ? 'border-purple-300 bg-purple-100 text-purple-700'
+                    : 'border-gray-200 text-gray-400 hover:text-purple-600 hover:border-purple-200'
+                } disabled:cursor-not-allowed disabled:opacity-40`}
               >
                 +
               </button>

@@ -239,7 +239,6 @@ export default function NotificationsPage() {
     );
     const isFriendJoinedNotification =
       notification.type === 'friend_accepted' &&
-      !!notification.related_user_id &&
       !isGroupMembershipUpdate;
 
     if (notification.type === 'calendar_match' && notification.related_user_id && !isSharedEvent) {
@@ -248,7 +247,12 @@ export default function NotificationsPage() {
     }
 
     if (isFriendJoinedNotification) {
-      navigate(`/friends?findTimes=${encodeURIComponent(notification.related_user_id!)}`);
+      if (notification.related_user_id) {
+        navigate(`/friends?findTimes=${encodeURIComponent(notification.related_user_id)}`);
+      } else {
+        navigate('/friends');
+      }
+      return;
     }
   };
 
@@ -328,23 +332,23 @@ export default function NotificationsPage() {
               <div
                 key={notification.id}
                 onClick={() => handleNotificationClick(notification)}
-                className={`flex items-start gap-4 rounded-2xl border ${
+                className={`flex items-start gap-2.5 rounded-xl border ${
                   notification.read ? 'border-gray-100 bg-white' : `${config.border} ${config.bg} cursor-pointer`
-                } p-5 shadow-sm transition-all hover:shadow-md`}
+                } px-3 py-2.5 shadow-sm transition-all hover:shadow-md`}
               >
                 {notification.related_user?.photo_url ? (
                   <img
                     src={notification.related_user.photo_url}
                     alt=""
-                    className="mt-0.5 h-10 w-10 rounded-full ring-2 ring-white shadow-sm"
+                    className="mt-0.5 h-8 w-8 rounded-full ring-2 ring-white shadow-sm"
                   />
                 ) : (
-                  <span className="mt-0.5 text-xl">{config.emoji}</span>
+                  <span className="mt-0.5 text-base">{config.emoji}</span>
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className={`text-sm font-semibold ${notification.read ? 'text-gray-700' : 'text-gray-900'}`}>
+                      <p className={`text-xs font-semibold ${notification.read ? 'text-gray-700' : 'text-gray-900'}`}>
                         {notification.title}
                       </p>
                       {/* Shared event card rendering */}
@@ -352,51 +356,46 @@ export default function NotificationsPage() {
                         const sharedEvent = parseSharedEvent(notification.body);
                         if (sharedEvent) {
                           return (
-                            <div className="mt-2">
+                            <div className="mt-1.5">
                               <a
                                 href={sharedEvent.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3 transition-all hover:shadow-md hover:border-slotted-200"
+                                className="flex items-center gap-2.5 rounded-lg border border-gray-200 bg-white p-2 transition-all hover:shadow-md hover:border-slotted-200"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {sharedEvent.imageUrl ? (
-                                  <img src={sharedEvent.imageUrl} alt="" className="h-14 w-14 rounded-lg object-cover shrink-0 shadow-sm" />
+                                  <img src={sharedEvent.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover shrink-0 shadow-sm" />
                                 ) : (
-                                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-purple-100 to-pink-100 text-xl">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-purple-100 to-pink-100 text-base">
                                     🎟️
                                   </div>
                                 )}
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-semibold text-gray-900 truncate">{sharedEvent.title}</p>
-                                  <p className="text-xs text-gray-500 truncate">
+                                  <p className="text-xs font-semibold text-gray-900 truncate">{sharedEvent.title}</p>
+                                  <p className="text-[10px] text-gray-500 truncate">
                                     {sharedEvent.datetimeLocal ? new Date(sharedEvent.datetimeLocal).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''}
                                     {sharedEvent.venue ? ` · ${sharedEvent.venue}` : ''}
                                   </p>
-                                  {sharedEvent.priceMin !== undefined && (
-                                    <p className="text-[11px] text-gray-400 mt-0.5">
-                                      {sharedEvent.priceMin === 0 ? 'Free' : `From $${sharedEvent.priceMin}`}
-                                    </p>
-                                  )}
                                 </div>
-                                <span className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-slotted-600 hover:bg-slotted-50 transition-colors">
-                                  🎟️ Tickets
+                                <span className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-slotted-600 hover:bg-slotted-50 transition-colors">
+                                  🎟️
                                 </span>
                               </a>
                               {sharedEvent.senderMessage && (
-                                <p className="mt-1.5 text-xs text-gray-500 italic">"{sharedEvent.senderMessage}"</p>
+                                <p className="mt-1 text-[11px] text-gray-500 italic">"{sharedEvent.senderMessage}"</p>
                               )}
                             </div>
                           );
                         }
                         return (
-                          <p className="mt-0.5 text-sm text-gray-500">
+                          <p className="mt-0.5 text-[11px] text-gray-500 leading-snug">
                             <NotificationBody text={notification.body} />
                           </p>
                         );
                       })()}
                     </div>
-                    <span className="shrink-0 text-xs text-gray-400">{timeAgo(notification.created_at)}</span>
+                    <span className="shrink-0 text-[10px] text-gray-400">{timeAgo(notification.created_at)}</span>
                     <button
                       onClick={(e) => { e.stopPropagation(); dismissNotification(notification.id); }}
                       className="shrink-0 rounded-full p-1 text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-all ml-1"
@@ -410,9 +409,9 @@ export default function NotificationsPage() {
 
                   {/* Friend request accept/decline buttons */}
                   {notification.type === 'friend_request' && notification.related_id && (
-                    <div className="mt-3">
+                    <div className="mt-2">
                       {friendRequestDone[notification.id] ? (
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border ${
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium border ${
                           friendRequestDone[notification.id] === 'accept'
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : 'border-gray-200 bg-gray-50 text-gray-600'
@@ -420,11 +419,11 @@ export default function NotificationsPage() {
                           {friendRequestDone[notification.id] === 'accept' ? '✅ Accepted' : '❌ Declined'}
                         </span>
                       ) : (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1.5">
                           <button
                             onClick={(e) => { e.stopPropagation(); handleFriendRequest(notification.id, notification.related_id!, 'accept'); }}
                             disabled={friendRequestLoading === notification.id}
-                            className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm disabled:opacity-50"
+                            className="rounded-lg bg-emerald-500 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm disabled:opacity-50"
                           >
                             {friendRequestLoading === notification.id ? '...' : '✅ Accept'}
                           </button>
@@ -442,9 +441,9 @@ export default function NotificationsPage() {
 
                   {/* Meetup RSVP buttons */}
                   {notification.type === 'meetup_request' && notification.related_id && (
-                    <div className="mt-3">
+                    <div className="mt-2">
                       {rsvpDone[notification.id] ? (
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border ${
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium border ${
                           rsvpDone[notification.id] === 'accepted'
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : rsvpDone[notification.id] === 'maybe'
@@ -456,18 +455,18 @@ export default function NotificationsPage() {
                           {rsvpDone[notification.id] === 'accepted' ? '✅ Accepted' : rsvpDone[notification.id] === 'maybe' ? '🤔 Maybe' : rsvpDone[notification.id] === 'counter_proposed' ? '🔄 Suggested new time' : 'Not this time'}
                         </span>
                       ) : (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1.5">
                           <button
                             onClick={(e) => { e.stopPropagation(); handleRsvp(notification.id, notification.related_id!, 'accepted'); }}
                             disabled={rsvpLoading === notification.id}
-                            className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm disabled:opacity-50"
+                            className="rounded-lg bg-emerald-500 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm disabled:opacity-50"
                           >
                             {rsvpLoading === notification.id ? '...' : '✅ Accept'}
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleRsvp(notification.id, notification.related_id!, 'maybe'); }}
                             disabled={rsvpLoading === notification.id}
-                            className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-700 transition-all hover:bg-amber-100 disabled:opacity-50"
+                            className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-700 transition-all hover:bg-amber-100 disabled:opacity-50"
                           >
                             🤔 Maybe
                           </button>
@@ -481,7 +480,7 @@ export default function NotificationsPage() {
                               }
                             }}
                             disabled={rsvpLoading === notification.id}
-                            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 disabled:opacity-50"
+                            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-medium text-gray-600 transition-all hover:bg-gray-50 disabled:opacity-50"
                           >
                             Not this time
                           </button>

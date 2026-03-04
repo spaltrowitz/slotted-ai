@@ -520,6 +520,25 @@ async function createNotification(opts: {
     return;
   }
 
+  // Post-insert race-condition cleanup: if concurrent inserts slipped past the
+  // pre-check (TOCTOU), keep the oldest and delete extras.
+  if (opts.relatedUserId) {
+    const cutoff = new Date(Date.now() - 60 * 60000).toISOString();
+    const { data: dupes } = await sb
+      .from("notifications")
+      .select("id, created_at")
+      .eq("user_id", opts.userId)
+      .eq("type", opts.type)
+      .eq("related_user_id", opts.relatedUserId)
+      .gte("created_at", cutoff)
+      .order("created_at", { ascending: true });
+    if (dupes && dupes.length > 1) {
+      const idsToDelete = dupes.slice(1).map((d: any) => d.id);
+      await sb.from("notifications").delete().in("id", idsToDelete);
+      console.log(`Cleaned up ${idsToDelete.length} duplicate notification(s): ${opts.type} for user ${opts.userId}`);
+    }
+  }
+
   //Send FCM push notification
   try {
     const { data: tokens } = await getSupabase()
@@ -3425,6 +3444,7 @@ app.put("/groups/:id", requireAuth, async (req: AuthRequest, res: Response) => {
             title: `Removed from "${group.name || 'a group'}"`,
             body: `You were removed from the group "${group.name || ''}" by ${me.display_name || "the group owner"}.`,
             relatedUserId: me.id,
+            relatedId: groupId,
           });
         } catch { /* ignore notification errors */ }
       }
@@ -3446,6 +3466,7 @@ app.put("/groups/:id", requireAuth, async (req: AuthRequest, res: Response) => {
               title: `${namesStr} left "${group.name || 'your group'}"`,
               body: `${namesStr} ${removedIds.length === 1 ? 'was' : 'were'} removed from "${group.name || ''}" by ${me.display_name || "the group owner"}.`,
               relatedUserId: me.id,
+              relatedId: groupId,
             });
           } catch { /* ignore */ }
         }
@@ -3535,6 +3556,7 @@ app.post("/groups/:id/members", requireAuth, async (req: AuthRequest, res: Respo
           title: `Added to "${group?.name || 'a group'}"`,
           body: `${me.display_name || "Someone"} added you to the group "${group?.name || ''}" on Slotted`,
           relatedUserId: me.id,
+          relatedId: groupId,
         });
       } catch { /* ignore notification errors */ }
     }
@@ -3555,6 +3577,7 @@ app.post("/groups/:id/members", requireAuth, async (req: AuthRequest, res: Respo
           title: `${namesStr} joined "${group?.name || 'your group'}"`,
           body: `${me.display_name || "Someone"} added ${namesStr} to the group "${group?.name || ''}"`,
           relatedUserId: me.id,
+          relatedId: groupId,
         });
       } catch { /* ignore */ }
     }
@@ -8481,9 +8504,13 @@ app.get("/calendar/selected", requireAuth, async (req: AuthRequest, res: Respons
 
 /** PUT /calendar/selected — update which calendars are selected */
 app.put("/calendar/selected", requireAuth, async (req: AuthRequest, res: Response) => {
-  const { calendarIds } = req.body; // array of Google Calendar IDs to select
+  const { calendarIds, source = "google" } = req.body; // array of provider calendar IDs to select
   if (!Array.isArray(calendarIds)) {
     res.status(400).json({ error: "calendarIds must be an array" });
+    return;
+  }
+  if (!["google", "apple", "outlook"].includes(source)) {
+    res.status(400).json({ error: "source must be google, apple, or outlook" });
     return;
   }
   try {
@@ -8497,13 +8524,15 @@ app.put("/calendar/selected", requireAuth, async (req: AuthRequest, res: Respons
     await getSupabase()
       .from("user_calendars")
       .update({ is_selected: false })
-      .eq("user_id", dbUser.id);
+      .eq("user_id", dbUser.id)
+      .eq("source", source);
 
     if (calendarIds.length > 0) {
       await getSupabase()
         .from("user_calendars")
         .update({ is_selected: true })
         .eq("user_id", dbUser.id)
+        .eq("source", source)
         .in("calendar_id", calendarIds);
     }
 

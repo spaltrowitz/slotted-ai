@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 const navItems = [
@@ -44,6 +45,56 @@ const navItems = [
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const location = useLocation();
+  const touchStartY = useRef<number | null>(null);
+  const pullDistance = useRef(0);
+  const isPulling = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('ontouchstart' in window)) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (window.scrollY > 0) {
+        isPulling.current = false;
+        return;
+      }
+      touchStartY.current = e.touches[0]?.clientY ?? null;
+      pullDistance.current = 0;
+      isPulling.current = true;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isPulling.current || touchStartY.current === null || window.scrollY > 0) return;
+      const currentY = e.touches[0]?.clientY ?? touchStartY.current;
+      const delta = currentY - touchStartY.current;
+      if (delta <= 0) {
+        pullDistance.current = 0;
+        return;
+      }
+      pullDistance.current = Math.min(delta, 140);
+      if (delta > 10) {
+        e.preventDefault();
+      }
+    };
+
+    const onTouchEnd = () => {
+      if (isPulling.current && window.scrollY <= 0 && pullDistance.current > 90) {
+        window.location.reload();
+      }
+      touchStartY.current = null;
+      pullDistance.current = 0;
+      isPulling.current = false;
+    };
+
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+  }, []);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f8f7f4] font-sans">

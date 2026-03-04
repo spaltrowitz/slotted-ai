@@ -241,23 +241,41 @@ export default function DashboardPage() {
     if (!userUid) return;
     let active = true;
     setDashboardLoading(true);
+    const loadingFallback = window.setTimeout(() => {
+      if (active) setDashboardLoading(false);
+    }, 1200);
 
-    Promise.allSettled([
-      api.get('/dashboard'),
-      api.get('/activity-feed'),
-      api.get('/meetups'),
-      api.get('/friends'),
-    ]).then(([dashRes, activityRes, meetupsRes, friendsRes]) => {
-      if (!active) return;
-      if (dashRes.status === 'fulfilled') setFriendsToSee(dashRes.value.data.friendsToSee || []);
-      if (activityRes.status === 'fulfilled') setActivities(activityRes.value.data.activities || []);
-      if (meetupsRes.status === 'fulfilled') setMeetups(meetupsRes.value.data.meetups || []);
-      if (friendsRes.status === 'fulfilled') {
-        const accepted = (friendsRes.value.data.friends || []).filter((f: any) => f.status === 'accepted');
+    api.get('/dashboard')
+      .then((res) => {
+        if (!active) return;
+        setFriendsToSee(res.data.friendsToSee || []);
+      })
+      .finally(() => {
+        clearTimeout(loadingFallback);
+        if (active) setDashboardLoading(false);
+      });
+
+    api.get('/activity-feed')
+      .then((res) => {
+        if (!active) return;
+        setActivities(res.data.activities || []);
+      })
+      .catch(() => {});
+
+    api.get('/meetups')
+      .then((res) => {
+        if (!active) return;
+        setMeetups(res.data.meetups || []);
+      })
+      .catch(() => {});
+
+    api.get('/friends')
+      .then((res) => {
+        if (!active) return;
+        const accepted = (res.data.friends || []).filter((f: any) => f.status === 'accepted');
         setAllFriends(accepted.map((f: any) => ({ id: f.friend.id, displayName: f.friend.displayName, photoUrl: f.friend.photoUrl || null })));
-      }
-      setDashboardLoading(false);
-    });
+      })
+      .catch(() => {});
 
     // Load smart event suggestions (non-blocking)
     api.get('/events/suggestions').then((r) => {
@@ -269,7 +287,10 @@ export default function DashboardPage() {
       setSavedEvents((r.data.events || r.data || []).slice(0, 5));
     }).catch(() => {});
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+      clearTimeout(loadingFallback);
+    };
   }, [userUid]); // only depends on UID string, not the mutable User object
 
   // Fetch calendar events (works for both calendar-connected and manual-only users)
@@ -756,7 +777,7 @@ export default function DashboardPage() {
 
       {/* ─── NO UPCOMING HANGOUTS (when user has friends but nothing scheduled) ─── */}
       {!dashboardLoading && allFriends.length > 0 && upcoming.length === 0 && (
-        <div className="mb-4 sm:mb-6 rounded-2xl border border-dashed border-slotted-200 bg-slotted-50/30 p-4 sm:p-6 text-center">
+        <div className="hidden sm:block mb-4 sm:mb-6 rounded-2xl border border-dashed border-slotted-200 bg-slotted-50/30 p-4 sm:p-6 text-center">
           <span className="text-2xl sm:text-3xl">📅</span>
           <h3 className="mt-1.5 sm:mt-2 font-display text-sm sm:text-base font-bold text-gray-900">No hangouts coming up</h3>
           <p className="mt-1 sm:mt-1.5 text-xs sm:text-sm text-gray-500 leading-relaxed max-w-sm mx-auto">
@@ -1549,6 +1570,22 @@ export default function DashboardPage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {!dashboardLoading && allFriends.length > 0 && upcoming.length === 0 && (
+        <div className="sm:hidden mb-6 rounded-2xl border border-dashed border-slotted-200 bg-slotted-50/30 p-4 text-center">
+          <span className="text-2xl">📅</span>
+          <h3 className="mt-1.5 font-display text-sm font-bold text-gray-900">No hangouts coming up</h3>
+          <p className="mt-1 text-xs text-gray-500 leading-relaxed max-w-sm mx-auto">
+            Find a time that works for everyone and book something fun.
+          </p>
+          <Link
+            to="/friends"
+            className="mt-3 inline-flex items-center gap-2 rounded-xl gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+          >
+            👋 Find a time with a friend
+          </Link>
         </div>
       )}
 

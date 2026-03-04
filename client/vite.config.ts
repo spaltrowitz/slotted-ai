@@ -8,6 +8,19 @@ export default defineConfig({
   build: {
     outDir: '../build',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('/firebase/')) return 'vendor-firebase';
+          if (id.includes('/@tanstack/')) return 'vendor-query';
+          if (id.includes('/react-router')) return 'vendor-router';
+          if (id.includes('/react-dom/')) return 'vendor-react-dom';
+          if (id.includes('/react/')) return 'vendor-react';
+          if (id.includes('/axios/')) return 'vendor-axios';
+        },
+      },
+    },
   },
   server: {
     proxy: {
