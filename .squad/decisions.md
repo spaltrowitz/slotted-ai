@@ -682,3 +682,86 @@ Previously, it cleared the token and exited — causing a one-webhook delay befo
 
 - Max 1 retry per webhook call (full sync can't produce another 410)
 - Retry failure is caught separately and logged — doesn't affect the main error handling
+
+---
+
+## Decision: Default Hangout Windows for Meetup Suggestions (Zuko, 2026-03-04)
+
+| Field | Value |
+|---|---|
+| **Author** | Zuko (Backend) |
+| **Date** | 2025-07-25 |
+| **Status** | Implemented |
+| **Scope** | Calendar overlap / suggestion endpoints |
+
+### Context
+
+Slotted was suggesting meetup times like "Sunday 7:30 PM" — technically free on both calendars but not a typical time for friends to hang out.
+
+### Decision
+
+Added a `DEFAULT_HANGOUT_WINDOWS` config that restricts **all suggested meetup times** to:
+
+- **Friday:** 5 PM – 11 PM
+- **Saturday:** 9 AM – 11 PM
+- **Sunday:** 9 AM – 5 PM
+- **Mon–Thu:** No suggestions
+
+This filter applies to `/availability/overlap`, `/availability/group-overlap`, and the `findCalendarMatches` scheduled function. It does NOT apply to external event matching (`/events/match`, `/events/suggestions`) since those have fixed times.
+
+### Trade-offs
+
+- **Pro:** Prevents socially awkward suggestions (Sunday night, weekday mornings).
+- **Pro:** Config is a simple constant — easy to adjust or extend for weeknight hangouts later.
+- **Con:** Users who prefer Monday lunch hangouts won't get suggestions until we add per-user overrides.
+
+### Future Extension
+
+The config could become per-user (stored in the `users` table) to support custom hangout preferences. For now, the system-wide default matches the majority use case.
+
+---
+
+## Decision: Settings Page Information Density (Suki, 2026-03-04)
+
+| Field | Value |
+|---|---|
+| **Author** | Suki (Designer) |
+| **Date** | 2025-07-25 |
+| **Status** | Implemented |
+| **Scope** | Settings page UX cleanup |
+
+### Decision
+
+Strip verbose explanatory text from the Settings page. Each section header now shows only the title (no subtitle). Inline helper text on sub-fields was shortened or removed where the control's label is self-explanatory. Redundant summary/info boxes were removed.
+
+### What Changed
+
+1. **Section headers**: Removed all "We use this to..." subtitles from sections 1–5. The numbered badges + title are sufficient.
+2. **Share hangout toggle**: Collapsed from toggle + separate status box into a single card with dynamic subtitle text.
+3. **Social Battery summary**: Removed the dynamic "💡 Slotted.ai will..." summary box — it just restated the user's selection.
+4. **Event Interests info box**: Removed the blue "💡 These preferences help..." note — self-evident.
+5. **Feedback**: Shortened header from "Share Feedback" to "Feedback", trimmed copy.
+6. **Spacing**: `space-y-10` → `space-y-6` between sections, `p-5` → `p-4` on cards, tightened inner dividers from `mt-4 pt-4` to `mt-3 pt-3`.
+7. **Sub-field labels**: Shortened ("Where are you based?" → "Neighborhoods", "When are you free to hang out?" → "When are you free?", etc.) and removed sub-descriptions where the label is sufficient.
+
+### Rationale
+
+Settings pages are for returning users who know what they want to change. Verbose explanations belong in onboarding, not settings. Every line of text the user doesn't need to read is friction.
+
+---
+
+## Directive: Default Hangout Windows (Shari, 2026-03-04)
+
+| Field | Value |
+|---|---|
+| **Author** | Shari Paltrowitz (via Copilot) |
+| **Date** | 2026-03-04 |
+| **Type** | User directive |
+
+### Request
+
+Default suggested meetup times should be: Friday evening (after work), Saturday all day, Sunday until 5 PM. Sunday 7:30 PM is not a normal time to suggest people hang out. No suggestions outside these windows.
+
+### Notes
+
+Captured for team memory. Aligns with implemented hangout windows decision.

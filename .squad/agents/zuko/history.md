@@ -119,3 +119,34 @@ Code review identified 15/30 test scenarios fully covered, 9/30 partial, 4/30 mi
 - Added `connectReferral()` and `acceptFriendshipAction()` to client SDK
 - Tests: single connect, rapid reconnect dedup, type coexistence, user pair independence, global invariants
 - Run: `npm run scenario:notification-dedup` from `tests/agents/`
+
+### Default Hangout Windows Filter (2025-07-25)
+
+**Added a system-wide filter to restrict suggested meetup times to socially appropriate windows.**
+
+#### What Was Added
+- `DEFAULT_HANGOUT_WINDOWS` constant in `functions/src/index.ts` (~line 2355): configurable per-day-of-week hour ranges
+- `filterOverlapsToHangoutWindows()` helper: intersects overlap ranges with the allowed windows, timezone-aware via `zonedToUtc`
+- Windows: Friday 5–11 PM, Saturday 9 AM–11 PM, Sunday 9 AM–5 PM. Mon–Thu: no suggestions.
+
+#### Endpoints Affected
+1. **`GET /availability/overlap/:friendId`** — applied after `clampOverlapsToPreferences`, before `roundOverlaps`
+2. **`POST /availability/group-overlap`** — same position in the N-way overlap pipeline
+3. **`findCalendarMatches` scheduled function** — proactive weekend matching now filters overlaps through hangout windows before sending notifications. Uses recipient's timezone for accurate day-of-week.
+
+#### Not Affected (Intentionally)
+- `/events/match` and `/events/suggestions` — these match against fixed external events (concerts, shows). The hangout windows only restrict *suggested* meetup times, not real-world events.
+
+#### Pattern
+- Follows same structure as `clampOverlapsToPreferences`: iterates over slots, determines day-of-week in user's timezone, clamps to allowed hour ranges using `zonedToUtc`.
+- Config is a plain `Record<number, ...>` at module scope — easy to adjust or extend (e.g., add weeknight hangouts later).
+
+### 2026-03-04 Team Update — Hangout Windows (Zuko)
+
+Added `DEFAULT_HANGOUT_WINDOWS` config and `filterOverlapsToHangoutWindows()` to restrict meetup suggestions. Now only suggests:
+- **Friday:** 5 PM – 11 PM
+- **Saturday:** 9 AM – 11 PM  
+- **Sunday:** 9 AM – 5 PM
+- **Mon–Thu:** No suggestions
+
+Applied to `/availability/overlap`, `/availability/group-overlap`, and `findCalendarMatches`. Prevents socially awkward suggestions (Sunday 7:30 PM, weekday mornings).

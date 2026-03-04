@@ -19,3 +19,12 @@
 - User preference: Avoid duplicate emojis across landing page sections. Early Access badge switched from ✨ to 🎟️ to not clash with "Get suggestions" step. Always audit for emoji uniqueness across the page.
 - User preference: Shari prefers mobile-first, single-column layouts over grid layouts for value-prop sections. Dark backgrounds are risky on landing pages — lighter treatments with subtle differentiation (left borders, typography changes) are safer.
 - User preference: When iterating on feedback, keep changes surgical — don't rebuild sections from scratch, refine what's there.
+- LoginPage had a duplicate "Get started with Google" button — one in the hero CTA and a second "Bottom CTA" section near the footer. Removed the bottom duplicate (2025-07-25). Only one sign-in CTA should exist on the page.
+- Settings page cleanup (2025-07-25): Removed all "We use this to..." section subtitle explanations — they read as the app justifying itself rather than helping the user. Section headers now show just the title. Inline helper text on sub-fields shortened or removed. Share hangout toggle card collapsed from toggle + separate status box into a single row with dynamic subtitle. Social Battery summary box removed (redundant with selection). Event Interests info box removed. Feedback section header shortened. Section gap reduced from space-y-10 to space-y-6, card padding from p-5 to p-4. Net effect: ~30% less vertical scroll on mobile.
+- Design principle: Settings pages should minimize "teaching" copy. Users already chose to be on the page — label controls clearly and let them act. Explanations belong in onboarding, not settings.
+
+### 2026-03-04 Team Update — Settings & Login Fixes (Suki)
+
+**Settings cleanup:** Removed all verbose section subtitles, collapsed share-hangout toggle, removed Social Battery + Event Interests info boxes, tightened spacing from space-y-10 to space-y-6 and p-5 to p-4. Mobile vertical scroll reduced ~30%.
+
+**Login fix:** Removed duplicate "Get started with Google" button from footer. Kept single CTA in hero section.
