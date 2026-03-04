@@ -873,6 +873,15 @@ app.post("/users/me", requireAuth, async (req: AuthRequest, res: Response) => {
         console.error("Pending invite auto-connect failed:", pendingErr);
         // Non-blocking — don't fail the signup
       }
+
+      // Reclassify any friendships based on neighborhoods
+      if (data.neighborhood) {
+        try {
+          await reclassifyFriendships(data.id, data.neighborhood);
+        } catch (e) {
+          console.error("Failed to reclassify friendships on signup:", e);
+        }
+      }
     }
 
     // Send a welcome notification only for brand-new users (not on every login)
@@ -919,6 +928,46 @@ function stripSensitive(user: Record<string, any>) {
     delete safe[field];
   }
   return safe;
+}
+
+/** Extract city from neighborhood string (e.g., "West Village, NYC" → "nyc") */
+function extractCity(neighborhood: string): string {
+  return neighborhood.toLowerCase().split(',').pop()?.trim() || '';
+}
+
+/** Re-evaluate friendship types for all of a user's friendships based on current neighborhoods */
+async function reclassifyFriendships(userId: string, myNeighborhood: string) {
+  const myCity = extractCity(myNeighborhood);
+
+  const { data: friendships } = await getSupabase()
+    .from("friendships")
+    .select("id, user_a_id, user_b_id, user_a_friendship_type, user_b_friendship_type, user_a:users!friendships_user_a_id_fkey(id, neighborhood), user_b:users!friendships_user_b_id_fkey(id, neighborhood)")
+    .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+    .eq("status", "accepted");
+
+  if (!friendships?.length) return;
+
+  for (const f of friendships) {
+    const iAmA = (f as any).user_a_id === userId;
+    const friend = iAmA ? (f as any).user_b : (f as any).user_a;
+    const theirNeighborhood = friend?.neighborhood || '';
+    const theirCity = extractCity(theirNeighborhood);
+
+    let newType = 'local';
+    if (myCity && theirCity && myCity !== theirCity) {
+      newType = 'long_distance';
+    }
+
+    // Only update MY side — the friend's classification of me updates when they save their settings
+    const myCurrentType = iAmA ? (f as any).user_a_friendship_type : (f as any).user_b_friendship_type;
+    if (myCurrentType !== newType) {
+      const col = iAmA ? 'user_a_friendship_type' : 'user_b_friendship_type';
+      await getSupabase()
+        .from("friendships")
+        .update({ [col]: newType })
+        .eq("id", (f as any).id);
+    }
+  }
 }
 
 /** GET /users/me — fetch current user profile (sensitive fields stripped) */
@@ -1043,6 +1092,17 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
       res.status(500).json({ error: error.message });
       return;
     }
+
+    // When neighborhood changes, re-evaluate friendship types for all friendships
+    if (neighborhood !== undefined && data) {
+      try {
+        await reclassifyFriendships(data.id, neighborhood);
+      } catch (e) {
+        // Non-critical — don't fail the settings save
+        console.error("Failed to reclassify friendships:", e);
+      }
+    }
+
     res.json(stripSensitive(data));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1326,12 +1386,10 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
     }
 
     // Auto-detect friendship type based on neighborhoods
-    const myNeighborhood = (me.neighborhood || '').toLowerCase();
-    const theirNeighborhood = (invitee.neighborhood || '').toLowerCase();
+    const myNeighborhood = (me.neighborhood || '');
+    const theirNeighborhood = (invitee.neighborhood || '');
     let defaultFriendshipType = 'local';
     
-    // Simple city detection: extract last part after comma (e.g., "West Village, NYC" → "nyc")
-    const extractCity = (n: string) => n.split(',').pop()?.trim() || '';
     const myCity = extractCity(myNeighborhood);
     const theirCity = extractCity(theirNeighborhood);
     
@@ -1430,11 +1488,10 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
     }
 
     // Auto-detect friendship type based on neighborhoods
-    const myNeighborhood = (me.neighborhood || '').toLowerCase();
-    const theirNeighborhood = (referrer.neighborhood || '').toLowerCase();
+    const myNeighborhood = (me.neighborhood || '');
+    const theirNeighborhood = (referrer.neighborhood || '');
     let defaultFriendshipType = 'local';
     
-    const extractCity = (n: string) => n.split(',').pop()?.trim() || '';
     const myCity = extractCity(myNeighborhood);
     const theirCity = extractCity(theirNeighborhood);
     
