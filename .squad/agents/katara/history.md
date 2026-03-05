@@ -58,3 +58,12 @@ Toph designed webhook + incremental sync architecture. Frontend doesn't change f
 - Empty state when no upcoming meetups: "No hangouts coming up" + CTA to find times with a friend.
 - The "Calendar connected but no events" nudge and the "Mark Busy" reference in the connect-calendar CTA are both hidden on mobile since they reference the calendar grid.
 - `isMobile` from `useIsMobile()` hook drives all conditional rendering — no new hooks or state.
+
+### Workbox PWA Asset Caching (2026-07)
+- Installed `vite-plugin-pwa` with `generateSW` mode — Workbox generates the full SW from config, no custom SW file needed.
+- Coexistence approach: `importScripts: ['./firebase-messaging-sw.js']` in the Workbox config pulls Firebase messaging code into the generated `sw.js`. Single SW handles both caching and push notifications.
+- `usePushNotifications.ts` updated to pass `serviceWorkerRegistration` (from `navigator.serviceWorker.ready`) to Firebase's `getToken()` — prevents Firebase from registering a second SW at `/firebase-messaging-sw.js`.
+- `registerSW({ immediate: true })` in `main.tsx` triggers auto-update on new deploys.
+- `manifest: false` because we already have `/public/manifest.json`.
+- Type reference for `virtual:pwa-register` added to `vite-env.d.ts`.
+- NetworkOnly rules for Firebase Auth (`identitytoolkit`/`securetoken`), Google Calendar API, and `/api/calendar/` must come BEFORE the general `/api/` StaleWhileRevalidate rule — Workbox evaluates routes in order.

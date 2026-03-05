@@ -44,10 +44,11 @@ export function usePushNotifications() {
         return false;
       }
 
-      // Get FCM token
-      // VAPID key must be generated in Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
+      // Use the Workbox-registered SW (which imports firebase-messaging-sw.js via importScripts)
+      const swRegistration = await navigator.serviceWorker.ready;
       const token = await getToken(messaging, {
         vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY || 'YOUR_VAPID_KEY_HERE',
+        serviceWorkerRegistration: swRegistration,
       });
 
       if (token) {
@@ -112,8 +113,10 @@ export function usePushNotifications() {
       try {
         const messaging = await getMessagingInstance();
         if (!messaging || cancelled) return;
+        const swRegistration = await navigator.serviceWorker.ready;
         const token = await getToken(messaging, {
           vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY || 'YOUR_VAPID_KEY_HERE',
+          serviceWorkerRegistration: swRegistration,
         });
         if (token && !cancelled) {
           setFcmToken(token);
