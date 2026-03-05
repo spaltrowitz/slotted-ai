@@ -28,6 +28,9 @@
 - Primary action visibility problems: Dashboard buries "Find times with a friend" beneath calendar, pending/confirmed hangouts, events, activity. Friends page buries friend list beneath Invite and Groups sections. Events page splits into 4 tabs with no clear entry point. Users land on pages and must hunt for what to do.
 - Navigation clarity: "Inbox" label doesn't match `/notifications` route. Avatar and Settings nav both go to Settings (redundant). 4 nav items is appropriate scope.
 
+### Settings Cleanup Review (2026-03-05T19:57:27Z)
+Reviewed settings page cleanup proposal for sparse page concern, avatar a11y, and necessity of call/hangout prefs. Orchestration log: `.squad/orchestration-log/2026-03-05T19:57:27Z-suki-settings-review.md`. Decision merged to `.squad/decisions.md`. Validation: removal scope appropriate, avatar dropdown accessible, no functionality uses removed pref fields. Safe to remove.
+
 ### 2026-03-04 Team Update — Settings & Login Fixes (Suki)
 
 **Settings cleanup:** Removed all verbose section subtitles, collapsed share-hangout toggle, removed Social Battery + Event Interests info boxes, tightened spacing from space-y-10 to space-y-6 and p-5 to p-4. Mobile vertical scroll reduced ~30%.

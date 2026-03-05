@@ -1445,3 +1445,62 @@ While the Social Battery UI is hidden (< 3 hangouts), the backend default of `2-
 - **No backend changes required** — all data derived client-side
 - **One new component** — StarRating; reusable for future rating flows
 - **FriendsPage UX improved** — First-timers see simpler, single-suggestion flow vs. multi-slot picker
+
+---
+
+## Decision: Settings Cleanup & Sign Out to Header (2026-03-05T19:57:27Z)
+
+**Author:** Katara (Frontend Dev) + Shari Paltrowitz (Product)  
+**Date:** 2026-03-05  
+**Status:** Implemented
+
+### What Changed
+
+1. **SettingsPage reduced to 2 sections + feedback:** Calendar → Advanced accordion → Feedback. Removed: Account section (display name editing, sign out), Event Interests (backlogged), Default hangout length, Default call length.
+
+2. **Sign Out moved to AppShell header dropdown:** The profile avatar in the top-right corner is now a dropdown menu with "Settings" and "Sign out" options. Previously it was a direct link to /settings with sign out only available inside the Settings page.
+
+3. **Mobile bottom nav updated:** Added gear icon (⚙️) as 3rd tab to ensure Settings access from mobile. Desktop nav unchanged.
+
+4. **Notifications panel fixed on mobile:** Changed positioning from `bottom-0` to `top-14 bottom-0` to account for AppShell header height and ensure panel is visible.
+
+### Why
+
+- Event Interests, hangout length, and call length are being backlogged — no need to show UI for unused features.
+- Sign out should be accessible from any page, not buried in Settings.
+- Account section was removed since sign out was its primary action; display name editing can be re-added later if needed.
+- Mobile users needed consistent settings access via bottom nav.
+- Notifications panel was off-screen on mobile, making it inaccessible.
+
+### Team Review (2026-03-05T19:57:27Z)
+
+#### Suki (Designer)
+- Validated removal scope — no excessive whitespace. Section density appropriate.
+- Confirmed avatar-to-dropdown interaction is accessible.
+- No functionality uses `preferredDuration`, `preferredCallDuration` — safe to remove.
+
+#### Ty Lee (UI Designer)
+- Recommended killing explicit Save button — settings should auto-persist.
+- Recommended flattening Advanced accordion (nested accordions less clear).
+- Recommended extracting Feedback section to external link or separate page.
+- Recommended styling Sign Out as destructive (red/pink text) for visual distinctiveness.
+
+#### Mai (Product Strategist)
+- Confirmed all removals correct — not connected to active features.
+- Found that `preferredDuration` feeds scheduling algorithm but users always hit defaults anyway.
+- Recommended learning durations from actual meetup logs in future phase, not user prefs.
+- Confirmed header placement is correct for account actions.
+
+### Impact on Other Agents
+
+- **Backend (Zuko):** The `PUT /users/me/settings` endpoint still accepts `preferredDuration`, `preferredCallDuration`, `eventInterests`, `eventCity`, and `displayName` fields — they're just no longer sent from the frontend. No backend changes needed, but these fields could be cleaned up later.
+- **All agents:** Sign out is now accessible via the profile dropdown in the AppShell header on every page.
+
+### Pending Polish Recommendations
+
+- [ ] Remove explicit Save button — auto-persist on change
+- [ ] Flatten Advanced accordion into flat toggleable sections
+- [ ] Extract Feedback to external link or separate page
+- [ ] Style Sign Out as destructive action (red/pink text)
+
+These recommendations await user approval and will be tracked separately.

@@ -63,3 +63,6 @@ Suki reviewed Mai's product strategy critique and provided detailed feedback on 
 - Animate state transitions (friend joins, hangout booked) — micro-interactions = emotional moments
 
 **Key quote from Ty Lee:** "Visual diet, not redesign. Features work. AI matching is clever. Visual layer is drowning. Strip, then polish." This validates Mai's temporal thinking at a design-system level.
+
+### Settings Cleanup & Sign Out to Header Review (2026-03-05T19:57:27Z)
+Settings page cleanup proposal reviewed for product strategy. Orchestration log: `.squad/orchestration-log/2026-03-05T19:57:27Z-mai-product-strategy.md`. Decision merged to `.squad/decisions.md`. Validation: all removals correct (Event Interests, call/hangout defaults, Account section not connected to active features). Duration learning from successful meetup logs recommended as future phase instead of explicit user prefs. Header placement for sign out confirmed correct — users expect account actions near avatar. Settings cleanup removes ~6 UI lines without losing active functionality, aligning with phase 1 goal of reducing decision paralysis.
