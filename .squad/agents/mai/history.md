@@ -66,3 +66,35 @@ Suki reviewed Mai's product strategy critique and provided detailed feedback on 
 
 ### Settings Cleanup & Sign Out to Header Review (2026-03-05T19:57:27Z)
 Settings page cleanup proposal reviewed for product strategy. Orchestration log: `.squad/orchestration-log/2026-03-05T19:57:27Z-mai-product-strategy.md`. Decision merged to `.squad/decisions.md`. Validation: all removals correct (Event Interests, call/hangout defaults, Account section not connected to active features). Duration learning from successful meetup logs recommended as future phase instead of explicit user prefs. Header placement for sign out confirmed correct — users expect account actions near avatar. Settings cleanup removes ~6 UI lines without losing active functionality, aligning with phase 1 goal of reducing decision paralysis.
+
+### Multi-Friend Homepage Fix (2026-03-05)
+
+**Problem:** User with 10 friends sees arbitrary single-friend message on homepage ("You and Mindy are connected! ❤️") due to stage system bug.
+
+**Root cause analysis:**
+- Stage system has name/logic mismatch: `one-friend` stage triggers for **any** user with `friendCount > 0 && completedHangoutCount === 0`, not just users with literally one friend
+- `StageOneFriend` component picks `friends[friends.length - 1]` (most recent connection), creating arbitrary single-friend focus
+- This feels random/jarring for users with multiple friends
+
+**Key architectural insight:**
+The stage system was designed assuming linear progression (0 → 1 → 2 friends), but users can invite 10 friends at once or accept 3 requests before scheduling. Stages should be based on **user actions** (first hangout, active scheduler) not **friend count**.
+
+**Recommendation:** Replace arbitrary single-friend message with avatar row showing all friends ("Who do you want to hang out with?"). Reuses existing "People to See" component from active-user dashboard. Zero new complexity, scales to any friend count, gives user agency to choose.
+
+**Why Option A (avatar row) beats Option B (AI-ranked suggestions):**
+- No AI dependency — works today with existing data
+- User feels in control after being guided through earlier stages
+- Aligns with Slotted principles: no social pressure, no ranking friends, AI invisible until after user picks
+- Natural upgrade path: add AI suggestions as additional section once user has hangout history
+
+**Long-term refactor recommendation:** Rename `one-friend` → `first-hangout` to reflect goal (book first hangout) not state (friend count).
+
+**Files analyzed:**
+- `client/src/lib/userStage.ts` — Stage calculation logic
+- `client/src/pages/DashboardPage.tsx` — Stage rendering components
+- `docs/03-prd-mvp-v1.md` — Original product requirements
+- `docs/06-mvp-current-state.md` — Current state and design principles
+- `docs/11-beta-tester-feedback.md` — User feedback themes
+- `docs/10-ux-audit-checklist.md` — UX quality standards
+
+**Decision document:** `docs/plans/mai-homepage-recommendation.md` (full analysis + 3 options with tradeoffs)

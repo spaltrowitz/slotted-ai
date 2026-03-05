@@ -148,3 +148,22 @@ Toph designed webhook + incremental sync architecture. Frontend doesn't change f
 - **Not changed**: InvitePage, EventSharePage, OnboardingPage — these show a single person in isolation where disambiguation isn't meaningful.
 - `getFirstName` retained for current-user greeting and FriendAvailability's "Me" label. Unused imports cleaned up.
 - Type check: `cd client && npx tsc --noEmit` passes clean.
+
+## Learnings
+
+### Calendar Selection UX Research (2026-07)
+- **Problem identified:** FriendsPage multi-select mode for friends lacks clear visual indicators. Users don't understand they're in selection mode because: (1) long-press entry is non-discoverable, (2) visual state is subtle (light background + small checkmark badge on avatar), (3) no checkboxes (users expect them for multi-select).
+- **Current pattern:** `selectMode` boolean state + `selectedIds` Set. Long-press (500ms) or right-click activates mode. Tapping toggles selection. Selected rows get `bg-slotted-50/60` background + 16×16px checkmark badge positioned on avatar bottom-right. "Select" button in header (text-only, easy to miss). Floating action button appears when >= 2 selected.
+- **CalendarPicker pattern:** The `CalendarPicker` component (used in Settings) implements standard checkbox list pattern with explicit checkboxes, selection count ("X of Y selected"), and quick actions ("Select all" / "None"). This creates inconsistency — users may expect the same pattern for friend selection.
+- **Recommendation:** Add checkboxes when in select mode (matches CalendarPicker pattern, universal multi-select affordance). Enhance visual state (darker background, maybe left border). Add selection count at top. Make "Select" button more prominent. Hybrid approach (checkboxes + visual state) is strongest.
+- **Files:** `client/src/pages/FriendsPage.tsx` (lines 29-31 state, 150-155 long-press, 203-221 render with visual state, 246-251 header button, 394-406 floating action). `client/src/components/CalendarPicker.tsx` (lines 148-176 checkbox pattern, 245-255 count + quick actions).
+- **Edge cases:** Single friend (can't select), selection persistence on mode exit (currently clears), keyboard nav (none), screen reader support (no ARIA labels).
+- Research document: `.squad/agents/katara/research-calendar-selection-ux.md`
+
+### Feedback UI Location Research (2025-05-XX)
+- **Current state:** Feedback form is embedded in SettingsPage.tsx (lines 562-578) as the last section on the page. Includes textarea, send button, user email display, and success state ("Sent! Thank you ✓").
+- **Backend:** `POST /feedback` with `{ message: string }` via `feedbackMutation` (useMutation).
+- **Existing patterns:** AddToCalendarModal uses fixed overlay + centered card modal pattern (`fixed inset-0 z-50 flex items-center bg-black/40 backdrop-blur-sm`). NotificationDropdown uses absolute positioned dropdown from header. No existing FABs in codebase.
+- **Recommendation:** Extract to floating action button (FAB) in bottom-right corner, managed by AppShell. Click opens modal (reuse AddToCalendarModal pattern). Icon: chat bubble (friendly, conversational). Positioning: mobile `fixed bottom-20 right-4 z-40` (above tab bar), desktop `fixed bottom-6 right-6 z-40`.
+- **Implementation plan:** Create FeedbackModal.tsx component, add FAB to AppShell.tsx, remove feedback section from SettingsPage.tsx.
+- **Research doc:** `.squad/agents/katara/feedback-extraction-research.md`

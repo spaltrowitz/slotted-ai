@@ -10,7 +10,7 @@ import api from '../lib/api';
 import { fetchUserSettings, fetchMeetups, queryKeys } from '../lib/queries';
 
 export default function SettingsPage() {
-  const { user, onboardingComplete, googleCalendarConnected, googleCalendarStale, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, outlookCalendarConnected, connectOutlookCalendar, disconnectOutlookCalendar, verifyCalendarHealth, signInWithGoogle } = useAuth();
+  const { user, onboardingComplete, googleCalendarConnected, googleCalendarStale, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, outlookCalendarConnected, connectOutlookCalendar, disconnectOutlookCalendar, verifyCalendarHealth, signInWithGoogle, signOut } = useAuth();
   const queryClient = useQueryClient();
   const [travelBuffer, setTravelBuffer] = useState(30);
   const [planningStyle, setPlanningStyle] = useState('flexible');
