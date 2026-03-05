@@ -1504,3 +1504,34 @@ While the Social Battery UI is hidden (< 3 hangouts), the backend default of `2-
 - [ ] Style Sign Out as destructive action (red/pink text)
 
 These recommendations await user approval and will be tracked separately.
+
+---
+
+## Decision: First-Name-Only Display Names (Katara, 2026-03-05)
+
+| Field | Value |
+|---|---|
+| **Author** | Katara (Frontend Dev) |
+| **Date** | 2026-03-05 |
+| **Status** | Implemented |
+| **Scope** | MVP User-Facing Names |
+
+### What
+
+All user-facing display names across the frontend now show first name only (e.g., "Shari" instead of "Shari Paltrowitz"). Full names remain in database.
+
+### How
+
+- New utility `getFirstName()` in `client/src/lib/utils.ts` — splits on space, returns first token, handles null/undefined/empty
+- Applied at every render site; full names remain in DB, API responses, and meetup-log payloads
+- Replaced all ad-hoc `.split(' ')[0]` patterns with the centralized utility
+
+### Why
+
+- Friendlier, more casual tone — matches Slotted's social product identity
+- Privacy improvement — less personal info shown on screen at a glance
+- "Shari" feels warmer than "Shari Paltrowitz" for a friendship app
+
+### Affected Files
+
+DashboardPage, FriendsPage, InvitePage, EventSharePage, OnboardingPage, NotificationsPage, NotificationDropdown, FriendAvailability, GroupAvailability.
