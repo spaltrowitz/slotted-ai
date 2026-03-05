@@ -832,3 +832,186 @@ On mobile (`useIsMobile()` returns true), the full calendar grid (week view, mon
 - **No social pressure**: Empty state says "No hangouts coming up" — no counts like "0 hangouts".
 - **Privacy-first**: Only shows Slotted meetup titles, no raw calendar event details.
 
+
+---
+
+## Decision: UI Simplification Directives (Shari, 2026-03-05)
+
+| Field | Value |
+|---|---|
+| **Author** | Shari Paltrowitz (via Copilot) |
+| **Date** | 2026-03-05 |
+| **Type** | User directive (product strategy) |
+| **Status** | Proposed — awaiting implementation planning |
+
+### Context
+
+Beta feedback indicated the app feels overwhelming with too many clickable elements, decorative elements, and secondary features competing with the core value proposition (scheduling with friends).
+
+### Decision
+
+**Scope 1 (UI Simplification - v1):**
+1. App is too "busy" — unclear what action to take on each page, too many clickable things
+2. Too many emojis — keep only functional ones, remove decorative
+3. Groups feature isn't necessary — selecting multiple friends already shows joint calendars, groups shouldn't be a separate concept
+
+**Scope 2 (Expanded - v2, merged with Scope 1):**
+1. Groups: shouldn't need a group to find times with multiple friends — just select them
+2. Calendar view on dashboard doesn't add anything — consider removing
+3. Strip app to what a user NEEDS to get started, remove distractions from additional features
+
+### Rationale
+
+Core UX principle: each page should have one clear primary action. Beta feedback shows the app needs to feel native and intuitive on first use, not overwhelming with features the user doesn't need yet.
+
+### Related Decisions
+
+- See **Design Decision: UI Simplification — Product Audit Results** for detailed analysis and full product design recommendations
+
+---
+
+## Decision: Groups Feature Removal (Toph, 2026-03-05)
+
+| Field | Value |
+|---|---|
+| **Author** | Toph (Lead/Architect) |
+| **Date** | 2026-03-05 |
+| **Type** | Architecture decision |
+| **Status** | Proposed — awaiting user approval |
+
+### Context
+
+User feedback indicated the app feels "too busy," with specific callout that the groups feature is unnecessary since users can already select multiple friends and find joint availability without creating a formal group.
+
+### Analysis
+
+Full scope analysis of groups feature completed (see `docs/plans/research-groups-removal.md`):
+
+1. **Groups feature is fully implemented** — 2 DB tables, 5 endpoints, extensive UI
+2. **Multi-friend scheduling is independent** — the `GroupAvailability` component works with ANY friendIds array, not just saved groups
+3. **Removal is clean** — no shared logic with core features. Groups are a pure add-on.
+4. **Naming is misleading** — "GroupAvailability" component should be "MultiFriendAvailability"
+
+### Decision
+
+**RECOMMEND removing the groups feature entirely** while preserving multi-friend scheduling:
+
+**Remove:**
+- `friend_groups` and `friend_group_members` tables
+- 5 group endpoints: `GET /groups`, `POST /groups`, `PUT /groups/:id`, `POST /groups/:id/members`, `DELETE /groups/:id`
+- Group CRUD UI in FriendsPage (~400 lines of state/handlers/modals)
+- `group_id` column on `pending_invites`
+- 4 group notification types
+- `SavedGroup` interface and `fetchGroups()` query
+
+**Keep (with rebrand):**
+- Multi-friend scheduling flow: select 2+ friends → find times → book
+- `GroupAvailability` component (rename to `MultiFriendAvailability`)
+- `/availability/group-overlap` endpoint (rename to `/availability/multi-friend`)
+- POST `/meetups` with `friendIds[]` support
+
+**Impact:**
+- **Users:** All saved groups deleted. Can still schedule with multiple friends, just can't save those collections.
+- **Code:** ~600 lines removed total (frontend + backend), 2 tables dropped, simpler UX
+- **Risk:** Pending invites with `group_id` must be handled in migration
+
+### Alternatives Considered
+
+1. **Keep groups but improve UX** — Rejected. Adds complexity for marginal value.
+2. **Remove UI but keep backend** — Rejected. Dead code is technical debt.
+3. **Deprecate gradually** — Rejected. User base is small (early access), clean break is better.
+
+---
+
+## Design Decision: UI Simplification — Product Audit Results (Suki, 2026-03-05)
+
+| Field | Value |
+|---|---|
+| **Author** | Suki (Designer) |
+| **Date** | 2026-03-05 |
+| **Type** | Design decision |
+| **Status** | Awaiting review |
+
+### Summary
+
+Completed a full product design and user research audit for Slotted. The core finding is that the app's "aha moment" (finding overlapping free times with a friend) is buried under feature creep.
+
+### Key Decisions Proposed
+
+**1. Remove Groups Feature**
+- Rationale: Duplicates multi-friend selection that already exists. Adds ~160 lines of UI complexity for marginal convenience of "saving" friend selections. Beta feedback explicitly called this out as unnecessary.
+- Impact: Simpler FriendsPage, clearer mental model, reduced code surface.
+- Related: See **Decision: Groups Feature Removal (Toph)** for full scope analysis
+
+**2. Remove Dashboard Calendar View**
+- Rationale: Users already have Google Calendar. The calendar view doesn't enable scheduling — it just displays information the user can see elsewhere. Removing it makes the "Find times with a friend" CTA more prominent.
+- Impact: ~400 lines of code removed, cleaner dashboard, faster page load.
+- Status: IMPLEMENTED (see **Decision: Replace Mobile Calendar Grid** and related dashboard cleanup)
+
+**3. Consider Removing Events Page from V1**
+- Rationale: Events (discovery, search, saved) is a "nice to have" that distracts from the core loop of scheduling with friends. Beta user Emma specifically noted the value is in group coordination, not event discovery.
+- Recommendation: Defer to V2, or demote to secondary feature accessible only from Friends page.
+
+**4. Simplify Information Architecture**
+- Dashboard: 15 sections → 3 (Upcoming, Catch up, CTA)
+- Notifications: 3 tabs → 1 unified list
+- Settings: 4 tabs → 2 tabs
+- Nav: 4 items → 3 (move Settings to menu)
+
+**5. Emoji Reduction**
+- Remove 24 decorative emojis that duplicate text labels
+- Keep 84 functional emojis (state indicators, category icons, pickers)
+- Full analysis: 108 emojis total identified in audit, see `docs/plans/research-product-design-audit.md`
+
+### Full Analysis
+
+See `docs/plans/research-product-design-audit.md` for complete rationale, page-by-page recommendations, feature tiers, and beta feedback integration.
+
+---
+
+## Decision: Workbox PWA Asset Caching via vite-plugin-pwa (Katara, 2026-03-05)
+
+| Field | Value |
+|---|---|
+| **Author** | Katara (Frontend Dev) |
+| **Status** | Implemented |
+| **Scope** | PWA offline caching, service worker architecture |
+
+### Decision
+
+Use `vite-plugin-pwa` with `generateSW` mode and `importScripts` to add Workbox-based asset caching while coexisting with the existing Firebase Messaging service worker.
+
+### Key Choices
+
+1. **`generateSW` over `injectManifest`** — simpler config, no custom SW file to maintain. Workbox generates the entire SW from `vite.config.ts` options.
+2. **`importScripts('./firebase-messaging-sw.js')`** — the generated `sw.js` imports Firebase messaging code. One SW handles both caching and push notifications.
+3. **`serviceWorkerRegistration` passed to `getToken()`** — prevents Firebase from registering a second SW. Both systems share the Workbox-managed registration.
+4. **`manifest: false`** — we already have `public/manifest.json`, no auto-generation needed.
+5. **Route order matters** — NetworkOnly rules for auth/calendar endpoints are registered before the general `/api/` StaleWhileRevalidate rule.
+
+### Caching Strategies
+
+| Resource | Strategy | Config |
+|----------|----------|--------|
+| JS/CSS/HTML bundles | Precache (26 entries) | Auto from build output |
+| Images/fonts/icons | CacheFirst | 100 entries, 30-day expiry |
+| /api/* (non-calendar) | StaleWhileRevalidate | 50 entries, 5-min expiry |
+| Firebase Auth endpoints | NetworkOnly | Always fresh |
+| /api/calendar/* | NetworkOnly | Always fresh |
+| Google Calendar API | NetworkOnly | Always fresh |
+| Navigation requests | NetworkFirst | 3s timeout, cache fallback |
+
+### Files Changed
+
+- `client/vite.config.ts` — Added VitePWA plugin with full Workbox config
+- `client/src/main.tsx` — Added `registerSW({ immediate: true })` for auto-update
+- `client/src/vite-env.d.ts` — Added `vite-plugin-pwa/client` type reference
+- `client/src/hooks/usePushNotifications.ts` — Pass Workbox SW registration to Firebase `getToken()`
+- `client/package.json` — Added `vite-plugin-pwa` devDependency
+
+### Build Output
+
+- `build/sw.js` — Generated Workbox service worker
+- `build/workbox-*.js` — Workbox runtime library
+- `build/firebase-messaging-sw.js` — Copied from public/, imported by sw.js
+
