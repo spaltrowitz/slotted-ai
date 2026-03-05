@@ -41,3 +41,11 @@ Sokka produced 30 test scenarios for two-way sync in `docs/plans/test-scenarios-
 
 ### Toph's Two-Way Sync Architecture
 Toph designed webhook + incremental sync architecture. Frontend doesn't change for Phase 1–3 (entirely server-driven). Phase 4 (Apple + hardening) may require additional calendar selection UI later.
+
+### Performance Optimizations (2026-07)
+- Enhanced DashboardPage skeleton to mimic real layout (greeting + calendar grid + avatar row + activity cards) instead of 2 plain gray rectangles. Uses `animate-pulse` per section.
+- RouteLoadingFallback in App.tsx upgraded from a spinner to a structural skeleton — shown while any lazy-loaded page chunk downloads.
+- Dashboard chunk prefetched via `requestIdleCallback` on page load — by the time user clicks "Sign in", the chunk is cached.
+- DNS preconnect/prefetch hints added to index.html for googleapis, identitytoolkit, firebaseinstallations.
+- Vite build config: `target: 'es2020'`, `cssMinify: true`, `reportCompressedSize: false` for smaller bundles and faster builds.
+- No new dependencies introduced; all optimizations are pure config + Tailwind markup.
