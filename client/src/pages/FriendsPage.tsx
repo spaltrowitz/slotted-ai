@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,26 +7,14 @@ import { trackFriendInvited, trackInviteLinkCopied, trackFriendAdded } from '../
 import FriendAvailability from '../components/FriendAvailability';
 import GroupAvailability from '../components/GroupAvailability';
 import api from '../lib/api';
-
-interface FriendRecord {
-  friendshipId: string;
-  status: string;
-  invitedBy: string;
-  friendshipType?: string; // "local" | "long_distance"
-  lastHangoutDate?: string;
-  daysSinceLastHangout?: number;
-  avgCadenceDays?: number;
-  totalHangouts?: number;
-  friend: {
-    id: string;
-    displayName: string;
-    email: string;
-    photoUrl?: string;
-    socialBattery?: string;
-    calendarConnected?: boolean;
-    eventInterests?: string[];
-  };
-}
+import {
+  fetchFriends,
+  fetchGroups,
+  fetchUserSettings,
+  queryKeys,
+  type FriendRecord,
+  type SavedGroup,
+} from '../lib/queries';
 
 const INTEREST_LABELS: Record<string, { emoji: string; label: string }> = {
   theater: { emoji: '🎭', label: 'Theater' },
@@ -37,18 +26,10 @@ const INTEREST_LABELS: Record<string, { emoji: string; label: string }> = {
   opera: { emoji: '🎻', label: 'Classical' },
 };
 
-interface SavedGroup {
-  id: string;
-  name: string;
-  members: { id: string; displayName: string; photoUrl?: string }[];
-  pendingEmails?: string[];
-}
-
 export default function FriendsPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [friends, setFriends] = useState<FriendRecord[]>([]);
-  const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
   // Find times state
@@ -61,14 +42,12 @@ export default function FriendsPage() {
   const [groupFriendNames, setGroupFriendNames] = useState<string[]>([]);
 
   // Saved groups
-  const [groups, setGroups] = useState<SavedGroup[]>([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [createGroupSelectedIds, setCreateGroupSelectedIds] = useState<Set<string>>(new Set());
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
   const [inviteEmailInput, setInviteEmailInput] = useState('');
-  const [myEventInterests, setMyEventInterests] = useState<string[]>([]);
 
   // Remove friend state
   const [removingFriend, setRemovingFriend] = useState<FriendRecord | null>(null);
@@ -86,74 +65,26 @@ export default function FriendsPage() {
   const inviteUrl = `https://slotted-ai.web.app?ref=${user?.uid ?? ''}`;
   const message = `Let's schedule time to hang :) This app syncs our calendars and finds the best time to meet up. ${inviteUrl}`;
 
-  // Load current user's event interests
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        const token = await user.getIdToken();
-        const res = await fetch('/api/users/me', { headers: { Authorization: `Bearer ${token}` } });
-        if (res.ok) {
-          const me = await res.json();
-          if (me.event_interests) setMyEventInterests(me.event_interests);
-        }
-      } catch { /* ignore */ }
-    })();
-  }, [user]);
+  const { data: friends = [], isLoading: loading } = useQuery({
+    queryKey: queryKeys.friends,
+    queryFn: fetchFriends,
+    enabled: !!user,
+    refetchOnWindowFocus: true,
+  });
 
-  const fetchFriends = useCallback(async () => {
-    if (!user) return;
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch('/api/friends', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setFriends(data.friends || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch friends:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+  const { data: groups = [] } = useQuery({
+    queryKey: queryKeys.groups,
+    queryFn: fetchGroups,
+    enabled: !!user,
+  });
 
-  const fetchGroups = useCallback(async () => {
-    if (!user) return;
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch('/api/groups', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setGroups(data.groups || []);
-      }
-    } catch {
-      // silent
-    }
-  }, [user]);
+  const { data: settingsData } = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: fetchUserSettings,
+    enabled: !!user,
+  });
 
-  useEffect(() => {
-    fetchFriends();
-    fetchGroups();
-  }, [fetchFriends, fetchGroups]);
-
-  // Keep list fresh across devices: when user returns to this page/app, refetch.
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === 'visible') {
-        void fetchFriends();
-      }
-    };
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', refresh);
-    return () => {
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', refresh);
-    };
-  }, [fetchFriends]);
+  const myEventInterests = settingsData?.event_interests ?? [];
 
   // Auto-open FriendAvailability from URL param
   useEffect(() => {

@@ -5,8 +5,7 @@
 //   npm run setup
 // ---------------------------------------------------------------------------
 
-import * as admin from "firebase-admin";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { SlottedClient } from "./client.js";
 import { PERSONAS } from "./personas.js";
@@ -21,7 +20,7 @@ function loadEnv() {
   const lines = readFileSync(envPath, "utf-8").split("\n");
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("//")) continue;
     const eqIdx = trimmed.indexOf("=");
     if (eqIdx === -1) continue;
     const key = trimmed.slice(0, eqIdx).trim();
@@ -32,55 +31,70 @@ function loadEnv() {
 
 loadEnv();
 
-// Initialize Firebase Admin
-const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "./service-account.json";
-const fullSaPath = resolve(import.meta.dirname || __dirname, "..", saPath);
-if (!existsSync(fullSaPath)) {
-  console.error(`❌ Service account key not found at ${fullSaPath}`);
-  console.error("Download from Firebase Console → Project Settings → Service Accounts → Generate New Private Key");
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+if (!FIREBASE_API_KEY) {
+  console.error("❌ Missing FIREBASE_API_KEY in .env");
+  console.error("Find it at Firebase Console → Project Settings → General → Web API Key");
   process.exit(1);
 }
 
-const serviceAccount = JSON.parse(readFileSync(fullSaPath, "utf-8"));
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+async function createOrSignIn(email: string, password: string, displayName: string): Promise<{ uid: string; idToken: string }> {
+  // Try to sign in first
+  const signInResp = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    },
+  );
+
+  if (signInResp.ok) {
+    const data = (await signInResp.json()) as { idToken: string; localId: string };
+    return { uid: data.localId, idToken: data.idToken };
+  }
+
+  // Sign-in failed — create the account
+  console.log(`  → Creating new account...`);
+  const signUpResp = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, displayName, returnSecureToken: true }),
+    },
+  );
+
+  if (!signUpResp.ok) {
+    const body = await signUpResp.text();
+    throw new Error(`Failed to create account for ${email}: ${signUpResp.status} ${body}`);
+  }
+
+  const data = (await signUpResp.json()) as { idToken: string; localId: string };
+  return { uid: data.localId, idToken: data.idToken };
+}
 
 async function main() {
   console.log("🔧 Slotted Test Agent Setup\n");
 
+  const envPath = resolve(import.meta.dirname || __dirname, "../.env");
+  let envContent = readFileSync(envPath, "utf-8");
+
   for (const [name, persona] of Object.entries(PERSONAS)) {
     console.log(`--- Setting up ${name} (${persona.email}) ---`);
 
-    const uid = process.env[persona.envUidKey];
-    if (!uid) {
-      console.log(`  ⚠️  ${persona.envUidKey} not set in .env`);
-      console.log(`  → Create account ${persona.email} in Firebase Auth, then add the UID to .env`);
-
-      // Try to find or create the user in Firebase
-      try {
-        const existingUser = await admin.auth().getUserByEmail(persona.email);
-        console.log(`  ✓ Found existing Firebase user: ${existingUser.uid}`);
-        console.log(`  → Add to .env: ${persona.envUidKey}=${existingUser.uid}`);
-      } catch {
-        console.log(`  → User doesn't exist in Firebase yet. Creating...`);
-        try {
-          const newUser = await admin.auth().createUser({
-            email: persona.email,
-            displayName: persona.displayName,
-            emailVerified: true,
-          });
-          console.log(`  ✓ Created Firebase user: ${newUser.uid}`);
-          console.log(`  → Add to .env: ${persona.envUidKey}=${newUser.uid}`);
-        } catch (err: any) {
-          console.log(`  ✗ Failed to create user: ${err.message}`);
-        }
-      }
-      continue;
-    }
-
-    console.log(`  Firebase UID: ${uid}`);
-
-    // Authenticate and set up the user profile
     try {
+      const { uid } = await createOrSignIn(persona.email, persona.password, persona.displayName);
+      console.log(`  ✓ Firebase UID: ${uid}`);
+
+      // Update .env with the UID if not already set
+      if (!process.env[persona.envUidKey]) {
+        envContent += `\n${persona.envUidKey}=${uid}`;
+        process.env[persona.envUidKey] = uid;
+        console.log(`  ✓ Added ${persona.envUidKey}=${uid} to .env`);
+      }
+
+      // Authenticate and set up the user profile
       const client = new SlottedClient(persona);
       await client.authenticate();
       console.log("  ✓ Authenticated successfully");
@@ -110,6 +124,8 @@ async function main() {
     console.log();
   }
 
+  // Write updated .env
+  writeFileSync(envPath, envContent);
   console.log("✅ Setup complete! Run: npm test");
 }
 

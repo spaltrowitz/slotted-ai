@@ -8,7 +8,6 @@
 //   npm run scenario:all            — run all scenarios
 // ---------------------------------------------------------------------------
 
-import * as admin from "firebase-admin";
 import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import { SlottedClient } from "./client.js";
@@ -128,17 +127,13 @@ async function main() {
   const scenarioFlag = args.find((a) => a.startsWith("--scenario="))?.split("=")[1]
     || (args.indexOf("--scenario") >= 0 ? args[args.indexOf("--scenario") + 1] : null);
 
-  // Initialize Firebase Admin
-  const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "./service-account.json";
-  const fullSaPath = resolve(import.meta.dirname || __dirname, "..", saPath);
-  if (!existsSync(fullSaPath)) {
-    console.error(`❌ Service account key not found at ${fullSaPath}`);
-    console.error("Download from Firebase Console → Project Settings → Service Accounts");
+  // Verify API key is available
+  const apiKey = process.env.FIREBASE_API_KEY;
+  if (!apiKey) {
+    console.error("❌ Missing FIREBASE_API_KEY in .env");
+    console.error("Find it at Firebase Console → Project Settings → General → Web API Key");
     process.exit(1);
   }
-
-  const serviceAccount = JSON.parse(readFileSync(fullSaPath, "utf-8"));
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 
   console.log("🤖 Slotted Test Agent Runner\n");
 
@@ -149,12 +144,6 @@ async function main() {
   const agents: Record<string, SlottedClient> = {};
 
   for (const [name, persona] of Object.entries(PERSONAS)) {
-    const uid = process.env[persona.envUidKey];
-    if (!uid) {
-      console.error(`  ❌ ${name}: Missing ${persona.envUidKey} in .env — run npm run setup first`);
-      process.exit(1);
-    }
-
     const client = new SlottedClient(persona);
     try {
       await client.authenticate();

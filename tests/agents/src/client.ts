@@ -5,7 +5,6 @@
 // a Firebase custom token minted from the service account.
 // ---------------------------------------------------------------------------
 
-import * as admin from "firebase-admin";
 import { AgentPersona } from "./personas.js";
 
 // ---------------------------------------------------------------------------
@@ -90,21 +89,9 @@ export class SlottedClient {
   }
 
   // -------------------------------------------------------------------------
-  // Auth — mint a Firebase ID token from the service account
+  // Auth — sign in via Firebase email/password REST API
   // -------------------------------------------------------------------------
   async authenticate(): Promise<void> {
-    const firebaseUid = process.env[this.persona.envUidKey];
-    if (!firebaseUid) {
-      throw new Error(
-        `Missing env var ${this.persona.envUidKey}. ` +
-        `Set it to the Firebase UID for ${this.persona.email}.`,
-      );
-    }
-
-    // Mint a custom token, then exchange it for an ID token via the REST API
-    const customToken = await admin.auth().createCustomToken(firebaseUid);
-
-    // Exchange custom token → ID token via Firebase Auth REST API
     const apiKey = process.env.FIREBASE_API_KEY;
     if (!apiKey) {
       throw new Error(
@@ -114,20 +101,24 @@ export class SlottedClient {
     }
 
     const resp = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`,
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: customToken, returnSecureToken: true }),
+        body: JSON.stringify({
+          email: this.persona.email,
+          password: this.persona.password,
+          returnSecureToken: true,
+        }),
       },
     );
 
     if (!resp.ok) {
       const body = await resp.text();
-      throw new Error(`Failed to exchange custom token: ${resp.status} ${body}`);
+      throw new Error(`Failed to sign in ${this.persona.email}: ${resp.status} ${body}`);
     }
 
-    const data = (await resp.json()) as { idToken: string };
+    const data = (await resp.json()) as { idToken: string; localId: string };
     this.idToken = data.idToken;
   }
 

@@ -1,9 +1,27 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
+import {
+  fetchActivityFeed,
+  fetchCalendarEvents,
+  fetchDashboard,
+  fetchEventSuggestions,
+  fetchFriends,
+  fetchMeetups,
+  fetchSavedEvents,
+  queryKeys,
+  type ActivityFeedItem,
+  type CalendarEvent,
+  type EventSuggestion,
+  type FriendRecord,
+  type FriendToSee,
+  type Meetup,
+  type SavedEvent,
+} from '../lib/queries';
 
 /** Responsive breakpoint — true when viewport < 640px */
 function useIsMobile() {
@@ -15,18 +33,6 @@ function useIsMobile() {
     return () => mq.removeEventListener('change', handler);
   }, []);
   return isMobile;
-}
-
-/* ─── types ─── */
-interface ActivityFeedItem {
-  type: 'overdue_friends' | 'recent_activity' | 'free_weekend';
-  priority: number;
-  friendId: string;
-  friendName: string;
-  friendPhoto?: string;
-  message: string;
-  timestamp?: string;
-  activityType?: string;
 }
 
 /* ─── constants ─── */
@@ -65,38 +71,7 @@ const CANCEL_REASONS = [
   { value: 'other', emoji: '🤷', label: 'Other' },
 ];
 
-/* ─── types ─── */
-interface Meetup {
-  id: string;
-  title: string;
-  start_time: string;
-  end_time: string;
-  status: string;
-  created_by: string;
-  participants: { userId: string; displayName: string; photoUrl: string | null; rsvp: string }[];
-  myRsvp: string;
-}
-interface CalEvent {
-  id: string;
-  title: string;
-  start: string;
-  end: string;
-  allDay: boolean;
-  location: string | null;
-  source: 'google' | 'apple';
-  calendarName: string;
-  color: string | null;
-}
-interface FriendToSee {
-  id: string;
-  displayName: string;
-  photoUrl: string | null;
-  socialBattery: string;
-  lastHangout: string | null;
-  neighborhood: string | null;
-  timezone: string | null;
-  friendshipType: string;
-}
+type CalEvent = CalendarEvent;
 
 /* ─── helpers ─── */
 function timeAgo(dateStr: string): string {
@@ -175,6 +150,7 @@ function HowItWorks() {
 export default function DashboardPage() {
   const { user, calendarConnected, calendarJustConnected } = useAuth();
   const isMobile = useIsMobile();
+  const queryClient = useQueryClient();
 
   // Calendar view state — week on mobile, month on desktop
   const [calView, setCalView] = useState<'agenda' | 'week' | 'month'>(() => {
@@ -186,14 +162,11 @@ export default function DashboardPage() {
     setCalView(v);
     localStorage.setItem('slotted_cal_view', v);
   };
-  const [calEvents, setCalEvents] = useState<CalEvent[]>([]);
-  const [calEventsLoading, setCalEventsLoading] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 1 = next week, etc.
   const [monthOffset, setMonthOffset] = useState(0); // 0 = this month, 1 = next month, etc.
 
   // Manual busy block mode
   const [markBusyMode, setMarkBusyMode] = useState(false);
-  const [busyBlockSaving, setBusyBlockSaving] = useState(false);
   const [busyBlockJustSaved, setBusyBlockJustSaved] = useState(false);
 
   // Drag-to-select busy blocks state
@@ -203,19 +176,10 @@ export default function DashboardPage() {
   const [pendingBlocks, setPendingBlocks] = useState<Set<string>>(new Set()); // "dateStr|hour" keys
 
   // Dashboard data
-  const [friendsToSee, setFriendsToSee] = useState<FriendToSee[]>([]);
-
-  const [activities, setActivities] = useState<ActivityFeedItem[]>([]);
   const [dismissingActivity, setDismissingActivity] = useState<string | null>(null);
 
-  // Smart event suggestions
-  const [eventSuggestions, setEventSuggestions] = useState<any[]>([]);
-  const [savedEvents, setSavedEvents] = useState<any[]>([]);
-
   // Meetups
-  const [meetups, setMeetups] = useState<Meetup[]>([]);
   const [didntHappenId, setDidntHappenId] = useState<string | null>(null);
-  const [reasonSaving, setReasonSaving] = useState(false);
   const [cancellingMeetupId, setCancellingMeetupId] = useState<string | null>(null);
   const [expandedMeetupId, setExpandedMeetupId] = useState<string | null>(null);
   const [acceptingMeetupId, setAcceptingMeetupId] = useState<string | null>(null);
@@ -231,12 +195,10 @@ export default function DashboardPage() {
   const [logDuration, setLogDuration] = useState<number | null>(null);
   const [logTimeOfDay, setLogTimeOfDay] = useState('');
   const [logRating, setLogRating] = useState(0);
-  const [logSaving, setLogSaving] = useState(false);
   const [logSaved, setLogSaved] = useState(false);
   const [logDate, setLogDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [logFriendId, setLogFriendId] = useState<string>('');
   const [logFriendName, setLogFriendName] = useState('');
-  const [allFriends, setAllFriends] = useState<{ id: string; displayName: string; photoUrl: string | null }[]>([]);
 
   const today = new Date();
   const greeting =
@@ -245,95 +207,199 @@ export default function DashboardPage() {
     today.getHours() < 12 ? '☀️' : today.getHours() < 18 ? '🌤️' : '🌙';
 
   /* ─── data fetching ─── */
-  const [dashboardLoading, setDashboardLoading] = useState(true);
-
-  // Stable user UID ref to avoid re-running effects when user object changes
   const userUid = user?.uid;
 
-  // Load core dashboard data once when user is available
-  useEffect(() => {
-    if (!userUid) return;
-    let active = true;
-    setDashboardLoading(true);
-    const loadingFallback = window.setTimeout(() => {
-      if (active) setDashboardLoading(false);
-    }, 1200);
+  const { data: friendsToSee = [], isLoading: dashboardLoading } = useQuery({
+    queryKey: queryKeys.dashboard,
+    queryFn: fetchDashboard,
+    enabled: !!userUid,
+  });
 
-    api.get('/dashboard')
-      .then((res) => {
-        if (!active) return;
-        setFriendsToSee(res.data.friendsToSee || []);
-      })
-      .finally(() => {
-        clearTimeout(loadingFallback);
-        if (active) setDashboardLoading(false);
-      });
+  const { data: activities = [] } = useQuery({
+    queryKey: queryKeys.activityFeed,
+    queryFn: fetchActivityFeed,
+    enabled: !!userUid,
+  });
 
-    api.get('/activity-feed')
-      .then((res) => {
-        if (!active) return;
-        setActivities(res.data.activities || []);
-      })
-      .catch(() => {});
+  const { data: meetups = [] } = useQuery({
+    queryKey: queryKeys.meetups,
+    queryFn: fetchMeetups,
+    enabled: !!userUid,
+  });
 
-    api.get('/meetups')
-      .then((res) => {
-        if (!active) return;
-        setMeetups(res.data.meetups || []);
-      })
-      .catch(() => {});
+  const { data: friendsData = [] } = useQuery({
+    queryKey: queryKeys.friends,
+    queryFn: fetchFriends,
+    enabled: !!userUid,
+  });
 
-    api.get('/friends')
-      .then((res) => {
-        if (!active) return;
-        const accepted = (res.data.friends || []).filter((f: any) => f.status === 'accepted');
-        setAllFriends(accepted.map((f: any) => ({ id: f.friend.id, displayName: f.friend.displayName, photoUrl: f.friend.photoUrl || null })));
-      })
-      .catch(() => {});
+  const { data: eventSuggestions = [] } = useQuery({
+    queryKey: queryKeys.events.suggestions,
+    queryFn: fetchEventSuggestions,
+    enabled: !!userUid,
+  });
 
-    // Load smart event suggestions (non-blocking)
-    api.get('/events/suggestions').then((r) => {
-      setEventSuggestions(r.data.suggestions || []);
-    }).catch(() => {});
+  const { data: savedEventsData = [] } = useQuery({
+    queryKey: queryKeys.events.saved,
+    queryFn: fetchSavedEvents,
+    enabled: !!userUid,
+  });
 
-    // Load saved/hearted events (non-blocking)
-    api.get('/events/saved').then((r) => {
-      setSavedEvents((r.data.events || r.data || []).slice(0, 5));
-    }).catch(() => {});
+  const savedEvents = useMemo(() => savedEventsData.slice(0, 5), [savedEventsData]);
 
-    return () => {
-      active = false;
-      clearTimeout(loadingFallback);
-    };
-  }, [userUid]); // only depends on UID string, not the mutable User object
+  const allFriends = useMemo(() => {
+    return friendsData
+      .filter((f) => f.status === 'accepted')
+      .map((f) => ({ id: f.friend.id, displayName: f.friend.displayName, photoUrl: f.friend.photoUrl || null }));
+  }, [friendsData]);
 
-  // Fetch calendar events (works for both calendar-connected and manual-only users)
-  // Note: /calendar/events also triggers a background availability sync server-side
-  useEffect(() => {
-    if (!userUid) return;
-    let active = true;
-    setCalEventsLoading(true);
+  const fetchDays = useMemo(() => {
+    if (calView !== 'month') return 14;
+    const ref = new Date();
+    ref.setMonth(ref.getMonth() + monthOffset);
+    const monthEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, 6);
+    const days = Math.ceil((monthEnd.getTime() - new Date().getTime()) / 86400000);
+    return days < 1 ? 1 : days;
+  }, [calView, monthOffset]);
 
-    let fetchDays = 14;
-    if (calView === 'month') {
-      const ref = new Date();
-      ref.setMonth(ref.getMonth() + monthOffset);
-      const monthEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, 6);
-      fetchDays = Math.ceil((monthEnd.getTime() - new Date().getTime()) / 86400000);
-      if (fetchDays < 1) fetchDays = 1;
-    }
+  const calendarQueryKey = useMemo(
+    () => queryKeys.calendarEvents(fetchDays, calendarConnected),
+    [fetchDays, calendarConnected],
+  );
 
-    api.get(`/calendar/events?days=${fetchDays}`).then(({ data }) => {
-      if (active) {
-        setCalEvents(data.events || []);
-        setCalEventsLoading(false);
+  const {
+    data: calEvents = [],
+    isFetching: calEventsLoading,
+  } = useQuery({
+    queryKey: calendarQueryKey,
+    queryFn: () => fetchCalendarEvents(fetchDays),
+    enabled: !!userUid,
+  });
+
+  type BusyBlockPayload = { start_time: string; end_time: string; label: string };
+
+  const saveBusyBlocksMutation = useMutation({
+    mutationFn: async (blocks: BusyBlockPayload[]) => {
+      if (blocks.length === 1) {
+        await api.post('/busy-blocks', blocks[0]);
+      } else {
+        await api.post('/busy-blocks/batch', { blocks });
       }
-    }).catch(() => {
-      if (active) setCalEventsLoading(false);
-    });
+    },
+    onMutate: async (blocks) => {
+      await queryClient.cancelQueries({ queryKey: calendarQueryKey });
+      const previousEvents = queryClient.getQueryData<CalEvent[]>(calendarQueryKey) ?? [];
+      const tempEvents: CalEvent[] = blocks.map((block, index) => ({
+        id: `manual_temp_${index}_${Date.now()}`,
+        title: 'Busy',
+        start: block.start_time,
+        end: block.end_time,
+        allDay: false,
+        location: null,
+        source: 'google',
+        calendarName: 'Slotted',
+        color: '#f59e0b',
+        status: 'confirmed',
+        myRsvp: 'accepted',
+        participants: [],
+      }));
+      queryClient.setQueryData<CalEvent[]>(calendarQueryKey, [...previousEvents, ...tempEvents]);
+      return { previousEvents };
+    },
+    onError: (err, blocks, context) => {
+      if (context?.previousEvents) {
+        queryClient.setQueryData(calendarQueryKey, context.previousEvents);
+      }
+      console.error('Failed to save busy blocks:', err);
+    },
+    onSuccess: () => {
+      setBusyBlockJustSaved(true);
+      setTimeout(() => setBusyBlockJustSaved(false), 1500);
+      queryClient.invalidateQueries({ queryKey: ['calendar', 'events'] });
+    },
+  });
 
-    return () => { active = false; };
-  }, [userUid, calendarConnected, calView, monthOffset]);
+  const removeBusyBlockMutation = useMutation({
+    mutationFn: async (eventId: string) => {
+      const blockId = eventId.replace('manual_', '');
+      await api.delete(`/busy-blocks/${blockId}`);
+    },
+    onMutate: async (eventId) => {
+      await queryClient.cancelQueries({ queryKey: calendarQueryKey });
+      const previousEvents = queryClient.getQueryData<CalEvent[]>(calendarQueryKey) ?? [];
+      queryClient.setQueryData<CalEvent[]>(calendarQueryKey, previousEvents.filter((ev) => ev.id !== eventId));
+      return { previousEvents };
+    },
+    onError: (err, eventId, context) => {
+      if (context?.previousEvents) {
+        queryClient.setQueryData(calendarQueryKey, context.previousEvents);
+      }
+      console.error('Failed to remove busy block:', err);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendar', 'events'] });
+    },
+  });
+
+  const updateMeetupRsvpMutation = useMutation({
+    mutationFn: async ({ meetupId, rsvp }: { meetupId: string; rsvp: 'accepted' | 'declined' }) => {
+      const { data } = await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp });
+      return data as { meetupConfirmed?: boolean };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.meetups });
+    },
+  });
+
+  const markMeetupDidntHappenMutation = useMutation({
+    mutationFn: async ({ meetupId, reason }: { meetupId: string; reason: string }) => {
+      await api.patch(`/meetups/${meetupId}/didnt-happen`, { reason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.meetups });
+    },
+  });
+
+  const shareMeetupMutation = useMutation({
+    mutationFn: async (meetupId: string) => {
+      const { data } = await api.post(`/meetups/${meetupId}/share`);
+      return data as { shareUrl: string };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.meetups });
+    },
+  });
+
+  const logMeetupMutation = useMutation({
+    mutationFn: async (payload: {
+      activity_type: string | null;
+      duration_min: number | null;
+      day_of_week: number;
+      time_of_day: string | null;
+      rating: number | null;
+      hangout_date: string;
+      friend_id: string | null;
+      friend_name: string | null;
+    }) => {
+      await api.post('/meetup-logs', payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.activityFeed });
+    },
+  });
+
+  const dismissActivityMutation = useMutation({
+    mutationFn: async ({ activityType, friendId }: { activityType: ActivityFeedItem['type']; friendId: string }) => {
+      await api.post('/activity-feed/dismiss', { activityType, friendId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.activityFeed });
+    },
+  });
+
+  const busyBlockSaving = saveBusyBlocksMutation.isPending;
+  const reasonSaving = markMeetupDidntHappenMutation.isPending;
+  const logSaving = logMeetupMutation.isPending;
 
   /* ─── manual busy block handlers (with drag-to-select) ─── */
   const isManualBlock = (ev: CalEvent) => ev.id?.startsWith('manual_') ?? false;
@@ -388,51 +454,16 @@ export default function DashboardPage() {
       return { start_time: startTime.toISOString(), end_time: endTime.toISOString(), label: 'Busy' };
     });
 
-    // Optimistic: add temporary events to calendar immediately
-    const tempEvents: CalEvent[] = blocksToSave.map((b, i) => ({
-      id: `manual_temp_${i}_${Date.now()}`,
-      title: 'Busy',
-      start: b.start_time,
-      end: b.end_time,
-      allDay: false,
-      location: null,
-      source: 'google' as const,
-      calendarName: 'Slotted',
-      color: '#f59e0b',
-      status: 'confirmed',
-      myRsvp: 'accepted',
-      participants: [],
-    }));
-    setCalEvents((prev) => [...prev, ...tempEvents]);
-
     setPendingBlocks(new Set());
     setDragStart(null);
     setDragEnd(null);
-    setBusyBlockSaving(true);
 
     try {
-      if (blocksToSave.length === 1) {
-        // Single block — use regular endpoint
-        await api.post('/busy-blocks', blocksToSave[0]);
-      } else {
-        // Multiple blocks — use batch endpoint
-        await api.post('/busy-blocks/batch', { blocks: blocksToSave });
-      }
-      setBusyBlockJustSaved(true);
-      setTimeout(() => setBusyBlockJustSaved(false), 1500);
-      // Background refresh to get real IDs from server
-      const fetchDays = calView === 'month' ? 45 : 14;
-      api.get(`/calendar/events?days=${fetchDays}`).then(({ data }) => {
-        setCalEvents(data.events || []);
-      }).catch(() => {});
-    } catch (err) {
-      console.error('Failed to save busy blocks:', err);
-      // Remove optimistic events on failure
-      setCalEvents((prev) => prev.filter((ev) => !ev.id.startsWith('manual_temp_')));
-    } finally {
-      setBusyBlockSaving(false);
+      await saveBusyBlocksMutation.mutateAsync(blocksToSave);
+    } catch {
+      // handled in mutation
     }
-  }, [isDragging, pendingBlocks, calView]);
+  }, [isDragging, pendingBlocks, saveBusyBlocksMutation]);
 
   // Global pointer-up listener to catch drag end even outside grid
   useEffect(() => {
@@ -443,23 +474,15 @@ export default function DashboardPage() {
   }, [isDragging, handleBusyPointerUp]);
 
   const handleRemoveBusyBlock = async (eventId: string) => {
-    // eventId is like "manual_<uuid>"
-    const blockId = eventId.replace('manual_', '');
-    // Optimistic removal
-    setCalEvents((prev) => prev.filter((ev) => ev.id !== eventId));
     try {
-      await api.delete(`/busy-blocks/${blockId}`);
-    } catch (err) {
-      console.error('Failed to remove busy block:', err);
-      // Re-fetch on error
-      const fetchDays = calView === 'month' ? 45 : 14;
-      api.get(`/calendar/events?days=${fetchDays}`).then(({ data }) => {
-        setCalEvents(data.events || []);
-      }).catch(() => {});
+      await removeBusyBlockMutation.mutateAsync(eventId);
+    } catch {
+      // handled in mutation
     }
   };
 
   /* ─── derived ─── */
+  const currentUserId = user?.uid?.replace(/^firebase_/, '') || '';
   const now = useMemo(() => new Date(), []);
   const upcoming = meetups.filter((m) => {
     const start = new Date(m.start_time);
@@ -517,12 +540,12 @@ export default function DashboardPage() {
   const handleAcceptMeetup = async (meetupId: string) => {
     setAcceptingMeetupId(meetupId);
     try {
-      const { data } = await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'accepted' });
-      // Update local state
-      setMeetups((prev) => prev.map((m) => {
+      const data = await updateMeetupRsvpMutation.mutateAsync({ meetupId, rsvp: 'accepted' });
+      const currentMeetups = queryClient.getQueryData<Meetup[]>(queryKeys.meetups) ?? meetups;
+      const updatedMeetups = currentMeetups.map((m) => {
         if (m.id !== meetupId) return m;
         const updatedParticipants = m.participants.map((p) =>
-          p.userId === (user?.uid?.replace(/^firebase_/, '') || '') ? { ...p, rsvp: 'accepted' } : p
+          p.userId === currentUserId ? { ...p, rsvp: 'accepted' } : p
         );
         const allAccepted = updatedParticipants.every((p) => p.rsvp === 'accepted');
         return {
@@ -531,10 +554,10 @@ export default function DashboardPage() {
           status: data.meetupConfirmed || allAccepted ? 'confirmed' : m.status,
           participants: updatedParticipants,
         };
-      }));
-      // If meetup is now confirmed, show add to calendar
+      });
+      queryClient.setQueryData(queryKeys.meetups, updatedMeetups);
       if (data.meetupConfirmed) {
-        const meetup = meetups.find((m) => m.id === meetupId);
+        const meetup = updatedMeetups.find((m) => m.id === meetupId);
         if (meetup) {
           setCalendarModal({
             meetupId,
@@ -544,28 +567,42 @@ export default function DashboardPage() {
           });
         }
       }
-    } catch { /* silent */ }
-    finally { setAcceptingMeetupId(null); }
+    } catch {
+      // silent
+    } finally {
+      setAcceptingMeetupId(null);
+    }
   };
 
   const handleCancelMeetup = async (meetupId: string) => {
     if (!window.confirm('Cancel this hangout? The other person will be notified.')) return;
     setCancellingMeetupId(meetupId);
     try {
-      await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'declined' });
-      setMeetups((prev) => prev.map((m) => m.id === meetupId ? { ...m, myRsvp: 'declined', status: 'cancelled' } : m));
-    } catch { /* silent */ }
-    finally { setCancellingMeetupId(null); }
+      await updateMeetupRsvpMutation.mutateAsync({ meetupId, rsvp: 'declined' });
+      const currentMeetups = queryClient.getQueryData<Meetup[]>(queryKeys.meetups) ?? meetups;
+      const updatedMeetups = currentMeetups.map((m) =>
+        m.id === meetupId ? { ...m, myRsvp: 'declined', status: 'cancelled' } : m
+      );
+      queryClient.setQueryData(queryKeys.meetups, updatedMeetups);
+    } catch {
+      // silent
+    } finally {
+      setCancellingMeetupId(null);
+    }
   };
 
   const handleDidntHappen = async (meetupId: string, reason: string) => {
-    setReasonSaving(true);
     try {
-      await api.patch(`/meetups/${meetupId}/didnt-happen`, { reason });
-      setMeetups((prev) => prev.map((m) => m.id === meetupId ? { ...m, status: 'didnt_happen' } : m));
+      await markMeetupDidntHappenMutation.mutateAsync({ meetupId, reason });
+      const currentMeetups = queryClient.getQueryData<Meetup[]>(queryKeys.meetups) ?? meetups;
+      queryClient.setQueryData(
+        queryKeys.meetups,
+        currentMeetups.map((m) => (m.id === meetupId ? { ...m, status: 'didnt_happen' } : m)),
+      );
       setDidntHappenId(null);
-    } catch { /* silent */ }
-    finally { setReasonSaving(false); }
+    } catch {
+      // silent
+    }
   };
 
   const formatMeetupTime = (start: string) => {
@@ -578,8 +615,8 @@ export default function DashboardPage() {
     setSharingMeetupId(meetupId);
     setShareUrl(null);
     try {
-      const { data } = await api.post(`/meetups/${meetupId}/share`);
-      const url = data.shareUrl as string;
+      const data = await shareMeetupMutation.mutateAsync(meetupId);
+      const url = data.shareUrl;
       setShareUrl(url);
       const message = `Hey! Here are the details for ${title || 'our hangout'} — add it to your calendar:\n${url}`;
       if (navigator.share) {
@@ -589,12 +626,20 @@ export default function DashboardPage() {
       } else {
         await navigator.clipboard.writeText(message);
       }
-    } catch { /* silent */ }
-    finally { if (!navigator.share) setTimeout(() => { setSharingMeetupId(null); setShareUrl(null); }, 2000); }
+    } catch {
+      // silent
+    } finally {
+      if (!navigator.share) {
+        setTimeout(() => {
+          setSharingMeetupId(null);
+          setShareUrl(null);
+        }, 2000);
+      }
+    }
   };
 
   const otherParticipants = (m: Meetup) =>
-    m.participants.filter((p) => p.userId !== user?.uid?.replace(/^firebase_/, ''));
+    m.participants.filter((p) => p.userId !== currentUserId);
 
   /* helper: get the date string (YYYY-MM-DD) for an event's start, handling all-day vs timed */
   const eventDateStr = (isoStr: string, isAllDay: boolean) => {
@@ -885,7 +930,7 @@ export default function DashboardPage() {
               const isExpanded = expandedMeetupId === m.id;
               const friendId = others.length === 1 ? others[0].userId : null;
               const iNeedToRespond = m.myRsvp === 'pending';
-              const waitingOn = m.participants.filter((p) => p.rsvp === 'pending' && p.userId !== (user?.uid?.replace(/^firebase_/, '') || ''));
+              const waitingOn = m.participants.filter((p) => p.rsvp === 'pending' && p.userId !== currentUserId);
               return (
                 <div key={m.id} className="rounded-xl border border-amber-100 bg-white overflow-hidden">
                   <div
@@ -1567,7 +1612,7 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="divide-y divide-gray-50">
-            {eventSuggestions.slice(0, 3).map((ev: any) => (
+            {eventSuggestions.slice(0, 3).map((ev) => (
               <Link key={ev.id} to={`/events`} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-slotted-50/30">
                 {ev.imageUrl ? (
                   <img src={ev.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0 shadow-sm" loading="lazy" />
@@ -1585,7 +1630,7 @@ export default function DashboardPage() {
                   <p className="text-[11px] text-slotted-600 font-medium mt-0.5 truncate">{ev.reason}</p>
                 </div>
                 <div className="flex -space-x-1.5 shrink-0">
-                  {(ev.matchingFriends || []).slice(0, 3).map((f: any) => (
+                  {(ev.matchingFriends || []).slice(0, 3).map((f) => (
                     f.photo ? (
                       <img key={f.id} src={f.photo} alt="" className="h-6 w-6 rounded-full ring-2 ring-white" title={f.name} loading="lazy" />
                     ) : (
@@ -1612,7 +1657,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="divide-y divide-gray-50">
-            {savedEvents.map((ev: any) => (
+            {savedEvents.map((ev) => (
               <a
                 key={ev.id}
                 href={ev.url}
@@ -1686,18 +1731,16 @@ export default function DashboardPage() {
                   </div>
                   <button
                     onClick={async () => {
-                      if (!user) return;
                       setDismissingActivity(activityKey);
-                      setActivities(prev => prev.filter((_, i) => i !== index));
+                      const previousActivities = queryClient.getQueryData<ActivityFeedItem[]>(queryKeys.activityFeed) ?? activities;
+                      queryClient.setQueryData(
+                        queryKeys.activityFeed,
+                        previousActivities.filter((_, i) => i !== index),
+                      );
                       try {
-                        const token = await user.getIdToken();
-                        await fetch('/api/activity-feed/dismiss', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                          body: JSON.stringify({ activityType: activity.type, friendId: activity.friendId }),
-                        });
-                      } catch (err) {
-                        console.error('Failed to dismiss activity:', err);
+                        await dismissActivityMutation.mutateAsync({ activityType: activity.type, friendId: activity.friendId });
+                      } catch {
+                        queryClient.setQueryData(queryKeys.activityFeed, previousActivities);
                       } finally {
                         setDismissingActivity(null);
                       }
@@ -1932,30 +1975,29 @@ export default function DashboardPage() {
               <p className="text-[10px] text-gray-400 mt-0.5">Only visible to you</p>
             </div>
             <div className="flex items-center gap-3 pt-1">
-              <button
-                disabled={logSaving}
-                onClick={async () => {
-                  setLogSaving(true);
-                  try {
-                    const hangoutDate = new Date(logDate + 'T12:00:00');
-                    await api.post('/meetup-logs', {
-                      activity_type: logActivity || null,
-                      duration_min: logDuration || null,
-                      day_of_week: hangoutDate.getDay(),
-                      time_of_day: logTimeOfDay || null,
-                      rating: logRating || null,
-                      hangout_date: logDate,
-                      friend_id: logFriendId || null,
-                      friend_name: (!logFriendId && logFriendName.trim()) ? logFriendName.trim() : null,
-                    });
-                    setLogSaved(true);
-                    setTimeout(() => { setLogSaved(false); setShowLogForm(false); setLogFriendId(''); setLogFriendName(''); setLogDate(new Date().toISOString().slice(0, 10)); setLogActivity(''); setLogDuration(null); setLogTimeOfDay(''); setLogRating(0); }, 2000);
-                  } catch (err: any) {
-                    console.error('Hangout log error:', err);
-                    alert(err?.response?.data?.error || 'Failed to save hangout. Please try again.');
-                  }
-                  finally { setLogSaving(false); }
-                }}
+                <button
+                  disabled={logSaving}
+                  onClick={async () => {
+                    try {
+                      const hangoutDate = new Date(logDate + 'T12:00:00');
+                      await logMeetupMutation.mutateAsync({
+                        activity_type: logActivity || null,
+                        duration_min: logDuration || null,
+                        day_of_week: hangoutDate.getDay(),
+                        time_of_day: logTimeOfDay || null,
+                        rating: logRating || null,
+                        hangout_date: logDate,
+                        friend_id: logFriendId || null,
+                        friend_name: (!logFriendId && logFriendName.trim()) ? logFriendName.trim() : null,
+                      });
+                      setLogSaved(true);
+                      setTimeout(() => { setLogSaved(false); setShowLogForm(false); setLogFriendId(''); setLogFriendName(''); setLogDate(new Date().toISOString().slice(0, 10)); setLogActivity(''); setLogDuration(null); setLogTimeOfDay(''); setLogRating(0); }, 2000);
+                    } catch (err) {
+                      const error = err as { response?: { data?: { error?: string } } };
+                      console.error('Hangout log error:', err);
+                      alert(error.response?.data?.error || 'Failed to save hangout. Please try again.');
+                    }
+                  }}
                 className={`rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
                   logSaved ? 'bg-emerald-500' : 'gradient-btn'
                 }`}

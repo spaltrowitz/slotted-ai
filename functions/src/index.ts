@@ -233,6 +233,31 @@ async function getAcceptedFriendIdSet(userId: string): Promise<Set<string>> {
   return ids;
 }
 
+async function strictCalendarCheck(userId: string): Promise<boolean> {
+  const sb = getSupabase();
+  const { data: selectedRows } = await sb
+    .from("user_calendars")
+    .select("user_id")
+    .eq("user_id", userId)
+    .eq("is_selected", true)
+    .limit(1);
+  if (!selectedRows || selectedRows.length === 0) return false;
+
+  const nowIso = new Date().toISOString();
+  const windowEndIso = new Date(Date.now() + 14 * 86400000).toISOString();
+  const recentSyncCutoffIso = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
+  const { data: busyRows } = await sb
+    .from("availability")
+    .select("user_id")
+    .eq("user_id", userId)
+    .eq("status", "busy")
+    .gte("end_time", nowIso)
+    .lte("start_time", windowEndIso)
+    .gte("created_at", recentSyncCutoffIso)
+    .limit(1);
+  return !!(busyRows && busyRows.length > 0);
+}
+
 /** Helper: true if user is a participant of the given meetup */
 async function isMeetupParticipant(meetupId: string, userId: string): Promise<boolean> {
   const { data, error } = await getSupabase()
@@ -1638,16 +1663,21 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
       return;
     }
 
-    // Notify the referrer — createNotification handles dedup internally
+    // Only notify the referrer if the friendship was just created (not an upsert no-op).
+    // Compare created_at to now — if older than 30 seconds, this was a pre-existing friendship.
     if (data) {
-      await createNotification({
-        userId: referrer.id,
-        type: "friend_accepted",
-        title: "New friend connected!",
-        body: `${me.display_name || me.email} joined Slotted via your invite and you're now connected.`,
-        relatedUserId: me.id,
-        relatedId: data.id,
-      });
+      const createdAt = new Date(data.created_at).getTime();
+      const isNew = Date.now() - createdAt < 30000;
+      if (isNew) {
+        await createNotification({
+          userId: referrer.id,
+          type: "friend_accepted",
+          title: "New friend connected!",
+          body: `${me.display_name || me.email} joined Slotted via your invite and you're now connected.`,
+          relatedUserId: me.id,
+          relatedId: data.id,
+        });
+      }
     }
 
     res.json(data);
@@ -3164,7 +3194,7 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
           synced: friendSync.synced,
           freeSlots: friendSync.slots,
           name: friendUser?.display_name || "Friend",
-          calendarConnected: !!(friendUser?.google_refresh_token || friendUser?.apple_calendar_connected),
+          calendarConnected: await strictCalendarCheck(friendId),
         },
       },
     });
@@ -3283,6 +3313,9 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
     const suggestions = await scoreGroupOverlaps(me.id, requestedFriendIds, currentOverlaps, 8);
 
     // Build sync status for each participant
+    const calConnectedResults = await Promise.all(
+      friendUsers.map((fu) => fu?.id ? strictCalendarCheck(fu.id) : Promise.resolve(false)),
+    );
     const participantStatus = friendUsers.map((fu, idx) => {
       const syncResult = syncResults[idx + 1]; // +1 because index 0 is "me"
       const synced = syncResult?.status === "fulfilled"
@@ -3296,7 +3329,7 @@ app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, re
         name: fu?.display_name || "Friend",
         synced,
         freeSlots,
-        calendarConnected: !!(fu?.google_refresh_token || fu?.apple_calendar_connected),
+        calendarConnected: calConnectedResults[idx],
       };
     });
 

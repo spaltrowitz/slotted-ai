@@ -1,32 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
 import CounterProposePanel from '../components/CounterProposePanel';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
-
-interface Notification {
-  id: string;
-  type: 'friend_accepted' | 'friend_request' | 'meetup_request' | 'meetup_confirmed' | 'meetup_reminder' | 'calendar_match' | 'meetup_rsvp_changed' | 'meetup_time_changed' | 'meetup_counter_propose';
-  title: string;
-  body: string;
-  read: boolean;
-  created_at: string;
-  related_id?: string;
-  related_user_id?: string;
-  related_user?: {
-    display_name: string;
-    photo_url: string | null;
-  };
-  my_rsvp?: string; // from backend: current RSVP status for meetup_request notifications
-}
+import { fetchMeetups, fetchNotifications, queryKeys, type Notification } from '../lib/queries';
 
 export default function NotificationsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [rsvpLoading, setRsvpLoading] = useState<string | null>(null);
   const [rsvpDone, setRsvpDone] = useState<Record<string, string>>({});
   const [calendarModal, setCalendarModal] = useState<{
@@ -41,86 +26,154 @@ export default function NotificationsPage() {
   const [counterProposeActionLoading, setCounterProposeActionLoading] = useState<string | null>(null);
   const [counterProposeActionDone, setCounterProposeActionDone] = useState<Record<string, string>>({});
 
-  const fetchNotifications = useCallback(async () => {
-    if (!user) return;
-    try {
-      const res = await api.get('/notifications');
-      setNotifications(res.data);
-      // Pre-populate RSVP state from backend so buttons don't reappear after refresh
-      const preRsvp: Record<string, string> = {};
-      for (const n of res.data) {
-        if (n.type === 'meetup_request' && n.my_rsvp && n.my_rsvp !== 'pending') {
-          preRsvp[n.id] = n.my_rsvp;
-        }
-      }
-      if (Object.keys(preRsvp).length > 0) {
-        setRsvpDone((prev) => ({ ...preRsvp, ...prev }));
-      }
-    } catch {
-      // silently fail
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+  const { data: notifications = [], isLoading: loading } = useQuery({
+    queryKey: queryKeys.notifications,
+    queryFn: fetchNotifications,
+    enabled: !!user,
+  });
 
   useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
+    if (notifications.length === 0) return;
+    const preRsvp: Record<string, string> = {};
+    for (const n of notifications) {
+      if (n.type === 'meetup_request' && n.my_rsvp && n.my_rsvp !== 'pending') {
+        preRsvp[n.id] = n.my_rsvp;
+      }
+    }
+    if (Object.keys(preRsvp).length > 0) {
+      setRsvpDone((prev) => ({ ...preRsvp, ...prev }));
+    }
+  }, [notifications]);
+
+  const markAsReadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.patch(`/notifications/${id}/read`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => {
+      await api.post('/notifications/mark-all-read');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+
+  const dismissNotificationMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/notifications/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+
+  const rsvpMutation = useMutation({
+    mutationFn: async ({ meetupId, rsvp }: { meetupId: string; rsvp: 'accepted' | 'declined' | 'maybe' }) => {
+      const { data } = await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp });
+      return data as { quotaWarning?: { message: string } };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.meetups });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+
+  const friendRequestMutation = useMutation({
+    mutationFn: async ({ friendshipId, action }: { friendshipId: string; action: 'accept' | 'decline' }) => {
+      await api.patch(`/friends/${friendshipId}`, { action });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.friends });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+
+  const counterProposeMutation = useMutation({
+    mutationFn: async ({ meetupId, action }: { meetupId: string; action: 'update_time' | 'keep_original' }) => {
+      if (action === 'update_time') {
+        await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'accepted' });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.meetups });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
 
   const markAsRead = async (id: string) => {
+    const previousNotifications = queryClient.getQueryData<Notification[]>(queryKeys.notifications) ?? notifications;
+    queryClient.setQueryData(
+      queryKeys.notifications,
+      previousNotifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
+    );
     try {
-      await api.patch(`/notifications/${id}/read`);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-      );
+      await markAsReadMutation.mutateAsync(id);
     } catch {
-      // silently fail
+      queryClient.setQueryData(queryKeys.notifications, previousNotifications);
     }
   };
 
   const markAllRead = async () => {
+    const previousNotifications = queryClient.getQueryData<Notification[]>(queryKeys.notifications) ?? notifications;
+    queryClient.setQueryData(
+      queryKeys.notifications,
+      previousNotifications.map((n) => ({ ...n, read: true })),
+    );
     try {
-      await api.post('/notifications/mark-all-read');
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      await markAllReadMutation.mutateAsync();
     } catch {
-      // silently fail
+      queryClient.setQueryData(queryKeys.notifications, previousNotifications);
     }
   };
 
   const dismissNotification = async (id: string) => {
+    const previousNotifications = queryClient.getQueryData<Notification[]>(queryKeys.notifications) ?? notifications;
+    queryClient.setQueryData(
+      queryKeys.notifications,
+      previousNotifications.filter((n) => n.id !== id),
+    );
     try {
-      await api.delete(`/notifications/${id}`);
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      await dismissNotificationMutation.mutateAsync(id);
     } catch {
-      // silently fail
+      queryClient.setQueryData(queryKeys.notifications, previousNotifications);
     }
   };
 
   const handleRsvp = async (notificationId: string, meetupId: string, rsvp: 'accepted' | 'declined' | 'maybe') => {
     setRsvpLoading(notificationId);
     try {
-      const { data } = await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp });
+      const data = await rsvpMutation.mutateAsync({ meetupId, rsvp });
       // Check for quota warning before finalizing
       if (data.quotaWarning && rsvp === 'accepted') {
         const proceed = window.confirm(data.quotaWarning.message);
         if (!proceed) {
           // Undo the RSVP
-          await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'declined' });
+          await rsvpMutation.mutateAsync({ meetupId, rsvp: 'declined' });
           setRsvpLoading(null);
           return;
         }
       }
-      await api.patch(`/notifications/${notificationId}/read`);
+      await markAsReadMutation.mutateAsync(notificationId);
       setRsvpDone((prev) => ({ ...prev, [notificationId]: rsvp }));
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+      const previousNotifications = queryClient.getQueryData<Notification[]>(queryKeys.notifications) ?? notifications;
+      queryClient.setQueryData(
+        queryKeys.notifications,
+        previousNotifications.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
       );
 
       // If accepted, prompt to add to calendar
       if (rsvp === 'accepted') {
         try {
-          const { data: meetupData } = await api.get(`/meetups`);
-          const meetup = (meetupData.meetups || []).find((m: any) => m.id === meetupId);
+          const meetups = await queryClient.fetchQuery({
+            queryKey: queryKeys.meetups,
+            queryFn: fetchMeetups,
+          });
+          const meetup = meetups.find((m) => m.id === meetupId);
           if (meetup) {
             setCalendarModal({
               meetupId: meetup.id,
@@ -143,11 +196,13 @@ export default function NotificationsPage() {
   const handleFriendRequest = async (notificationId: string, friendshipId: string, action: 'accept' | 'decline') => {
     setFriendRequestLoading(notificationId);
     try {
-      await api.patch(`/friends/${friendshipId}`, { action });
-      await api.patch(`/notifications/${notificationId}/read`);
+      await friendRequestMutation.mutateAsync({ friendshipId, action });
+      await markAsReadMutation.mutateAsync(notificationId);
       setFriendRequestDone((prev) => ({ ...prev, [notificationId]: action }));
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+      const previousNotifications = queryClient.getQueryData<Notification[]>(queryKeys.notifications) ?? notifications;
+      queryClient.setQueryData(
+        queryKeys.notifications,
+        previousNotifications.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
       );
     } catch {
       // silently fail
@@ -159,13 +214,13 @@ export default function NotificationsPage() {
   const handleCounterProposeAction = async (notificationId: string, meetupId: string, action: 'update_time' | 'keep_original') => {
     setCounterProposeActionLoading(notificationId);
     try {
-      if (action === 'update_time') {
-        await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'accepted' });
-      }
-      await api.patch(`/notifications/${notificationId}/read`);
+      await counterProposeMutation.mutateAsync({ meetupId, action });
+      await markAsReadMutation.mutateAsync(notificationId);
       setCounterProposeActionDone((prev) => ({ ...prev, [notificationId]: action }));
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+      const previousNotifications = queryClient.getQueryData<Notification[]>(queryKeys.notifications) ?? notifications;
+      queryClient.setQueryData(
+        queryKeys.notifications,
+        previousNotifications.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
       );
     } catch {
       // silently fail
@@ -517,8 +572,11 @@ export default function NotificationsPage() {
                         onClick={async (e) => {
                           e.stopPropagation();
                           try {
-                            const { data: meetupData } = await api.get('/meetups');
-                            const meetup = (meetupData.meetups || []).find((m: any) => m.id === notification.related_id);
+                            const meetups = await queryClient.fetchQuery({
+                              queryKey: queryKeys.meetups,
+                              queryFn: fetchMeetups,
+                            });
+                            const meetup = meetups.find((m) => m.id === notification.related_id);
                             if (meetup) {
                               setCalendarModal({
                                 meetupId: meetup.id,
@@ -596,8 +654,11 @@ export default function NotificationsPage() {
                         onClick={async (e) => {
                           e.stopPropagation();
                           try {
-                            const { data: meetupData } = await api.get('/meetups');
-                            const meetup = (meetupData.meetups || []).find((m: any) => m.id === notification.related_id);
+                            const meetups = await queryClient.fetchQuery({
+                              queryKey: queryKeys.meetups,
+                              queryFn: fetchMeetups,
+                            });
+                            const meetup = meetups.find((m) => m.id === notification.related_id);
                             if (meetup) {
                               setCalendarModal({
                                 meetupId: meetup.id,

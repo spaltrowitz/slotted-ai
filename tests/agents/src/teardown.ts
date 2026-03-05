@@ -5,7 +5,6 @@
 //   npm run teardown
 // ---------------------------------------------------------------------------
 
-import * as admin from "firebase-admin";
 import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import { SlottedClient } from "./client.js";
@@ -20,7 +19,7 @@ function loadEnv() {
   const lines = readFileSync(envPath, "utf-8").split("\n");
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("//")) continue;
     const eqIdx = trimmed.indexOf("=");
     if (eqIdx === -1) continue;
     const key = trimmed.slice(0, eqIdx).trim();
@@ -31,13 +30,6 @@ function loadEnv() {
 
 loadEnv();
 
-const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "./service-account.json";
-const fullSaPath = resolve(import.meta.dirname || __dirname, "..", saPath);
-if (existsSync(fullSaPath)) {
-  const serviceAccount = JSON.parse(readFileSync(fullSaPath, "utf-8"));
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-}
-
 async function main() {
   console.log("🧹 Slotted Test Agent Teardown\n");
 
@@ -47,14 +39,7 @@ async function main() {
 
   // Clean up notifications for all test agents via admin endpoints
   for (const [name, p] of Object.entries(PERSONAS)) {
-    const uid = process.env[p.envUidKey];
-    if (!uid) {
-      console.log(`⚠️  Skipping ${name} — no UID in .env`);
-      continue;
-    }
-
     try {
-      // Authenticate to get the Supabase user ID
       const agentClient = new SlottedClient(p);
       await agentClient.authenticate();
       const supabaseId = await agentClient.getSupabaseUserId();

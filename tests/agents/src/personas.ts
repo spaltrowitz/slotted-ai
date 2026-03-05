@@ -5,6 +5,7 @@
 export interface AgentPersona {
   name: string;
   email: string;
+  password: string;
   envUidKey: string;               // env var name holding the Firebase UID
   displayName: string;
   timezone: string;
@@ -21,6 +22,7 @@ export const PERSONAS: Record<string, AgentPersona> = {
   planner: {
     name: "planner",
     email: process.env.AGENT1_EMAIL || "slotted.tester1@gmail.com",
+    password: process.env.AGENT1_PASSWORD || "SlottedTest1!2026",
     envUidKey: "AGENT1_FIREBASE_UID",
     displayName: "Tessa Planner",
     timezone: "America/New_York",
@@ -36,6 +38,7 @@ export const PERSONAS: Record<string, AgentPersona> = {
   spontaneous: {
     name: "spontaneous",
     email: process.env.AGENT2_EMAIL || "slotted.tester2@gmail.com",
+    password: process.env.AGENT2_PASSWORD || "SlottedTest2!2026",
     envUidKey: "AGENT2_FIREBASE_UID",
     displayName: "Sam Spontaneous",
     timezone: "America/New_York",
@@ -51,6 +54,7 @@ export const PERSONAS: Record<string, AgentPersona> = {
   flaky: {
     name: "flaky",
     email: process.env.AGENT3_EMAIL || "slotted.tester3@gmail.com",
+    password: process.env.AGENT3_PASSWORD || "SlottedTest3!2026",
     envUidKey: "AGENT3_FIREBASE_UID",
     displayName: "Fiona Flaky",
     timezone: "America/New_York",
