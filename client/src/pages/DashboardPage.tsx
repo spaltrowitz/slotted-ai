@@ -473,6 +473,42 @@ export default function DashboardPage() {
   const pendingHangouts = upcoming.filter((m) =>
     m.status !== 'confirmed' && !m.participants.every((p) => p.rsvp === 'accepted')
   );
+  const upcomingByWeek = useMemo(() => {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+
+    const thisWeekStart = new Date(today);
+    thisWeekStart.setDate(today.getDate() - dayOfWeek);
+    thisWeekStart.setHours(0, 0, 0, 0);
+
+    const thisWeekEnd = new Date(thisWeekStart);
+    thisWeekEnd.setDate(thisWeekStart.getDate() + 6);
+    thisWeekEnd.setHours(23, 59, 59, 999);
+
+    const nextWeekStart = new Date(thisWeekEnd.getTime() + 1);
+    nextWeekStart.setHours(0, 0, 0, 0);
+
+    const nextWeekEnd = new Date(nextWeekStart);
+    nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+    nextWeekEnd.setHours(23, 59, 59, 999);
+
+    const thisWeek = upcoming
+      .filter((m) => {
+        const start = new Date(m.start_time);
+        return start >= thisWeekStart && start <= thisWeekEnd;
+      })
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+    const nextWeek = upcoming
+      .filter((m) => {
+        const start = new Date(m.start_time);
+        return start >= nextWeekStart && start <= nextWeekEnd;
+      })
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+    return { thisWeek, nextWeek };
+  }, [upcoming]);
+
   const pastConfirmed = meetups.filter((m) => {
     const end = new Date(m.end_time);
     return end < now && (m.status === 'confirmed' || (m.status === 'proposed' && m.myRsvp === 'accepted'));
@@ -768,7 +804,7 @@ export default function DashboardPage() {
       )}
 
       {/* Calendar connected but no events — nudge to select calendars or mark busy */}
-      {calendarConnected && !calEventsLoading && calEvents.filter(e => !e.id.startsWith('manual_')).length === 0 && !calendarJustConnected && (
+      {!isMobile && calendarConnected && !calEventsLoading && calEvents.filter(e => !e.id.startsWith('manual_')).length === 0 && !calendarJustConnected && (
         <div className="mb-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <span className="text-lg">📅</span>
           <p className="text-sm text-amber-800">
@@ -1055,8 +1091,8 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* ─── CALENDAR ─── */}
-      {(calendarConnected || true) && (
+      {/* ─── CALENDAR (desktop only) ─── */}
+      {!isMobile && (
         <div id="cal-section" className={`mb-4 sm:mb-6 rounded-2xl border ${markBusyMode ? 'border-amber-300 ring-2 ring-amber-100' : 'border-gray-200/60'} bg-white shadow-sm overflow-hidden transition-all`}>
           <div className="flex items-center justify-between border-b border-gray-100 px-3 sm:px-5 py-2 sm:py-3">
             <div className="flex items-center gap-2">
@@ -1405,6 +1441,70 @@ export default function DashboardPage() {
                 ))}
               </div>
             )
+          )}
+        </div>
+      )}
+
+      {/* ─── UPCOMING HANGOUTS (mobile only — replaces calendar grid) ─── */}
+      {isMobile && (
+        <div className="mb-4 rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+            <span className="text-base">📅</span>
+            <h2 className="font-display text-sm font-semibold text-gray-900">Upcoming Hangouts</h2>
+          </div>
+          {upcoming.length === 0 ? (
+            <div className="py-8 text-center px-4">
+              <span className="text-2xl">📅</span>
+              <h3 className="mt-2 font-display text-sm font-bold text-gray-900">No hangouts coming up</h3>
+              <p className="mt-1 text-xs text-gray-500 leading-relaxed max-w-xs mx-auto">
+                Find a time that works for everyone and book something fun.
+              </p>
+              <Link
+                to="/friends"
+                className="mt-3 inline-flex items-center gap-2 rounded-xl gradient-btn px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+              >
+                👋 Find a time with a friend
+              </Link>
+            </div>
+          ) : (
+            <div className="p-4 space-y-4">
+              {[
+                { label: 'This Week', items: upcomingByWeek.thisWeek },
+                { label: 'Next Week', items: upcomingByWeek.nextWeek },
+              ].map(({ label, items }) => (
+                <div key={label}>
+                  <p className="text-xs font-semibold text-gray-500 mb-2">📅 {label}</p>
+                  {items.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic pl-1">(nothing yet)</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {items.map((m) => {
+                        const d = new Date(m.start_time);
+                        const dayAbbrev = d.toLocaleDateString('en-US', { weekday: 'short' });
+                        const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+                        const isConfirmed = m.status === 'confirmed' || m.participants.every((p) => p.rsvp === 'accepted');
+                        const others = otherParticipants(m);
+                        const displayTitle = m.title || others.map((p) => p.displayName.split(' ')[0]).join(', ');
+                        return (
+                          <div key={m.id} className="flex items-center gap-3 rounded-xl bg-gray-50/80 px-3 py-2.5">
+                            <div className="shrink-0 text-right" style={{ minWidth: '4.5rem' }}>
+                              <span className="text-xs font-semibold text-gray-700">{dayAbbrev}</span>
+                              <span className="text-xs text-gray-400 ml-1">{time}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{displayTitle}</p>
+                            </div>
+                            <span className={`shrink-0 text-xs font-medium ${isConfirmed ? 'text-emerald-600' : 'text-amber-600'}`}>
+                              {isConfirmed ? 'confirmed ✓' : 'pending'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -1876,7 +1976,9 @@ export default function DashboardPage() {
         <div className="mt-4 sm:mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50/50 p-4 sm:p-5 text-center">
           <span className="text-xl sm:text-2xl">📅</span>
           <p className="mt-1 sm:mt-1.5 text-xs sm:text-sm font-medium text-gray-700">Connect your calendar for automatic availability</p>
-          <p className="mt-1 text-[11px] sm:text-xs text-gray-400">Or use <button onClick={() => { setMarkBusyMode(true); handleSetCalView('week'); setWeekOffset(0); document.getElementById('cal-section')?.scrollIntoView({ behavior: 'smooth' }); }} className="font-semibold text-amber-600 hover:text-amber-700 underline underline-offset-2">Mark Busy</button> on the calendar above to set your availability manually</p>
+          {!isMobile && (
+            <p className="mt-1 text-[11px] sm:text-xs text-gray-400">Or use <button onClick={() => { setMarkBusyMode(true); handleSetCalView('week'); setWeekOffset(0); document.getElementById('cal-section')?.scrollIntoView({ behavior: 'smooth' }); }} className="font-semibold text-amber-600 hover:text-amber-700 underline underline-offset-2">Mark Busy</button> on the calendar above to set your availability manually</p>
+          )}
           <Link
             to="/settings"
             className="mt-2.5 sm:mt-3 inline-block rounded-xl gradient-btn px-4 sm:px-5 py-1.5 sm:py-2 text-xs font-semibold text-white shadow-sm"

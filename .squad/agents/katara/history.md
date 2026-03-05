@@ -49,3 +49,12 @@ Toph designed webhook + incremental sync architecture. Frontend doesn't change f
 - DNS preconnect/prefetch hints added to index.html for googleapis, identitytoolkit, firebaseinstallations.
 - Vite build config: `target: 'es2020'`, `cssMinify: true`, `reportCompressedSize: false` for smaller bundles and faster builds.
 - No new dependencies introduced; all optimizations are pure config + Tailwind markup.
+
+### Mobile Calendar Removal (2026-07)
+- On mobile, the full calendar grid (week/month/agenda views, Mark Busy, calendar navigation) is replaced with a compact "Upcoming Hangouts" list grouped by "This Week" / "Next Week".
+- Desktop keeps the full calendar grid — no changes.
+- The `upcomingByWeek` useMemo groups meetups by current and next calendar week (Sunday–Saturday), sorted chronologically.
+- Each hangout row shows: day abbreviation, time, title, and status (`confirmed ✓` or `pending`) — follows Slotted soft-social language.
+- Empty state when no upcoming meetups: "No hangouts coming up" + CTA to find times with a friend.
+- The "Calendar connected but no events" nudge and the "Mark Busy" reference in the connect-calendar CTA are both hidden on mobile since they reference the calendar grid.
+- `isMobile` from `useIsMobile()` hook drives all conditional rendering — no new hooks or state.

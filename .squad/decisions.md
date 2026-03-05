@@ -798,3 +798,37 @@ Rewrote all 5 cards:
 - **Emoji 📅 → 🗓️** on card 1 to avoid duplicating the "How It Works" section's emoji.
 - **All titles 3–4 words** to prevent orphaning at 320px mobile viewports.
 
+---
+
+## Decision: Replace Mobile Calendar Grid with Upcoming Hangouts List (Katara, 2026-03-05)
+
+| Field | Value |
+|---|---|
+| **Author** | Katara (Frontend) |
+| **Date** | 2026-03-05 |
+| **Status** | Implemented |
+| **Scope** | DashboardPage mobile experience |
+
+### Decision
+
+On mobile (`useIsMobile()` returns true), the full calendar grid (week view, month view, agenda view, Mark Busy mode, calendar navigation) is entirely removed and replaced with a compact "Upcoming Hangouts" chronological list. Desktop is unchanged.
+
+### Rationale
+
+- The hourly time-grid calendar on mobile had scroll conflicts and was hard to use on small screens.
+- Users primarily care about their Slotted meetups on mobile, not raw calendar events.
+- A glanceable list grouped by "This Week" / "Next Week" is faster to scan and more mobile-friendly.
+
+### What Changed
+
+- **DashboardPage.tsx**: Calendar section wrapped with `!isMobile`, new mobile-only `<div>` renders the upcoming hangouts list.
+- **New `upcomingByWeek` useMemo**: Groups upcoming meetups by current and next calendar week (Sunday–Saturday boundaries).
+- **"Calendar connected but no events" nudge**: Hidden on mobile (references Mark Busy which is gone).
+- **"Connect calendar" CTA**: Mark Busy paragraph hidden on mobile.
+
+### Product Principles Followed
+
+- **Soft social dynamics**: Uses "pending" not "awaiting response", "confirmed ✓" not ✅ emoji.
+- **No social pressure**: Empty state says "No hangouts coming up" — no counts like "0 hangouts".
+- **Privacy-first**: Only shows Slotted meetup titles, no raw calendar event details.
+
