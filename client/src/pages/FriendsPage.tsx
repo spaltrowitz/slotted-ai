@@ -122,11 +122,6 @@ export default function FriendsPage() {
     window.open(`sms:?&body=${encodeURIComponent(message)}`, '_blank');
   };
 
-  const handleEmail = () => {
-    trackFriendInvited('email');
-    window.location.href = `mailto:?subject=${encodeURIComponent("Let's hang — try Slotted.ai!")}&body=${encodeURIComponent(message)}`;
-  };
-
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message);
     trackInviteLinkCopied();

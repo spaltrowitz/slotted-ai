@@ -182,8 +182,8 @@ function StageHasHangouts({
   upcoming,
   inviteUrl,
   currentUserId,
-  onExpand,
-  expandedId,
+  onExpand: _onExpand,
+  expandedId: _expandedId,
   calendarModal,
   onCalendarModal,
 }: {

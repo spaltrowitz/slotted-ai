@@ -394,7 +394,7 @@ export default function NotificationsPage() {
                     loading="lazy"
                   />
                 ) : (
-                  {config.emoji && <span className="mt-0.5 text-base">{config.emoji}</span>}
+                  config.emoji ? <span className="mt-0.5 text-base">{config.emoji}</span> : null
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">

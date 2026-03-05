@@ -337,7 +337,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                     {notification.related_user?.photo_url ? (
                       <img src={notification.related_user.photo_url} alt="" className="mt-0.5 h-7 w-7 rounded-full ring-2 ring-white shadow-sm" loading="lazy" />
                     ) : (
-                      {config.emoji ? <span className="mt-0.5 text-sm">{config.emoji}</span> : null}
+                      config.emoji ? <span className="mt-0.5 text-sm">{config.emoji}</span> : null
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
