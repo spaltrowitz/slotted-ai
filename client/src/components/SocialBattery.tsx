@@ -3,7 +3,7 @@ type BatteryLevel = 'open' | 'ask_me' | 'recharging';
 const batteryConfig: Record<BatteryLevel, { label: string; emoji: string; dot: string; activeBg: string; activeText: string; activeBorder: string; hoverBg: string }> = {
   open: {
     label: 'Open',
-    emoji: '💚',
+    emoji: '🟢',
     dot: 'bg-battery-open',
     activeBg: 'bg-gradient-to-r from-emerald-50 to-teal-50',
     activeText: 'text-emerald-700',
@@ -12,7 +12,7 @@ const batteryConfig: Record<BatteryLevel, { label: string; emoji: string; dot: s
   },
   ask_me: {
     label: 'Ask Me',
-    emoji: '💛',
+    emoji: '🟡',
     dot: 'bg-battery-ask',
     activeBg: 'bg-gradient-to-r from-amber-50 to-yellow-50',
     activeText: 'text-amber-700',

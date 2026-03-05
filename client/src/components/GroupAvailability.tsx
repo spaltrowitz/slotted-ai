@@ -110,7 +110,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
       <div className="flex items-center justify-between border-b border-purple-100 px-4 sm:px-5 py-4 bg-gradient-to-r from-purple-50/50 to-fuchsia-50/30">
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-sm font-bold text-gray-900 truncate">
-            👥 Group Availability ({friendNames.length + 1} people)
+            Group Availability ({friendNames.length + 1} people)
           </h3>
           <p className="mt-0.5 text-[11px] text-gray-400">
             Finding times that work for {friendNames.join(', ')} &amp; you
@@ -212,7 +212,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
           </div>
         ) : suggestions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <span className="text-4xl">📅</span>
+            <span className="text-4xl">—</span>
             <h4 className="mt-3 text-sm font-semibold text-gray-800">No common free times found</h4>
             <p className="mt-1.5 max-w-sm text-xs text-gray-400 leading-relaxed">
               All {friendNames.length + 1} people are busy for the next 2 weeks.
@@ -288,7 +288,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
           disabled={loading}
           className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
         >
-          {loading ? 'Syncing…' : '🔄 Refresh'}
+          {loading ? 'Syncing…' : 'Refresh'}
         </button>
       </div>
 

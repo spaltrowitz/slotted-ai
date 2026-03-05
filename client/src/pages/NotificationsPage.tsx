@@ -242,16 +242,16 @@ export default function NotificationsPage() {
   };
 
   const typeConfig: Record<string, { emoji: string; bg: string; border: string }> = {
-    friend_accepted: { emoji: '🎉', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-    friend_request: { emoji: '👋', bg: 'bg-violet-50', border: 'border-violet-100' },
-    meetup_request: { emoji: '📅', bg: 'bg-amber-50', border: 'border-amber-100' },
+    friend_accepted: { emoji: '', bg: 'bg-emerald-50', border: 'border-emerald-100' },
+    friend_request: { emoji: '', bg: 'bg-violet-50', border: 'border-violet-100' },
+    meetup_request: { emoji: '', bg: 'bg-amber-50', border: 'border-amber-100' },
     meetup_confirmed: { emoji: '✅', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-    meetup_reminder: { emoji: '⏰', bg: 'bg-blue-50', border: 'border-blue-100' },
-    calendar_match: { emoji: '✨', bg: 'bg-amber-50', border: 'border-amber-100' },
-    event_shared: { emoji: '🎟️', bg: 'bg-purple-50', border: 'border-purple-100' },
-    meetup_rsvp_changed: { emoji: '🔄', bg: 'bg-sky-50', border: 'border-sky-100' },
-    meetup_time_changed: { emoji: '🕐', bg: 'bg-indigo-50', border: 'border-indigo-100' },
-    meetup_counter_propose: { emoji: '💡', bg: 'bg-violet-50', border: 'border-violet-100' },
+    meetup_reminder: { emoji: '⏳', bg: 'bg-blue-50', border: 'border-blue-100' },
+    calendar_match: { emoji: '', bg: 'bg-amber-50', border: 'border-amber-100' },
+    event_shared: { emoji: '', bg: 'bg-purple-50', border: 'border-purple-100' },
+    meetup_rsvp_changed: { emoji: '', bg: 'bg-sky-50', border: 'border-sky-100' },
+    meetup_time_changed: { emoji: '', bg: 'bg-indigo-50', border: 'border-indigo-100' },
+    meetup_counter_propose: { emoji: '', bg: 'bg-violet-50', border: 'border-violet-100' },
   };
 
   /** Parse a shared event from the notification body if it starts with [EVENT_SHARE] */
@@ -361,7 +361,7 @@ export default function NotificationsPage() {
       ) : filteredNotifications.length === 0 ? (
         <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
           <div className="flex flex-col items-center justify-center px-6 py-20">
-            <div className="animate-float text-4xl sm:text-5xl mb-2">{activeTab === 'all' ? '🔔' : activeTab === 'unread' ? '✅' : activeTab === 'requests' ? '👋' : '⏰'}</div>
+            <div className="animate-float text-4xl sm:text-5xl mb-2">{activeTab === 'all' ? '' : activeTab === 'unread' ? '✅' : activeTab === 'requests' ? '' : '⏳'}</div>
             <h3 className="mt-3 font-display text-lg font-bold text-gray-900">
               {activeTab === 'all' ? 'No notifications yet' : activeTab === 'unread' ? 'All caught up!' : `No ${activeTab}`}
             </h3>
@@ -394,7 +394,7 @@ export default function NotificationsPage() {
                     loading="lazy"
                   />
                 ) : (
-                  <span className="mt-0.5 text-base">{config.emoji}</span>
+                  {config.emoji && <span className="mt-0.5 text-base">{config.emoji}</span>}
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
@@ -419,7 +419,6 @@ export default function NotificationsPage() {
                                   <img src={sharedEvent.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover shrink-0 shadow-sm" loading="lazy" />
                                 ) : (
                                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-purple-100 to-pink-100 text-base">
-                                    🎟️
                                   </div>
                                 )}
                                 <div className="flex-1 min-w-0">
@@ -430,7 +429,6 @@ export default function NotificationsPage() {
                                   </p>
                                 </div>
                                 <span className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-slotted-600 hover:bg-slotted-50 transition-colors">
-                                  🎟️
                                 </span>
                               </a>
                               {sharedEvent.senderMessage && (
@@ -467,7 +465,7 @@ export default function NotificationsPage() {
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : 'border-gray-200 bg-gray-50 text-gray-600'
                         }`}>
-                          {friendRequestDone[notification.id] === 'accept' ? '✅ Accepted' : '❌ Declined'}
+                          {friendRequestDone[notification.id] === 'accept' ? '✅ Accepted' : 'Declined'}
                         </span>
                       ) : (
                         <div className="flex flex-wrap gap-1.5">
@@ -503,7 +501,7 @@ export default function NotificationsPage() {
                                 ? 'border-blue-200 bg-blue-50 text-blue-700'
                                 : 'border-gray-200 bg-gray-50 text-gray-600'
                         }`}>
-                          {rsvpDone[notification.id] === 'accepted' ? '✅ Accepted' : rsvpDone[notification.id] === 'maybe' ? '🤔 Maybe' : rsvpDone[notification.id] === 'counter_proposed' ? '🔄 Suggested new time' : 'Not this time'}
+                          {rsvpDone[notification.id] === 'accepted' ? '✅ Accepted' : rsvpDone[notification.id] === 'maybe' ? 'Maybe' : rsvpDone[notification.id] === 'counter_proposed' ? 'Suggested new time' : 'Not this time'}
                         </span>
                       ) : (
                         <div className="flex flex-wrap gap-1.5">
@@ -519,7 +517,7 @@ export default function NotificationsPage() {
                             disabled={rsvpLoading === notification.id}
                             className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-700 transition-all hover:bg-amber-100 disabled:opacity-50"
                           >
-                            🤔 Maybe
+                            Maybe
                           </button>
                           <button
                             onClick={(e) => {
@@ -584,7 +582,7 @@ export default function NotificationsPage() {
                         }}
                         className="rounded-lg border border-slotted-200 bg-slotted-50 px-4 py-1.5 text-xs font-semibold text-slotted-700 transition-all hover:bg-slotted-100 shadow-sm"
                       >
-                        📅 Add to calendar
+                        Add to calendar
                       </button>
                     </div>
                   )}
@@ -597,7 +595,7 @@ export default function NotificationsPage() {
                         onClick={(e) => e.stopPropagation()}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-slotted-200 bg-slotted-50 px-4 py-1.5 text-xs font-semibold text-slotted-700 transition-all hover:bg-slotted-100 shadow-sm"
                       >
-                        📅 View meetup
+                        View meetup
                       </Link>
                     </div>
                   )}
@@ -619,7 +617,7 @@ export default function NotificationsPage() {
                           onClick={(e) => e.stopPropagation()}
                           className="inline-flex items-center gap-1.5 rounded-lg border border-slotted-200 bg-slotted-50 px-4 py-1.5 text-xs font-semibold text-slotted-700 transition-all hover:bg-slotted-100 shadow-sm"
                         >
-                          📅 View meetup
+                          View meetup
                         </Link>
                       ) : (
                         <div className="flex flex-wrap gap-2">
@@ -628,7 +626,7 @@ export default function NotificationsPage() {
                             disabled={counterProposeActionLoading === notification.id}
                             className="rounded-lg bg-violet-500 px-4 py-1.5 text-xs font-semibold text-white transition-all hover:bg-violet-600 shadow-sm disabled:opacity-50"
                           >
-                            {counterProposeActionLoading === notification.id ? '...' : '💡 Update time'}
+                            {counterProposeActionLoading === notification.id ? '...' : 'Update time'}
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'keep_original'); }}
@@ -666,7 +664,7 @@ export default function NotificationsPage() {
                         }}
                         className="rounded-lg border border-slotted-200 bg-slotted-50 px-4 py-1.5 text-xs font-semibold text-slotted-700 transition-all hover:bg-slotted-100 shadow-sm"
                       >
-                        📅 Add to calendar
+                        Add to calendar
                       </button>
                     </div>
                   )}

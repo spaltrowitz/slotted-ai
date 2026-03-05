@@ -54,7 +54,7 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
     return (
       <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🔔</span>
+          <span className="text-2xl"></span>
           <div className="flex-1">
             <p className="text-sm font-semibold text-emerald-900">Push notifications active</p>
             <p className="text-xs text-emerald-600">
@@ -62,7 +62,7 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
             </p>
             {!isStandalone && isMobile && (
               <p className="mt-1.5 text-[10px] text-emerald-500/80">
-                💡 For the most reliable notifications, install Slotted.ai as an app on your phone.
+                For the most reliable notifications, install Slotted.ai as an app on your phone.
               </p>
             )}
           </div>
@@ -83,7 +83,7 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
             </p>
             {!isStandalone && isMobile && (
               <p className="mt-1.5 text-[10px] text-amber-600">
-                📲 Installing Slotted.ai as an app (see above) gives the most reliable push notifications.
+                Installing Slotted.ai as an app (see above) gives the most reliable push notifications.
               </p>
             )}
             {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
@@ -126,7 +126,7 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
   return (
     <div className="rounded-2xl border border-slotted-200 bg-gradient-to-r from-slotted-50 to-purple-50 p-5 shadow-sm">
       <div className="flex items-start gap-4">
-        <span className="text-3xl">🔔</span>
+        <span className="text-3xl"></span>
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold text-gray-900">Enable push notifications</h3>
           <p className="mt-1 text-xs text-gray-600 leading-relaxed">
@@ -134,7 +134,7 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
           </p>
           {!isStandalone && isMobile && (
             <p className="mt-1.5 text-[10px] text-gray-400">
-              📲 For the best experience, install Slotted.ai as an app first (see above), then enable notifications.
+              For the best experience, install Slotted.ai as an app first (see above), then enable notifications.
             </p>
           )}
           {error && (

@@ -134,7 +134,7 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
         <div className="mb-4 rounded-2xl border border-slotted-200 bg-gradient-to-r from-slotted-50 to-purple-50 p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slotted-500 to-purple-600 text-lg text-white shadow-sm">
-              📲
+              
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900">
@@ -203,7 +203,6 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
                 <div className="space-y-3">
                   <Step
                     number={1}
-                    emoji="🔗"
                     title="Tap the Share button"
                     description={
                       <>
@@ -218,7 +217,6 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
 
                   <Step
                     number={2}
-                    emoji="➕"
                     title='Tap "Add to Home Screen"'
                     description="Scroll down in the share sheet and tap Add to Home Screen."
                   />
@@ -250,14 +248,12 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
                 <div className="space-y-3">
                   <Step
                     number={1}
-                    emoji="⋮"
                     title="Tap the menu (⋮)"
                     description="Tap the three-dot menu icon in the top-right corner of Chrome."
                   />
 
                   <Step
                     number={2}
-                    emoji="📲"
                     title='Tap "Add to Home screen"'
                     description='Select "Add to Home screen" or "Install app" from the menu.'
                   />
@@ -280,7 +276,6 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
                 <div className="space-y-3">
                   <Step
                     number={1}
-                    emoji="📌"
                     title="Install as an app (Chrome / Edge)"
                     description={
                       <>
@@ -304,7 +299,6 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
 
                   <Step
                     number={3}
-                    emoji="🔔"
                     title="Enable notifications"
                     description="After installing or bookmarking, make sure to enable push notifications below so you never miss a meetup request."
                   />
@@ -341,7 +335,7 @@ function Step({
   description,
 }: {
   number: number;
-  emoji: string;
+  emoji?: string;
   title: string;
   description: React.ReactNode;
 }) {
@@ -352,7 +346,7 @@ function Step({
       </div>
       <div>
         <p className="text-sm font-semibold text-gray-900">
-          {emoji} {title}
+          {emoji && <>{emoji} </>}{title}
         </p>
         <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">{description}</p>
       </div>

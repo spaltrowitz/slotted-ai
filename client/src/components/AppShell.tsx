@@ -1,8 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
+import { fetchNotifications, queryKeys } from '../lib/queries';
+import NotificationDropdown from './NotificationDropdown';
 
-const navItems = [
+const bottomNavItems = [
   {
     path: '/dashboard',
     label: 'Home',
@@ -21,15 +24,10 @@ const navItems = [
       </svg>
     ),
   },
-  {
-    path: '/notifications',
-    label: 'Inbox',
-    icon: (
-      <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-      </svg>
-    ),
-  },
+];
+
+const desktopNavItems = [
+  ...bottomNavItems,
   {
     path: '/settings',
     label: 'Settings',
@@ -43,11 +41,21 @@ const navItems = [
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
   const touchStartY = useRef<number | null>(null);
   const pullDistance = useRef(0);
   const isPulling = useRef(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+
+  const { data: notifications = [] } = useQuery({
+    queryKey: queryKeys.notifications,
+    queryFn: fetchNotifications,
+    enabled: !!user,
+  });
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('ontouchstart' in window)) return;
@@ -105,10 +113,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="absolute bottom-0 right-1/4 h-[350px] w-[350px] rounded-full bg-gradient-to-tl from-violet-100/20 via-fuchsia-50/15 to-transparent blur-3xl" />
       </div>
 
-      {/* Top navigation bar — desktop: full nav, mobile: logo + avatar only */}
+      {/* Top navigation bar */}
       <header className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/80 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-          {/* Left — logo + nav */}
+          {/* Left — logo + desktop nav */}
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-btn">
@@ -119,9 +127,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <span className="font-display text-lg font-bold text-gray-900">Slotted.ai</span>
             </Link>
 
-            {/* Desktop nav — hidden on mobile */}
+            {/* Desktop nav — Home, Friends, Settings */}
             <nav className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => {
+              {desktopNavItems.map((item) => {
                 const isActive = location.pathname.startsWith(item.path);
                 return (
                   <Link
@@ -141,15 +149,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
 
-          {/* Right — user */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={signOut}
-              aria-label="Sign out"
-              className="hidden md:inline-flex rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:border-gray-300 shadow-sm"
-            >
-              Sign out
-            </button>
+          {/* Right — bell icon, profile/settings icon */}
+          <div className="flex items-center gap-2">
+            {/* Bell icon — notifications dropdown trigger */}
+            <div className="relative">
+              <button
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                aria-label="Notifications"
+                className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                </svg>
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+              <NotificationDropdown open={notificationsOpen} onClose={closeNotifications} />
+            </div>
+
+            {/* Profile/Settings icon */}
             <Link to="/settings" aria-label="Settings" className="cursor-pointer rounded-full p-1 -m-1">
               {user?.photoURL ? (
                 <img src={user.photoURL} alt="" className="h-8 w-8 rounded-full ring-2 ring-slotted-100 transition-opacity hover:opacity-80" loading="lazy" />
@@ -168,10 +189,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto max-w-6xl px-4 py-6 pb-28 sm:px-6 sm:py-8 md:pb-8">{children}</div>
       </main>
 
-      {/* Mobile bottom tab bar — hidden on desktop */}
+      {/* Mobile bottom tab bar — 2 tabs: Home + Friends */}
       <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-gray-200/80 bg-white/95 backdrop-blur-xl md:hidden">
         <div className="mx-auto flex h-16 max-w-lg items-center justify-around px-1">
-          {navItems.map((item) => {
+          {bottomNavItems.map((item) => {
             const isActive = location.pathname.startsWith(item.path);
             return (
               <Link

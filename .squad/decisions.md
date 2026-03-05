@@ -1304,3 +1304,69 @@ Removed all 5 group CRUD endpoints from `functions/src/index.ts` (~434 lines). R
 ### Key Decision: Keep `scoreGroupOverlaps` function name
 
 The internal helper `scoreGroupOverlaps()` was NOT renamed because it's called by both the 1-on-1 `scoreOverlaps()` wrapper and the multi-friend endpoint. Renaming it would be a cosmetic-only change with risk of introducing bugs. Can be renamed in a future cleanup pass.
+
+
+---
+
+## Decision: Phase 2A UI Simplification (Katara, 2026-07)
+
+**Author:** Katara (Frontend Dev)  
+**Date:** 2026-07  
+**Status:** Implemented
+
+### Notifications are now a dropdown, not a page
+- `NotificationsPage.tsx` preserved but disconnected from nav (still routable at `/notifications` for deep links and push notification tap targets)
+- `NotificationDropdown.tsx` created in `components/` — renders as bottom sheet on mobile, dropdown on desktop
+- All notification actions (RSVP, friend requests, counter-propose) work inline in the dropdown
+- AppShell now fetches notifications for the unread count badge
+
+### Settings is a single scrollable page with accordion
+- Removed the 4-tab navigation (`profile`, `about`, `in-person`, `calls`)
+- New layout: Calendar (top) → Account → Advanced (collapsed)
+- Advanced accordion starts collapsed — most users never need to open it
+- Calendar is first because it directly impacts core experience
+
+### Bottom nav reduced to 2 tabs
+- Mobile: Home + Friends only
+- Header: [Logo] ... [Bell icon] [Profile avatar → Settings]
+- Desktop: Home, Friends, Settings in top nav bar (3 links)
+- Sign out button moved from header to Settings > Account section
+
+### Cross-Agent Impact
+- None — all changes are frontend-only, no API or schema changes
+- Push notification deep links to `/notifications` still work
+
+---
+
+## Decision: Phase 2B UI Simplification (Katara, 2026-07)
+
+**Author:** Katara (Frontend Dev)  
+**Date:** 2026-07  
+**Status:** Implemented
+
+### FriendsPage cards replaced with list rows
+- Removed friend categorization (local/long-distance), interest badges, calendar sync indicators, hangout cadence display
+- Each friend is now a single row: avatar (36px) + name + "last seen" caption + chevron
+- Added multi-select mode via long-press or "Select" toggle for batch "Find time" scheduling
+- Added "+ Invite a friend" row at bottom of list
+- Changed "Decline" to "Not now" for incoming friend invites (soft social language)
+
+### Onboarding reduced from 3 steps to 1
+- Removed step 2 (city selection) and step 3 (preferred times)
+- Single screen: welcome message + calendar connect
+- "Continue" button appears only after calendar is connected
+- Backend mutation sends empty `preferredTimes` array — no backend change needed
+
+### Help page created at /help
+- Repurposed HowItWorks content into 4 numbered steps
+- Accessible from Settings page (link after feedback section)
+- Protected route — requires authentication
+
+### Strict 8-emoji policy enforced
+- Only 🟢🟡🔴✅⏳⭐⚠️❤️ allowed across all frontend files
+- Decorative emojis in option arrays replaced with nothing or styled number badges
+- Applied to all pages and components (20+ files affected)
+
+### Cross-Agent Impact
+- None — all changes are frontend-only, no API or schema changes
+- Onboarding mutation still sends to same endpoint, just with empty preferredTimes

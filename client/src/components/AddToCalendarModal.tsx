@@ -108,7 +108,7 @@ export default function AddToCalendarModal({
         <div className="border-b border-gray-100 bg-gradient-to-r from-slotted-50/50 to-purple-50/50 px-4 py-4 sm:px-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-display text-base font-bold text-gray-900">📅 Add to Calendar</h3>
+              <h3 className="font-display text-base font-bold text-gray-900">Add to Calendar</h3>
               <p className="mt-0.5 text-xs text-gray-500">Save this meetup to your calendar</p>
             </div>
             <button

@@ -91,19 +91,18 @@ export default function LoginPage() {
         {/* Mobile: equal-width row that always fits */}
         <div className="grid grid-cols-3 gap-2 sm:hidden">
           {[
-            { step: '1', emoji: '📅', title: 'Connect calendar', color: 'from-blue-50 to-cyan-50', border: 'border-blue-100' },
-            { step: '2', emoji: '👋', title: 'Invite friends', color: 'from-violet-50 to-fuchsia-50', border: 'border-violet-100' },
-            { step: '3', emoji: '✨', title: 'Get suggestions', color: 'from-amber-50 to-orange-50', border: 'border-amber-100' },
+            { step: '1', title: 'Connect calendar', color: 'from-blue-50 to-cyan-50', border: 'border-blue-100' },
+            { step: '2', title: 'Invite friends', color: 'from-violet-50 to-fuchsia-50', border: 'border-violet-100' },
+            { step: '3', title: 'Get suggestions', color: 'from-amber-50 to-orange-50', border: 'border-amber-100' },
           ].map((item) => (
             <div
               key={item.step}
               className={`rounded-xl border ${item.border} bg-gradient-to-br ${item.color} p-2 shadow-sm`}
             >
               <div className="flex items-center gap-1.5 mb-1">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[9px] font-bold text-gray-900 shadow-sm ring-1 ring-gray-200/60">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-teal-500 text-[9px] font-bold text-white shadow-sm">
                   {item.step}
                 </span>
-                <span className="text-base">{item.emoji}</span>
               </div>
               <h3 className="font-display text-[11px] font-bold text-gray-900 leading-tight">{item.title}</h3>
             </div>
@@ -114,7 +113,6 @@ export default function LoginPage() {
           {[
             {
               step: '1',
-              emoji: '📅',
               title: 'Connect calendar',
               desc: 'Sign in with Google. We only see free or busy, never event titles or details.',
               color: 'from-blue-50 to-cyan-50',
@@ -122,7 +120,6 @@ export default function LoginPage() {
             },
             {
               step: '2',
-              emoji: '👋',
               title: 'Invite friends',
               desc: 'Share a link. When they join, we find mutual free time.',
               color: 'from-violet-50 to-fuchsia-50',
@@ -130,7 +127,6 @@ export default function LoginPage() {
             },
             {
               step: '3',
-              emoji: '✨',
               title: 'Get suggestions',
               desc: `AI picks the best times for you. Accept and it's on both calendars.`,
               color: 'from-amber-50 to-orange-50',
@@ -142,10 +138,9 @@ export default function LoginPage() {
               className={`rounded-2xl border ${item.border} bg-gradient-to-br ${item.color} p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md`}
             >
               <div className="mb-3 flex items-center gap-2.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-gray-900 shadow-sm ring-1 ring-gray-200/60">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-teal-500 text-xs font-bold text-white shadow-sm">
                   {item.step}
                 </span>
-                <span className="text-xl">{item.emoji}</span>
               </div>
               <h3 className="font-display text-sm font-bold text-gray-900">{item.title}</h3>
               <p className="mt-1.5 text-xs leading-relaxed text-gray-500">{item.desc}</p>
@@ -162,15 +157,14 @@ export default function LoginPage() {
         {/* Mobile: compact list */}
         <div className="flex flex-col gap-2 sm:hidden">
           {[
-            { emoji: '🗓️', text: 'Find times that actually work for the whole group' },
-            { emoji: '💬', text: "Turn \"let's hang\" into a real plan, no back and forth" },
-            { emoji: '🔔', text: "Gentle nudge when it's been a while since you hung out" },
-            { emoji: '⚡', text: "Connect calendars. Slotted finds when everyone's free" },
-            { emoji: '🔒', text: 'Your calendar stays private. We only see free or busy' },
-          ].map((item) => (
-            <div key={item.emoji} className="flex items-center gap-2.5 rounded-lg bg-white/60 px-3 py-2">
-              <span className="text-sm shrink-0">{item.emoji}</span>
-              <p className="text-xs text-gray-600">{item.text}</p>
+            'Find times that actually work for the whole group',
+            "Turn \"let's hang\" into a real plan, no back and forth",
+            "Gentle nudge when it's been a while since you hung out",
+            "Connect calendars. Slotted finds when everyone's free",
+            'Your calendar stays private. We only see free or busy',
+          ].map((text, i) => (
+            <div key={i} className="flex items-center gap-2.5 rounded-lg bg-white/60 px-3 py-2">
+              <p className="text-xs text-gray-600">{text}</p>
             </div>
           ))}
         </div>
@@ -178,45 +172,37 @@ export default function LoginPage() {
         <div className="hidden sm:flex flex-col gap-3">
           {[
             {
-              emoji: '🗓️',
               title: 'Plans, not promises',
               desc: 'Find times that actually work for a friend or the whole group.',
               accent: 'border-l-teal-400',
             },
             {
-              emoji: '💬',
               title: 'Skip the group text',
               desc: "Turn \"let's hang\" into a real plan without the back and forth.",
               accent: 'border-l-violet-400',
             },
             {
-              emoji: '🔔',
               title: 'Stay in the loop',
               desc: "Get a gentle nudge when it's been a while since you hung out.",
               accent: 'border-l-amber-400',
             },
             {
-              emoji: '⚡',
               title: 'Zero scheduling hassle',
               desc: "Connect your calendars and Slotted finds when everyone's free.",
               accent: 'border-l-pink-400',
             },
             {
-              emoji: '🔒',
               title: 'Your calendar stays private',
               desc: 'We only see free or busy, never details. You control what friends can see.',
               accent: 'border-l-cyan-400',
             },
           ].map((item) => (
             <div
-              key={item.emoji}
+              key={item.title}
               className={`rounded-xl border border-gray-200/60 border-l-[3px] ${item.accent} bg-white/70 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md`}
             >
-              <div className="flex items-center gap-2">
-                <span className="text-base">{item.emoji}</span>
-                <h3 className="font-display text-sm font-bold text-gray-900">{item.title}</h3>
-              </div>
-              <p className="mt-1 pl-7 text-xs leading-relaxed text-gray-500">{item.desc}</p>
+              <h3 className="font-display text-sm font-bold text-gray-900">{item.title}</h3>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500">{item.desc}</p>
             </div>
           ))}
         </div>

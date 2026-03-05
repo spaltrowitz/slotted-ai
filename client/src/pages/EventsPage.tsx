@@ -63,25 +63,25 @@ type ShareableEvent = EventResult | EventSuggestion;
 // Constants
 // ---------------------------------------------------------------------------
 const EVENT_TYPES = [
-  { value: '', label: 'All', emoji: '🔍' },
-  { value: 'theater', label: 'Theater', emoji: '🎭' },
-  { value: 'concert', label: 'Concerts', emoji: '🎵' },
-  { value: 'sports', label: 'Sports', emoji: '⚽' },
-  { value: 'comedy', label: 'Comedy', emoji: '😂' },
-  { value: 'festivals', label: 'Festivals', emoji: '🎪' },
-  { value: 'dance', label: 'Dance', emoji: '💃' },
-  { value: 'food', label: 'Food & Drink', emoji: '🍷' },
-  { value: 'community', label: 'Community', emoji: '🏘️' },
-  { value: 'outdoors', label: 'Outdoors', emoji: '🌳' },
+  { value: '', label: 'All' },
+  { value: 'theater', label: 'Theater' },
+  { value: 'concert', label: 'Concerts' },
+  { value: 'sports', label: 'Sports' },
+  { value: 'comedy', label: 'Comedy' },
+  { value: 'festivals', label: 'Festivals' },
+  { value: 'dance', label: 'Dance' },
+  { value: 'food', label: 'Food & Drink' },
+  { value: 'community', label: 'Community' },
+  { value: 'outdoors', label: 'Outdoors' },
 ];
 
 const DISCOVER_CATEGORIES = [
-  { value: 'concert', label: 'Concerts & Music', emoji: '🎵', gradient: 'from-purple-500 to-pink-500' },
-  { value: 'theater', label: 'Broadway & Theater', emoji: '🎭', gradient: 'from-amber-500 to-red-500' },
-  { value: 'sports', label: 'Sports', emoji: '⚽', gradient: 'from-green-500 to-emerald-500' },
-  { value: 'comedy', label: 'Comedy', emoji: '😂', gradient: 'from-yellow-500 to-orange-500' },
-  { value: 'food', label: 'Food & Drink', emoji: '🍷', gradient: 'from-red-500 to-rose-500' },
-  { value: 'community', label: 'Free & Community', emoji: '🏘️', gradient: 'from-blue-500 to-cyan-500' },
+  { value: 'concert', label: 'Concerts & Music', gradient: 'from-purple-500 to-pink-500' },
+  { value: 'theater', label: 'Broadway & Theater', gradient: 'from-amber-500 to-red-500' },
+  { value: 'sports', label: 'Sports', gradient: 'from-green-500 to-emerald-500' },
+  { value: 'comedy', label: 'Comedy', gradient: 'from-yellow-500 to-orange-500' },
+  { value: 'food', label: 'Food & Drink', gradient: 'from-red-500 to-rose-500' },
+  { value: 'community', label: 'Free & Community', gradient: 'from-blue-500 to-cyan-500' },
 ];
 
 // City-specific quick suggestions
@@ -134,16 +134,7 @@ const sourceLabel = (s: string) =>
 const sourceColor = (s: string) =>
   ({ seatgeek: 'bg-blue-50 text-blue-600', ticketmaster: 'bg-violet-50 text-violet-600', eventbrite: 'bg-orange-50 text-orange-600', meetup: 'bg-red-50 text-red-500', nyc_open_data: 'bg-green-50 text-green-600' }[s] || 'bg-gray-50 text-gray-600');
 
-const typeEmoji = (t: string) => {
-  const lower = t?.toLowerCase() || '';
-  if (lower.includes('theater') || lower.includes('arts')) return '🎭';
-  if (lower.includes('concert') || lower.includes('music')) return '🎵';
-  if (lower.includes('sport')) return '⚽';
-  if (lower.includes('comedy')) return '😂';
-  if (lower.includes('food') || lower.includes('drink')) return '🍷';
-  if (lower.includes('community') || lower.includes('free')) return '🏘️';
-  return '🎟️';
-};
+const typeEmoji = (_t: string) => '';
 
 /** Extract major city name from a neighborhood string */
 function extractMajorCity(input: string): string {
@@ -757,7 +748,7 @@ export default function EventsPage() {
           </p>
           <div className="flex items-center gap-2 mt-0.5">
             <p className="text-[11px] text-gray-400 truncate">
-              📍 {ev.venue}{ev.city ? `, ${ev.city}` : ''}
+              {ev.venue}{ev.city ? `, ${ev.city}` : ''}
             </p>
             {ev.performers && ev.performers.length > 0 && (
               <span className="text-[10px] text-gray-400 truncate hidden sm:inline">
@@ -807,7 +798,7 @@ export default function EventsPage() {
                 className={`rounded-full px-2.5 py-1 text-[10px] sm:text-[9px] font-semibold uppercase tracking-wider transition-all hover:opacity-80 ${sourceColor(s)}`}
                 title={`Buy on ${sourceLabel(s)}`}
               >
-                {allSources.length > 1 ? '🎟️' : ''} {sourceLabel(s)}
+                {sourceLabel(s)}
               </a>
             ))}
           </div>
@@ -838,7 +829,7 @@ export default function EventsPage() {
         {formatDateTime(ev.datetimeLocal || ev.datetime)}
       </p>
       <div className="flex items-center justify-between mt-1.5">
-        <span className="text-[10px] text-gray-400 truncate">📍 {ev.venue}</span>
+        <span className="text-[10px] text-gray-400 truncate">{ev.venue}</span>
         {formatPrice(ev.priceMin, ev.priceMax) && (
           <span className={`text-[10px] font-bold ${ev.priceMin === 0 ? 'text-green-600' : 'text-gray-600'}`}>
             {formatPrice(ev.priceMin, ev.priceMax)}
@@ -856,7 +847,7 @@ export default function EventsPage() {
       {/* Page Header */}
       <div className="mb-5">
         <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">
-          {friendNameParam ? `🎟️ Find something to do with ${friendNameParam}` : '🎟️ Things to Do'}
+          {friendNameParam ? `Find something to do with ${friendNameParam}` : 'Things to Do'}
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           {friendNameParam
@@ -875,7 +866,7 @@ export default function EventsPage() {
         <div className="mb-5 rounded-2xl border border-slotted-200/40 bg-gradient-to-r from-slotted-50/30 to-purple-50/20 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-slotted-100/50">
             <div className="flex items-center gap-2">
-              <span className="text-base">🎯</span>
+              <span className="text-base">⭐</span>
               <h2 className="font-display text-sm font-semibold text-gray-900">Events to do with friends</h2>
             </div>
             <span className="text-[10px] font-medium text-slotted-500">Based on shared interests &amp; availability</span>
@@ -886,7 +877,7 @@ export default function EventsPage() {
                 {ev.imageUrl ? (
                   <img src={ev.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0 shadow-sm" loading="lazy" />
                 ) : (
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 text-lg">🎟️</div>
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 text-lg" />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">{ev.title}</p>
@@ -915,7 +906,7 @@ export default function EventsPage() {
                     {ev.url && (
                       <a href={ev.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
                         className="rounded-full bg-slotted-100 px-2 py-0.5 text-[9px] font-semibold text-slotted-700 hover:bg-slotted-200 transition-all">
-                        🎟️ Tickets
+                        Tickets
                       </a>
                     )}
                   </div>
@@ -931,7 +922,7 @@ export default function EventsPage() {
         <div className="mb-5">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="text-base">🔥</span>
+              <span className="text-base">⭐</span>
               <h2 className="font-display text-sm font-semibold text-gray-900">
                 Trending in {city || 'your area'}
               </h2>
@@ -959,7 +950,7 @@ export default function EventsPage() {
               tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
-            {t === 'discover' ? '🗺️ Discover' : t === 'search' ? '🔍 Search' : t === 'saved' ? `❤️ Saved${savedEventIds.size > 0 ? ` (${savedEventIds.size})` : ''}` : '📅 Calendar'}
+            {t === 'discover' ? 'Discover' : t === 'search' ? 'Search' : t === 'saved' ? `❤️ Saved${savedEventIds.size > 0 ? ` (${savedEventIds.size})` : ''}` : 'Calendar'}
           </button>
         ))}
       </div>
@@ -1001,7 +992,7 @@ export default function EventsPage() {
                           <img src={s.imageUrl} alt="" className="h-9 w-9 rounded-lg object-cover shrink-0" loading="lazy" />
                         ) : (
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 text-sm">
-                            {s.type === 'performer' ? '🎤' : s.type === 'venue' ? '📍' : '🎟️'}
+                            {''}
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
@@ -1021,7 +1012,7 @@ export default function EventsPage() {
                 disabled={loading || !query.trim()}
                 className="rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
               >
-                {loading ? '…' : '🔍'}
+                {loading ? '…' : 'Search'}
               </button>
             </div>
 
@@ -1043,24 +1034,7 @@ export default function EventsPage() {
                       eventType === t.value ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
                     }`}
                   >
-                    {t.emoji} {t.label}
-                  </button>
-                ))}
-                <div className="relative group">
-                  <button className="rounded-md px-2 py-1 text-[11px] font-semibold text-gray-400 hover:text-gray-600 whitespace-nowrap">
-                    More ▾
-                  </button>
-                  <div className="absolute right-0 top-full z-40 hidden group-hover:block pt-1">
-                    <div className="rounded-lg border border-gray-200 bg-white shadow-lg p-1 min-w-[140px]">
-                      {EVENT_TYPES.slice(5).map((t) => (
-                        <button
-                          key={t.value}
-                          onClick={() => setEventType(t.value)}
-                          className={`w-full rounded-md px-3 py-1.5 text-left text-[11px] font-semibold transition-all ${
-                            eventType === t.value ? 'bg-slotted-50 text-slotted-700' : 'text-gray-500 hover:bg-gray-50'
-                          }`}
-                        >
-                          {t.emoji} {t.label}
+                    {t.label}
                         </button>
                       ))}
                     </div>
@@ -1108,7 +1082,7 @@ export default function EventsPage() {
               ))}
               {(dateFrom || dateTo) && (
                 <button onClick={() => { setDateFrom(''); setDateTo(''); }}
-                  className="text-[10px] text-gray-400 hover:text-red-400 transition-colors">✕ Clear</button>
+                  className="text-[10px] text-gray-400 hover:text-red-400 transition-colors">Clear</button>
               )}
             </div>
 
@@ -1117,17 +1091,17 @@ export default function EventsPage() {
               <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
                 <button onClick={() => setMode('search')}
                   className={`rounded-md px-3 py-1.5 text-[11px] font-semibold transition-all ${mode === 'search' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
-                  🔍 Browse
+                  Browse
                 </button>
                 <button onClick={() => setMode('match')}
                   className={`rounded-md px-3 py-1.5 text-[11px] font-semibold transition-all ${mode === 'match' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
-                  ✨ Match with friends
+                  Match with friends
                 </button>
               </div>
               {mode === 'match' && (
                 <button onClick={() => setShowFriendPicker(!showFriendPicker)}
                   className="rounded-lg border border-slotted-200 bg-slotted-50 px-3 py-1.5 text-[11px] font-semibold text-slotted-700 transition-all hover:bg-slotted-100">
-                  👥 {selectedFriends.size > 0 ? `${selectedFriends.size} selected` : 'Pick friends'}
+                  {selectedFriends.size > 0 ? `${selectedFriends.size} selected` : 'Pick friends'}
                 </button>
               )}
             </div>
@@ -1153,7 +1127,7 @@ export default function EventsPage() {
                               {f.displayName?.[0] ?? '?'}
                             </span>
                           )}
-                          {selected ? '✓ ' : ''}{f.displayName?.split(' ')[0] || f.email}
+                          {selected ? '✅ ' : ''}{f.displayName?.split(' ')[0] || f.email}
                         </button>
                       );
                     })}
@@ -1175,7 +1149,7 @@ export default function EventsPage() {
           {!loading && matches.length > 0 && (
             <div className="mb-5 rounded-2xl border border-slotted-200/60 bg-gradient-to-r from-slotted-50/40 to-purple-50/30 p-5 shadow-sm">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-base">✨</span>
+                <span className="text-base">⭐</span>
                 <h2 className="font-display text-sm font-semibold text-gray-900">
                   Times everyone is free
                 </h2>
@@ -1225,7 +1199,7 @@ export default function EventsPage() {
             <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
               <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-5 py-3">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-base shrink-0">🎫</span>
+                  <span className="text-base shrink-0">⭐</span>
                   <h2 className="font-display text-sm font-semibold text-gray-900 truncate">
                     {mode === 'match' ? 'All Events Found' : 'Search Results'}
                   </h2>
@@ -1240,7 +1214,7 @@ export default function EventsPage() {
           {!loading && searched && filteredEvents.length === 0 && (
             <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
               <div className="flex flex-col items-center justify-center px-6 py-16">
-                <span className="text-4xl sm:text-5xl mb-2">🎭</span>
+                <span className="text-4xl sm:text-5xl mb-2">⚠️</span>
                 <h3 className="mt-3 font-display text-lg font-bold text-gray-900">No events found</h3>
                 <p className="mt-2 max-w-sm text-center text-sm text-gray-400 leading-relaxed">
                   {priceFilter !== 'any' && events.length > 0
@@ -1259,7 +1233,7 @@ export default function EventsPage() {
                 <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm">🕔</span>
+                      <span className="text-sm">⏳</span>
                       <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Recent Searches</h3>
                     </div>
                     <button onClick={clearRecentSearches} className="text-[10px] text-gray-400 hover:text-red-400 transition-colors">Clear</button>
@@ -1282,7 +1256,7 @@ export default function EventsPage() {
               {/* Quick search suggestions */}
               <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-base">💡</span>
+                  <span className="text-base">⭐</span>
                   <h2 className="font-display text-sm font-semibold text-gray-900">
                     Ideas{city ? ` in ${city}` : ''}
                   </h2>
@@ -1302,7 +1276,7 @@ export default function EventsPage() {
               {friends.length > 0 && (
                 <div className="rounded-2xl border border-slotted-100 bg-gradient-to-r from-slotted-50/30 to-purple-50/20 p-5 shadow-sm">
                   <div className="flex items-start gap-3">
-                    <span className="text-2xl mt-0.5">👯</span>
+                    <span className="text-2xl mt-0.5">❤️</span>
                     <div className="flex-1">
                       <h3 className="font-display text-sm font-bold text-gray-900">Plan something with friends</h3>
                       <p className="mt-1 text-xs text-gray-500 leading-relaxed">
@@ -1338,12 +1312,11 @@ export default function EventsPage() {
                 <p className="text-center text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">How it works</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[
-                    { emoji: '🔍', title: 'Search', desc: 'Find concerts, shows, sports & more from SeatGeek, Ticketmaster, and other sources' },
-                    { emoji: '👥', title: 'Match', desc: "Pick friends and we'll cross-reference everyone's calendar to find times that work" },
-                    { emoji: '🎟️', title: 'Book', desc: 'Get direct links to buy tickets — with price comparisons across multiple platforms' },
+                    { title: 'Search', desc: 'Find concerts, shows, sports & more from SeatGeek, Ticketmaster, and other sources' },
+                    { title: 'Match', desc: "Pick friends and we'll cross-reference everyone's calendar to find times that work" },
+                    { title: 'Book', desc: 'Get direct links to buy tickets — with price comparisons across multiple platforms' },
                   ].map((step) => (
                     <div key={step.title} className="text-center">
-                      <span className="text-2xl">{step.emoji}</span>
                       <p className="mt-1 text-xs font-bold text-gray-700">{step.title}</p>
                       <p className="mt-0.5 text-[11px] text-gray-400 leading-relaxed">{step.desc}</p>
                     </div>
@@ -1361,7 +1334,7 @@ export default function EventsPage() {
           {/* City header */}
           <div className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-3">
-              <span className="text-2xl">🗺️</span>
+              <span className="text-2xl"></span>
               <div className="flex-1">
                 <h2 className="font-display text-base font-bold text-gray-900">
                   {city ? `What's happening in ${city}` : 'Discover local events'}
@@ -1386,7 +1359,6 @@ export default function EventsPage() {
                     : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}>
                 <div className={`absolute top-0 right-0 h-16 w-16 rounded-bl-full bg-gradient-to-br ${cat.gradient} opacity-10`} />
-                <span className="text-2xl">{cat.emoji}</span>
                 <p className="mt-2 text-sm font-semibold text-gray-900">{cat.label}</p>
               </button>
             ))}
@@ -1405,10 +1377,10 @@ export default function EventsPage() {
             <span className="text-xs text-gray-400 shrink-0">When:</span>
             <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 overflow-x-auto">
               {[
-                { value: 'all' as const, label: '📅 All', desc: 'Next 30 days' },
-                { value: 'today' as const, label: '☀️ Today', desc: new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) },
-                { value: 'tomorrow' as const, label: '🌅 Tomorrow', desc: (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); })() },
-                { value: 'weekend' as const, label: '🎉 This Weekend', desc: (() => {
+                { value: 'all' as const, label: 'All', desc: 'Next 30 days' },
+                { value: 'today' as const, label: 'Today', desc: new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) },
+                { value: 'tomorrow' as const, label: 'Tomorrow', desc: (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); })() },
+                { value: 'weekend' as const, label: 'This Weekend', desc: (() => {
                   const today = new Date();
                   const day = today.getDay();
                   const daysToSat = day === 6 ? 0 : day === 0 ? 6 : 6 - day;
@@ -1438,7 +1410,6 @@ export default function EventsPage() {
             <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm overflow-hidden">
               <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-5 py-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-base">📍</span>
                   <h2 className="font-display text-sm font-semibold text-gray-900">
                     {discoverCategory
                       ? `${DISCOVER_CATEGORIES.find(c => c.value === discoverCategory)?.label || 'Events'} in ${city}`
@@ -1457,7 +1428,7 @@ export default function EventsPage() {
           {/* Empty */}
           {!discoverLoading && discoverLoaded && filteredDiscoverEvents.length === 0 && (
             <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center shadow-sm">
-              <span className="text-4xl">🤷</span>
+              <span className="text-4xl">⚠️</span>
               <h3 className="mt-3 font-display text-base font-bold text-gray-700">No events found</h3>
               <p className="mt-2 text-sm text-gray-400">
                 {priceFilter !== 'any' && discoverEvents.length > 0
@@ -1469,7 +1440,7 @@ export default function EventsPage() {
 
           {!discoverLoading && !discoverLoaded && !city && (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/50 p-10 text-center">
-              <span className="text-4xl">📍</span>
+              <span className="text-4xl">⚠️</span>
               <h3 className="mt-3 font-display text-base font-bold text-gray-700">Set your city</h3>
               <p className="mt-2 text-sm text-gray-400">
                 Enter your city above or set it in <strong>Settings</strong> to browse local events.
@@ -1510,7 +1481,7 @@ export default function EventsPage() {
                   onClick={() => setTab('discover')}
                   className="mt-4 rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
                 >
-                  🗺️ Discover Events
+                  Discover Events
                 </button>
               </div>
             </div>
@@ -1600,7 +1571,7 @@ export default function EventsPage() {
 
           {!city && (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/50 p-8 text-center">
-              <span className="text-3xl">📍</span>
+              <span className="text-3xl">⚠️</span>
               <p className="mt-2 text-sm text-gray-400">Set your city in Settings to see events on the calendar.</p>
             </div>
           )}
@@ -1675,7 +1646,7 @@ export default function EventsPage() {
                                 {f.displayName?.[0] ?? '?'}
                               </span>
                             )}
-                            {selected ? '✓ ' : ''}{f.displayName?.split(' ')[0] || f.email}
+                            {selected ? '✅ ' : ''}{f.displayName?.split(' ')[0] || f.email}
                           </button>
                         );
                       })}

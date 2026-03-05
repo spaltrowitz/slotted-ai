@@ -7,19 +7,19 @@ import AddToCalendarModal from './AddToCalendarModal';
 type HangoutMode = 'in_person' | 'phone' | 'video';
 type VideoPlatform = 'facetime' | 'zoom' | 'google_meet' | 'teams' | 'whatsapp' | 'duo' | '';
 
-const MODE_CONFIG: Record<HangoutMode, { emoji: string; label: string; shortLabel: string }> = {
-  in_person: { emoji: '🤝', label: 'In person', shortLabel: 'Meet up' },
-  phone: { emoji: '📞', label: 'Phone call', shortLabel: 'Call' },
-  video: { emoji: '💻', label: 'Video call', shortLabel: 'Video call' },
+const MODE_CONFIG: Record<HangoutMode, { label: string; shortLabel: string }> = {
+  in_person: { label: 'In person', shortLabel: 'Meet up' },
+  phone: { label: 'Phone call', shortLabel: 'Call' },
+  video: { label: 'Video call', shortLabel: 'Video call' },
 };
 
-const VIDEO_PLATFORMS: { value: VideoPlatform; emoji: string; label: string }[] = [
-  { value: 'facetime', emoji: '📱', label: 'FaceTime' },
-  { value: 'zoom', emoji: '📹', label: 'Zoom' },
-  { value: 'google_meet', emoji: '🌐', label: 'Google Meet' },
-  { value: 'teams', emoji: '💼', label: 'Teams' },
-  { value: 'whatsapp', emoji: '💬', label: 'WhatsApp' },
-  { value: 'duo', emoji: '📞', label: 'Google Meet (Duo)' },
+const VIDEO_PLATFORMS: { value: VideoPlatform; label: string }[] = [
+  { value: 'facetime', label: 'FaceTime' },
+  { value: 'zoom', label: 'Zoom' },
+  { value: 'google_meet', label: 'Google Meet' },
+  { value: 'teams', label: 'Teams' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'duo', label: 'Google Meet (Duo)' },
 ];
 
 
@@ -130,7 +130,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
       <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-5 py-4 bg-gradient-to-r from-slotted-50/30 to-purple-50/30">
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-sm font-bold text-gray-900 truncate">
-            ✨ AI Suggestions with {friendName}
+            Suggestions with {friendName}
           </h3>
           <p className="mt-0.5 text-[11px] text-gray-400">
             Best times to meet based on both your calendars &amp; preferences
@@ -161,7 +161,6 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
                   : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
               }`}
             >
-              <span>{cfg.emoji}</span>
               {cfg.label}
             </button>
           );
@@ -182,7 +181,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
                   : 'text-gray-500 hover:text-gray-700 hover:bg-white border border-transparent'
               }`}
             >
-              {p.emoji} {p.label}
+              {p.label}
             </button>
           ))}
         </div>
@@ -259,7 +258,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
           </div>
         ) : suggestions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <span className="text-4xl">📅</span>
+            <span className="text-4xl">—</span>
             <h4 className="mt-3 text-sm font-semibold text-gray-800">No overlapping free times found</h4>
             <p className="mt-1.5 max-w-sm text-xs text-gray-400 leading-relaxed">
               {!syncStatus?.me.synced
@@ -332,7 +331,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
           disabled={loading}
           className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
         >
-          {loading ? 'Syncing…' : '🔄 Refresh'}
+          {loading ? 'Syncing…' : 'Refresh'}
         </button>
       </div>
 

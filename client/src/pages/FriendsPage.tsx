@@ -8,20 +8,9 @@ import FriendAvailability from '../components/FriendAvailability';
 import api from '../lib/api';
 import {
   fetchFriends,
-  fetchUserSettings,
   queryKeys,
   type FriendRecord,
 } from '../lib/queries';
-
-const INTEREST_LABELS: Record<string, { emoji: string; label: string }> = {
-  theater: { emoji: '🎭', label: 'Theater' },
-  concerts: { emoji: '🎵', label: 'Concerts' },
-  sports: { emoji: '⚽', label: 'Sports' },
-  comedy: { emoji: '😂', label: 'Comedy' },
-  festivals: { emoji: '🎪', label: 'Festivals' },
-  dance: { emoji: '💃', label: 'Dance' },
-  opera: { emoji: '🎻', label: 'Classical' },
-};
 
 export default function FriendsPage() {
   const { user } = useAuth();
@@ -29,14 +18,15 @@ export default function FriendsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [copied, setCopied] = useState(false);
 
-  // Find times state
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
   const [selectedFriendName, setSelectedFriendName] = useState<string>('');
 
-  // Remove friend state
   const [removingFriend, setRemovingFriend] = useState<FriendRecord | null>(null);
   const [removeLoading, setRemoveLoading] = useState(false);
-  const [showAddLongDistancePicker, setShowAddLongDistancePicker] = useState(false);
+
+  // Multi-select state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const inviteUrl = `https://slotted-ai.web.app?ref=${user?.uid ?? ''}`;
   const message = `Let's schedule time to hang :) This app syncs our calendars and finds the best time to meet up. ${inviteUrl}`;
@@ -47,14 +37,6 @@ export default function FriendsPage() {
     enabled: !!user,
     refetchOnWindowFocus: true,
   });
-
-  const { data: settingsData } = useQuery({
-    queryKey: queryKeys.settings,
-    queryFn: fetchUserSettings,
-    enabled: !!user,
-  });
-
-  const myEventInterests = settingsData?.event_interests ?? [];
 
   const friendActionMutation = useMutation({
     mutationFn: async ({ friendshipId, action }: { friendshipId: string; action: 'accept' | 'decline' }) => {
@@ -74,16 +56,6 @@ export default function FriendsPage() {
     },
   });
 
-  const updateFriendshipTypeMutation = useMutation({
-    mutationFn: async ({ friendshipId, friendshipType }: { friendshipId: string; friendshipType: 'local' | 'long_distance' }) => {
-      await api.patch(`/friends/${friendshipId}`, { friendshipType });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.friends });
-    },
-  });
-
-  // Auto-open FriendAvailability from URL param
   useEffect(() => {
     const findTimesId = searchParams.get('findTimes');
     if (findTimesId && friends.length > 0) {
@@ -106,8 +78,6 @@ export default function FriendsPage() {
     setSelectedFriendName('');
     setSearchParams({});
   };
-
-
 
   const handleFriendAction = async (friendshipId: string, action: 'accept' | 'decline') => {
     if (!user) return;
@@ -132,31 +102,6 @@ export default function FriendsPage() {
     }
   };
 
-  const handleToggleFriendshipType = async (friendship: FriendRecord, targetType: 'local' | 'long_distance') => {
-    if (!user) return;
-    const previousFriends = queryClient.getQueryData<FriendRecord[]>(queryKeys.friends) ?? friends;
-    queryClient.setQueryData(
-      queryKeys.friends,
-      previousFriends.map(f =>
-        f.friendshipId === friendship.friendshipId
-          ? { ...f, friendshipType: targetType }
-          : f
-      ),
-    );
-    try {
-      await updateFriendshipTypeMutation.mutateAsync({
-        friendshipId: friendship.friendshipId,
-        friendshipType: targetType,
-      });
-      return true;
-    } catch (err) {
-      console.error('Failed to update friendship type:', err);
-      queryClient.setQueryData(queryKeys.friends, previousFriends);
-      alert('Failed to update friend location. Please try again.');
-      return false;
-    }
-  };
-
   const handleText = () => {
     trackFriendInvited('sms');
     window.open(`sms:?&body=${encodeURIComponent(message)}`, '_blank');
@@ -174,6 +119,35 @@ export default function FriendsPage() {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const toggleSelect = (friendId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(friendId)) next.delete(friendId);
+      else next.add(friendId);
+      return next;
+    });
+  };
+
+  const handleRowClick = (f: FriendRecord) => {
+    if (selectMode) {
+      toggleSelect(f.friend.id);
+    } else {
+      handleFindTimes(f.friend.id, f.friend.displayName);
+    }
+  };
+
+  const handleLongPress = (f: FriendRecord) => {
+    if (!selectMode) {
+      setSelectMode(true);
+      setSelectedIds(new Set([f.friend.id]));
+    }
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
   const incomingInvites = friends.filter(
     (f) => f.status === 'pending' && f.invitedBy === f.friend.id
   );
@@ -181,138 +155,91 @@ export default function FriendsPage() {
     (f) => f.status === 'pending' && f.invitedBy !== f.friend.id
   );
   const acceptedFriends = friends.filter((f) => f.status === 'accepted');
-  const localFriends = acceptedFriends.filter((f) => (f.friendshipType || 'local') === 'local');
-  const longDistanceFriends = acceptedFriends.filter((f) => f.friendshipType === 'long_distance');
 
-  const batteryEmoji = (battery?: string) => {
-    if (battery === 'open') return '🟢';
-    if (battery === 'ask_me') return '🟡';
-    if (battery === 'recharging') return '🔴';
-    return '';
+  const lastSeenLabel = (f: FriendRecord) => {
+    const days = f.daysSinceLastHangout;
+    if (days === undefined || days === null || !f.lastHangoutDate) return '';
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days}d ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `${weeks}w ago`;
+    const months = Math.floor(days / 30);
+    return `${months}mo ago`;
   };
 
-  const batteryLabel = (battery?: string) => {
-    if (battery === 'open') return 'Open to hang';
-    if (battery === 'ask_me') return 'Ask me';
-    if (battery === 'recharging') return 'Recharging';
-    return '';
-  };
+  const renderFriendRow = (f: FriendRecord, i: number, arr: FriendRecord[]) => {
+    const isSelected = selectedIds.has(f.friend.id);
+    const seen = lastSeenLabel(f);
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Render a single friend row */
-  const renderFriendCard = (f: FriendRecord, i: number, arr: FriendRecord[]) => (
-    <div
-      key={f.friendshipId}
-      className={`flex items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 transition-colors hover:bg-gray-50/50 ${
-        i !== arr.length - 1 ? 'border-b border-gray-100' : ''
-      }`}
-    >
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-        {f.friend.photoUrl ? (
-          <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" loading="lazy" />
-        ) : (
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white">
-            {f.friend.displayName?.[0] ?? '?'}
-          </div>
-        )}
-        <div className="min-w-0 w-full">
-          <p className="text-sm sm:text-sm font-medium text-gray-900 truncate">
-            {f.friend.displayName}
-            {f.friend.socialBattery && (
-              <span className="ml-1.5 relative hidden sm:inline-flex items-center gap-1 group cursor-default">
-                {batteryEmoji(f.friend.socialBattery)}
-                <span className="text-[10px] text-gray-400 md:hidden">{batteryLabel(f.friend.socialBattery)}</span>
-                <span className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-800 px-2.5 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 md:block">
-                  {batteryLabel(f.friend.socialBattery)}
-                </span>
-              </span>
-            )}
-          </p>
-          <p className="hidden sm:block text-xs text-gray-400 truncate">
-            {f.friend.email}
-            <span className={`ml-2 inline-flex items-center gap-0.5 ${f.friend.calendarConnected ? 'text-green-500' : 'text-gray-300'}`}>
-              {f.friend.calendarConnected ? '📅' : '📅'}
-              <span className="text-[10px]">{f.friend.calendarConnected ? 'Cal synced' : 'No cal'}</span>
-            </span>
-          </p>
-          {/* Shared event interests */}
-          {(() => {
-            const shared = (f.friend.eventInterests || []).filter(i => myEventInterests.includes(i));
-            return shared.length > 0 ? (
-              <div className="mt-1 hidden sm:flex flex-wrap gap-1">
-                {shared.map(i => {
-                  const info = INTEREST_LABELS[i];
-                  return info ? (
-                    <span key={i} className="inline-flex items-center gap-0.5 rounded-full bg-slotted-50 border border-slotted-100 px-1.5 py-0.5 text-[10px] font-medium text-slotted-600">
-                      {info.emoji} {info.label}
-                    </span>
-                  ) : null;
-                })}
-              </div>
-            ) : null;
-          })()}
-          {/* Hangout cadence — only show after 2+ logged hangouts */}
-          {f.lastHangoutDate && (f.totalHangouts ?? 0) >= 2 && (() => {
-            const days = f.daysSinceLastHangout ?? 0;
-            const cadence = f.avgCadenceDays;
-            const isOverdue = cadence && days > cadence;
-            const firstName = f.friend.displayName.split(' ')[0];
-            return (
-              <div className={`mt-1.5 hidden sm:flex items-center gap-1.5 text-[11px] leading-tight ${
-                isOverdue ? 'text-amber-600' : 'text-gray-400'
-              }`}>
-                <span>{isOverdue ? '⏰' : '📅'}</span>
-                <span>
-                  {days === 0
-                    ? 'Hung out today'
-                    : days === 1
-                      ? 'Hung out yesterday'
-                      : `Last hung out ${days}d ago`}
-                  {cadence ? (
-                    <span className="text-gray-400"> · typically every {cadence}d</span>
-                  ) : null}
-                  {isOverdue ? (
-                    <span className="font-medium text-amber-600"> — time to catch up with {firstName}!</span>
-                  ) : null}
-                </span>
-              </div>
-            );
-          })()}
+    return (
+      <div
+        key={f.friendshipId}
+        role="button"
+        tabIndex={0}
+        onClick={() => handleRowClick(f)}
+        onContextMenu={(e) => { e.preventDefault(); handleLongPress(f); }}
+        onTouchStart={() => { longPressTimer = setTimeout(() => handleLongPress(f), 500); }}
+        onTouchEnd={() => { if (longPressTimer) clearTimeout(longPressTimer); }}
+        onTouchMove={() => { if (longPressTimer) clearTimeout(longPressTimer); }}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleRowClick(f); }}
+        className={`flex items-center gap-3 px-3 py-2.5 transition-colors cursor-pointer active:bg-gray-100 ${
+          i !== arr.length - 1 ? 'border-b border-gray-100' : ''
+        } ${isSelected ? 'bg-slotted-50/60' : 'hover:bg-gray-50/50'}`}
+      >
+        <div className="relative shrink-0">
+          {f.friend.photoUrl ? (
+            <img src={f.friend.photoUrl} alt="" className="h-9 w-9 rounded-full" loading="lazy" />
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xs font-semibold text-white">
+              {f.friend.displayName?.[0] ?? '?'}
+            </div>
+          )}
+          {selectMode && isSelected && (
+            <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-slotted-500 text-white">
+              <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          )}
         </div>
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <button
-          onClick={() => handleFindTimes(f.friend.id, f.friend.displayName)}
-          className={`rounded-xl px-2.5 py-2 sm:px-3 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
-            selectedFriendId === f.friend.id
-              ? 'bg-slotted-500 text-white'
-              : 'gradient-btn text-white'
-          }`}
-        >
-          {selectedFriendId === f.friend.id ? '✨ Viewing' : '✨ Find times'}
-        </button>
-        <button
-          onClick={() => setRemovingFriend(f)}
-          className="hidden sm:inline-flex rounded-lg p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
-          title="Remove friend"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-            <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-gray-900 truncate">
+            {f.friend.displayName}
+            {seen && <span className="ml-1.5 text-xs font-normal text-gray-400"> · {seen}</span>}
+          </p>
+        </div>
+
+        {!selectMode && (
+          <svg className="h-4 w-4 shrink-0 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
-        </button>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <AppShell>
-      <div className="mb-6">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">Friends</h1>
+      <div className="mb-5">
+        <div className="flex items-center justify-between">
+          <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">Friends</h1>
+          {acceptedFriends.length > 1 && (
+            <button
+              onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              {selectMode ? 'Cancel' : 'Select'}
+            </button>
+          )}
+        </div>
         <p className="mt-1 text-sm text-gray-500">
-          Your people. See who's around and feeling social 🫶
+          Your people
         </p>
       </div>
 
-      {/* FIND TIMES panel (1:1) */}
       {selectedFriendId && (
         <div className="mb-6">
           <FriendAvailability
@@ -323,51 +250,32 @@ export default function FriendsPage() {
         </div>
       )}
 
-      {/* Invite friends — share link */}
-      <div className="relative mb-5">
-        <p className="text-sm text-gray-500 mb-3">Invite friends to Slotted.ai so you can find the best times to hang out.</p>
-        <div className="flex gap-2 flex-wrap">
-          <button onClick={handleText} className="flex items-center gap-2 rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
-            📱 Text
-          </button>
-          <button onClick={handleEmail} className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:border-gray-300">
-            📧 Email
-          </button>
-          <button onClick={handleCopy} className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:border-gray-300">
-            {copied ? '✅ Copied!' : '📋 Copy link'}
-          </button>
-        </div>
-      </div>
-
       {/* Incoming invites */}
       {incomingInvites.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Friend Requests</h2>
-          <div className="overflow-hidden rounded-2xl border border-amber-100 bg-gradient-to-r from-amber-50/50 to-orange-50/30 shadow-sm">
+        <div className="mb-5">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Friend Requests</h2>
+          <div className="overflow-hidden rounded-xl border border-amber-100 bg-gradient-to-r from-amber-50/50 to-orange-50/30">
             {incomingInvites.map((f, i) => (
               <div
                 key={f.friendshipId}
-                className={`flex items-center justify-between gap-3 px-4 py-4 ${
+                className={`flex items-center justify-between gap-3 px-3 py-3 ${
                   i !== incomingInvites.length - 1 ? 'border-b border-amber-100' : ''
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   {f.friend.photoUrl ? (
-                    <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-amber-100" loading="lazy" />
+                    <img src={f.friend.photoUrl} alt="" className="h-9 w-9 rounded-full" loading="lazy" />
                   ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-sm font-semibold text-white">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-xs font-semibold text-white">
                       {f.friend.displayName?.[0] ?? '?'}
                     </div>
                   )}
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{f.friend.displayName}</p>
-                    <p className="text-xs text-gray-400">{f.friend.email}</p>
-                  </div>
+                  <p className="text-sm font-medium text-gray-900 truncate">{f.friend.displayName}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
                   <button
                     onClick={() => handleFriendAction(f.friendshipId, 'accept')}
-                    className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:bg-emerald-600 shadow-sm"
+                    className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:bg-emerald-600"
                   >
                     Accept
                   </button>
@@ -375,7 +283,7 @@ export default function FriendsPage() {
                     onClick={() => handleFriendAction(f.friendshipId, 'decline')}
                     className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50"
                   >
-                    Decline
+                    Not now
                   </button>
                 </div>
               </div>
@@ -386,30 +294,27 @@ export default function FriendsPage() {
 
       {/* Outgoing invites */}
       {outgoingInvites.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Pending Invites</h2>
-          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="mb-5">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Pending</h2>
+          <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
             {outgoingInvites.map((f, i) => (
               <div
                 key={f.friendshipId}
-                className={`flex items-center justify-between gap-3 px-4 py-4 ${
+                className={`flex items-center justify-between gap-3 px-3 py-2.5 ${
                   i !== outgoingInvites.length - 1 ? 'border-b border-gray-100' : ''
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   {f.friend.photoUrl ? (
-                    <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-gray-100" loading="lazy" />
+                    <img src={f.friend.photoUrl} alt="" className="h-9 w-9 rounded-full" loading="lazy" />
                   ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-gray-400 to-gray-500 text-sm font-semibold text-white">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-gray-400 to-gray-500 text-xs font-semibold text-white">
                       {f.friend.displayName?.[0] ?? '?'}
                     </div>
                   )}
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{f.friend.displayName}</p>
-                    <p className="text-xs text-gray-400">{f.friend.email}</p>
-                  </div>
+                  <p className="text-sm font-medium text-gray-900 truncate">{f.friend.displayName}</p>
                 </div>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
                   Pending
                 </span>
               </div>
@@ -418,16 +323,15 @@ export default function FriendsPage() {
         </div>
       )}
 
-      {/* Accepted friends */}
+      {/* Friend list */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-slotted-400 border-t-transparent" />
         </div>
       ) : acceptedFriends.length === 0 && incomingInvites.length === 0 && outgoingInvites.length === 0 ? (
-        <div className="rounded-2xl border border-slotted-200/60 bg-gradient-to-br from-slotted-50/60 to-purple-50/40 shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-slotted-200/60 bg-gradient-to-br from-slotted-50/60 to-purple-50/40 overflow-hidden">
           <div className="flex flex-col items-center justify-center px-6 py-16">
-            <div className="text-4xl sm:text-5xl mb-2">🤝</div>
-            <h3 className="mt-3 font-display text-lg font-bold text-gray-900">
+            <h3 className="font-display text-lg font-bold text-gray-900">
               Ready to connect?
             </h3>
             <p className="mt-2 max-w-sm text-center text-sm text-gray-500 leading-relaxed">
@@ -435,86 +339,52 @@ export default function FriendsPage() {
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               <button onClick={handleText} className="flex items-center gap-2 rounded-xl gradient-btn px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
-                📱 Text a friend
+                Text a friend
               </button>
               <button onClick={handleCopy} className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:border-gray-300">
-                {copied ? '✅ Copied!' : '📋 Copy invite link'}
+                {copied ? 'Copied!' : 'Copy invite link'}
               </button>
             </div>
-            <p className="mt-3 text-xs text-gray-400">Or enter an email above to send a direct invite</p>
           </div>
         </div>
-      ) : (
-        <>
-          {/* Local friends section */}
-          {localFriends.length > 0 && (
-            <div className="mb-6">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-                📍 Local · {localFriends.length}
-              </h2>
-              <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-                {localFriends.map((f, i) => renderFriendCard(f, i, localFriends))}
-              </div>
-            </div>
-          )}
-
-          {/* Long-distance friends section — always visible */}
-          <div className="mb-6">
-            <div className="mb-3 flex items-center">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                Long Distance {longDistanceFriends.length > 0 ? `· ${longDistanceFriends.length}` : ''}
-              </h2>
-              <button
-                onClick={() => setShowAddLongDistancePicker((prev) => !prev)}
-                disabled={localFriends.length === 0}
-                title="Add a friend to Long Distance mode for optimized call/video call times"
-                className={`ml-2 rounded-lg border px-2 py-1.5 text-xs font-semibold transition-all ${
-                  showAddLongDistancePicker
-                    ? 'border-purple-300 bg-purple-100 text-purple-700'
-                    : 'border-gray-200 text-gray-400 hover:text-purple-600 hover:border-purple-200'
-                } disabled:cursor-not-allowed disabled:opacity-40`}
-              >
-                +
-              </button>
-            </div>
-
-            {showAddLongDistancePicker && localFriends.length > 0 && (
-              <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50/30 p-3">
-                <p className="mb-2 text-[11px] font-medium text-gray-600">Move a friend to Long Distance mode:</p>
-                <div className="flex flex-wrap gap-2">
-                  {localFriends.map((friend) => (
-                      <button
-                        key={friend.friendshipId}
-                        onClick={async () => {
-                          const success = await handleToggleFriendshipType(friend, 'long_distance');
-                          if (success) setShowAddLongDistancePicker(false);
-                        }}
-                        className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-blue-300 hover:text-blue-700"
-                      >
-                      + {friend.friend.displayName.split(' ')[0]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {longDistanceFriends.length > 0 ? (
-              <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-                {longDistanceFriends.map((f, i) => renderFriendCard(f, i, longDistanceFriends))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/20 p-5">
-                <div className="flex flex-col items-center text-center">
-                  <span className="text-2xl mb-1">🌎</span>
-                  <p className="text-sm font-medium text-gray-600">No long-distance friends yet</p>
-                  <p className="mt-1 text-xs text-gray-400 max-w-xs">
-                    Friends in different cities or time zones will appear here automatically based on location, or you can change a friend's type in settings.
-                  </p>
-                </div>
-              </div>
-            )}
+      ) : acceptedFriends.length > 0 && (
+        <div className="mb-4">
+          <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
+            {acceptedFriends.map((f, i) => renderFriendRow(f, i, acceptedFriends))}
           </div>
-        </>
+        </div>
+      )}
+
+      {/* + Invite a friend row */}
+      {acceptedFriends.length > 0 && (
+        <div className="mb-6">
+          <button
+            onClick={handleText}
+            className="flex w-full items-center gap-3 rounded-xl border border-dashed border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-700 hover:bg-gray-50"
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-400">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </span>
+            Invite a friend
+          </button>
+        </div>
+      )}
+
+      {/* Multi-select bottom bar */}
+      {selectMode && selectedIds.size >= 2 && (
+        <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center px-4">
+          <button
+            onClick={() => {
+              // TODO: Navigate to group availability with selectedIds
+              exitSelectMode();
+            }}
+            className="rounded-xl gradient-btn px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl"
+          >
+            Find time for {selectedIds.size} friends →
+          </button>
+        </div>
       )}
 
       {/* Remove friend confirmation modal */}

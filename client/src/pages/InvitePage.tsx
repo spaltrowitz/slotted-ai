@@ -114,7 +114,7 @@ export default function InvitePage() {
           </div>
         ) : connected ? (
           <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
-            <span className="text-4xl">🎉</span>
+            <span className="text-4xl"></span>
             <h2 className="mt-4 font-display text-xl font-bold text-gray-900">You're connected!</h2>
             <p className="mt-2 text-sm text-gray-500">Taking you to your friends…</p>
           </div>

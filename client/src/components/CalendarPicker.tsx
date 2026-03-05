@@ -192,7 +192,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
       {!compact && !needsReconnect && (
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">📅 Choose Calendars</h3>
+            <h3 className="text-sm font-semibold text-gray-900">Choose Calendars</h3>
             <p className="mt-0.5 text-[11px] text-gray-400">
               Select which calendars Slotted.ai should read for availability
             </p>

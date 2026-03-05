@@ -32,7 +32,7 @@ function buildGoogleCalendarUrl(event: SharedEvent) {
     event.description || '',
     '',
     '---',
-    '📅 Created with Slotted.ai (https://slotted-ai.web.app)',
+    'Created with Slotted.ai (https://slotted-ai.web.app)',
     'The app that helps friends find time to hang.',
     `Join: ${inviteUrl}`,
   ].join('\n');
@@ -81,7 +81,7 @@ export default function EventSharePage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slotted-50 via-white to-purple-50 p-6">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-xl">
-          <div className="mb-4 text-4xl">😕</div>
+          <div className="mb-4 text-4xl"></div>
           <h1 className="mb-2 text-lg font-bold text-gray-900">Event Not Found</h1>
           <p className="mb-6 text-sm text-gray-500">{error}</p>
           <Link to="/" className="text-sm font-medium text-slotted-600 hover:text-slotted-700">
@@ -121,18 +121,15 @@ export default function EventSharePage() {
 
           <div className="space-y-2 text-sm text-gray-600">
             <div className="flex items-center gap-2">
-              <span>📅</span>
               <span>{formatDateTime(event.startTime)}</span>
             </div>
             {event.endTime && event.endTime !== event.startTime && (
               <div className="flex items-center gap-2">
-                <span>🏁</span>
                 <span>Until {formatDateTime(event.endTime)}</span>
               </div>
             )}
             {event.location && (
               <div className="flex items-center gap-2">
-                <span>📍</span>
                 <span>{event.location}</span>
               </div>
             )}
@@ -150,14 +147,14 @@ export default function EventSharePage() {
               rel="noopener noreferrer"
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-slotted-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slotted-600"
             >
-              📅 Add to Google Calendar
+              Add to Google Calendar
             </a>
             <a
               href={icsUrl}
               download
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50"
             >
-              ⬇️ Download Calendar File (.ics)
+              Download Calendar File (.ics)
             </a>
           </div>
         </div>

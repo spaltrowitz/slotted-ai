@@ -77,7 +77,7 @@ export default function CounterProposePanel({
   if (proposed) {
     return (
       <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
-        <span className="text-lg">🔄</span>
+        <span className="text-lg"></span>
         <p className="mt-1 text-sm font-semibold text-emerald-700">Counter-proposal sent!</p>
         <p className="mt-0.5 text-xs text-emerald-600">{friendName} will get a notification with your suggested time.</p>
       </div>
@@ -89,7 +89,7 @@ export default function CounterProposePanel({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 bg-gradient-to-r from-amber-50/50 to-orange-50/50">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900">🔄 Suggest a different time?</p>
+          <p className="text-sm font-semibold text-gray-900">Suggest a different time?</p>
           <p className="mt-0.5 text-[11px] text-gray-500">
             Pick a time that works better for you
           </p>
@@ -117,7 +117,7 @@ export default function CounterProposePanel({
           </div>
         ) : suggestions.length === 0 ? (
           <div className="text-center py-4">
-            <span className="text-2xl">📅</span>
+            <span className="text-2xl">—</span>
             <p className="mt-2 text-xs text-gray-500">No overlapping free times found in the next 2 weeks.</p>
           </div>
         ) : (
