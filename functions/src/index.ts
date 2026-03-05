@@ -1385,8 +1385,12 @@ app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
       const friendshipType = iAmA ? (f.user_a_friendship_type || "local") : (f.user_b_friendship_type || "local");
       const visitDurationHours = iAmA ? f.user_a_visit_duration_hours : f.user_b_visit_duration_hours;
       return {
+        id: f.id,
         friendshipId: f.id,
+        user_a_id: f.user_a_id,
+        user_b_id: f.user_b_id,
         status: f.status,
+        invited_by: f.invited_by,
         invitedBy: f.invited_by,
         hangoutPref,
         friendshipType,
@@ -1689,7 +1693,11 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
 /** PATCH /friends/:friendshipId — accept or decline a friendship, update prefs */
 app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: Response) => {
   const { friendshipId } = req.params;
-  const { action, hangoutPref, friendshipType, visitDurationHours } = req.body;
+  const { action: rawAction, status, hangoutPref, friendshipType, visitDurationHours } = req.body;
+
+  // Accept "status" as an alias for "action" (e.g., { status: "accepted" } → action: "accept")
+  const statusToAction: Record<string, string> = { accepted: "accept", declined: "decline" };
+  const action = rawAction || (status ? statusToAction[status] : undefined);
 
   // Support accept/decline actions AND hangoutPref/friendshipType/visitDurationHours updates
   const validActions = ["accept", "decline"];
@@ -3443,12 +3451,14 @@ app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
     const me = await getDbUser(req.uid!);
     if (!me) { res.status(404).json({ error: "User not found" }); return; }
 
-    const { name, emoji, memberIds, invitedEmails } = req.body;
-    const requestedMemberIds: string[] = Array.isArray(memberIds)
-      ? [...new Set(memberIds.filter((id: unknown): id is string => typeof id === "string" && !!id && id !== me.id))]
+    const { name, emoji, memberIds, member_ids, invitedEmails, invited_emails } = req.body;
+    const rawMemberIds = memberIds || member_ids;
+    const requestedMemberIds: string[] = Array.isArray(rawMemberIds)
+      ? [...new Set(rawMemberIds.filter((id: unknown): id is string => typeof id === "string" && !!id && id !== me.id))]
       : [];
     const hasMemberIds = requestedMemberIds.length > 0;
-    const hasInvitedEmails = Array.isArray(invitedEmails) && invitedEmails.length > 0;
+    const rawInvitedEmails = invitedEmails || invited_emails;
+    const hasInvitedEmails = Array.isArray(rawInvitedEmails) && rawInvitedEmails.length > 0;
 
     if (!name || (!hasMemberIds && !hasInvitedEmails)) {
       res.status(400).json({ error: "name and at least one member or invited email are required" });
@@ -3484,7 +3494,7 @@ app.post("/groups", requireAuth, async (req: AuthRequest, res: Response) => {
     // Handle invited emails — create pending invites with group_id
     const pendingResults: string[] = [];
     if (hasInvitedEmails) {
-      for (const rawEmail of invitedEmails) {
+      for (const rawEmail of rawInvitedEmails) {
         const email = rawEmail.trim().toLowerCase();
         if (!email) continue;
         try {
@@ -3778,15 +3788,18 @@ app.post("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const { title, friendId, friendIds, startTime, endTime, location, description } = req.body;
+    const { title, friendId, friendIds, friend_ids, startTime, start_time, endTime, end_time, location, description, activity } = req.body;
 
-    // Support both single friendId and multiple friendIds
-    const rawParticipantIds: string[] = Array.isArray(friendIds)
-      ? friendIds.filter((pid: unknown): pid is string => typeof pid === "string" && !!pid)
+    // Support both camelCase and snake_case, and single friendId vs multiple friendIds
+    const resolvedFriendIds = friendIds || friend_ids;
+    const rawParticipantIds: string[] = Array.isArray(resolvedFriendIds)
+      ? resolvedFriendIds.filter((pid: unknown): pid is string => typeof pid === "string" && !!pid)
       : (typeof friendId === "string" && !!friendId)
         ? [friendId]
         : [];
     const participantIds = [...new Set(rawParticipantIds.filter((pid) => pid !== me.id))];
+    const resolvedStartTime = startTime || start_time;
+    const resolvedEndTime = endTime || end_time;
 
     if (participantIds.length === 0) {
       res.status(400).json({ error: "At least one friendId is required" });
@@ -3810,8 +3823,8 @@ app.post("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
         title: title || "Hangout",
         description,
         location,
-        start_time: startTime,
-        end_time: endTime,
+        start_time: resolvedStartTime,
+        end_time: resolvedEndTime,
         created_by: me.id,
       })
       .select()
@@ -3842,7 +3855,7 @@ app.post("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
     }
 
     // Notify each invited participant
-    const startDt = new Date(startTime);
+    const startDt = new Date(resolvedStartTime);
     const timeStr = startDt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
       " at " + startDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
@@ -6279,25 +6292,27 @@ app.post("/events/save", requireAuth, async (req: AuthRequest, res: Response) =>
     if (!me) { res.status(404).json({ error: "User not found" }); return; }
 
     const { event, status } = req.body;
-    if (!event?.id || !event?.source || !event?.title || !event?.url) {
-      res.status(400).json({ error: "Missing required event fields (id, source, title, url)" });
+    if (!event?.source || !event?.title) {
+      res.status(400).json({ error: "Missing required event fields (source, title)" });
       return;
     }
+
+    const externalId = event.id || crypto.randomUUID();
 
     const { data, error } = await getSupabase()
       .from("saved_events")
       .upsert(
         {
           user_id: me.id,
-          external_id: event.id,
+          external_id: externalId,
           source: event.source,
           title: event.title,
           event_type: event.type || null,
-          venue: event.venue || null,
+          venue: event.venue || event.location || null,
           city: event.city || null,
-          datetime_utc: event.datetime || new Date().toISOString(),
-          datetime_local: event.datetimeLocal || null,
-          url: event.url,
+          datetime_utc: event.datetime || event.start || new Date().toISOString(),
+          datetime_local: event.datetimeLocal || event.end || null,
+          url: event.url || null,
           image_url: event.imageUrl || null,
           price_min: event.priceMin || null,
           price_max: event.priceMax || null,
@@ -9540,11 +9555,13 @@ export const findCalendarMatches = onSchedule("every day 09:00", async (event) =
       if (!expected) continue;
 
       // Check if they haven't been notified about this recently (throttle to max once per 2 weeks)
+      // Filter by divergence-specific title prefix to avoid cross-contamination with weekend match nudges
       const { data: recentNotifs } = await sb
         .from("notifications")
         .select("id")
         .eq("user_id", user.id)
-        .eq("type", "calendar_match") // reuse type since we can't add new DB enum easily
+        .eq("type", "calendar_match")
+        .ilike("title", "📊%")
         .gte("created_at", new Date(now.getTime() - 14 * 86400000).toISOString())
         .limit(1);
 

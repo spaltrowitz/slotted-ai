@@ -13,7 +13,7 @@
 //   - Multiple friend_accepted notifications for different user pairs coexist
 // ---------------------------------------------------------------------------
 
-import { Scenario, ScenarioContext, TestResult, assert, timed, sleep } from "../scenario.js";
+import { Scenario, ScenarioContext, TestResult, assert, timed, sleep, waitFor } from "../scenario.js";
 import { Notification } from "../client.js";
 
 const notificationDedupScenario: Scenario = {
@@ -57,9 +57,7 @@ const notificationDedupScenario: Scenario = {
       // Remove existing friendship so we can re-connect
       const friends = await planner.getFriends();
       const existingFriendship = friends.find(
-        (f) =>
-          (f.user_a_id === plannerId && f.user_b_id === spontId) ||
-          (f.user_a_id === spontId && f.user_b_id === plannerId),
+        (f: any) => f.friend?.id === spontId,
       );
 
       if (existingFriendship) {
@@ -92,11 +90,18 @@ const notificationDedupScenario: Scenario = {
       durationMs: referralMs,
     });
 
-    // Wait for notification to be created
-    await sleep(2000);
+    // Wait for notification to be created, then poll
+    await sleep(1000);
 
     // Count friend_accepted notifications for planner from spontaneous
-    const plannerNotifsAfterConnect = await planner.getNotifications();
+    const plannerNotifsAfterConnect = await waitFor(
+      () => planner.getNotifications(),
+      (notifs) => notifs.some(
+        (n: Notification) => n.type === "friend_accepted" && n.related_user_id === spontId,
+      ),
+      5,
+      1000,
+    );
     const newFriendAccepted = plannerNotifsAfterConnect.filter(
       (n: Notification) =>
         n.type === "friend_accepted" && n.related_user_id === spontId,
@@ -198,9 +203,7 @@ const notificationDedupScenario: Scenario = {
       // Ensure flaky → planner friendship exists
       const plannerFriends = await planner.getFriends();
       const flakyFriendship = plannerFriends.find(
-        (f) =>
-          (f.user_a_id === plannerId && f.user_b_id === flakyId) ||
-          (f.user_a_id === flakyId && f.user_b_id === plannerId),
+        (f: any) => f.friend?.id === flakyId,
       );
 
       if (!flakyFriendship) {

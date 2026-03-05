@@ -5,7 +5,7 @@
 // Also tests: decline, duplicate requests, and notification correctness
 // ---------------------------------------------------------------------------
 
-import { Scenario, ScenarioContext, TestResult, assert, timed, sleep } from "../scenario.js";
+import { Scenario, ScenarioContext, TestResult, assert, timed, sleep, waitFor } from "../scenario.js";
 
 const friendsScenario: Scenario = {
   name: "friends",
@@ -35,14 +35,19 @@ const friendsScenario: Scenario = {
     });
 
     // Wait for notification to propagate
-    await sleep(2000);
+    await sleep(1000);
 
     // -----------------------------------------------------------------------
     // Step 2: Spontaneous should have a friend_request notification
     // -----------------------------------------------------------------------
     ctx.log("Step 2: Checking Spontaneous's notifications for friend request");
     const { result: spontNotifs, durationMs: notifMs } = await timed(async () => {
-      return spontaneous.getNotifications();
+      return waitFor(
+        () => spontaneous.getNotifications(),
+        (notifs) => notifs.some((n) => n.type === "friend_request"),
+        5,
+        1000,
+      );
     });
     const friendReqNotif = spontNotifs.find(
       (n) => n.type === "friend_request",
@@ -93,11 +98,16 @@ const friendsScenario: Scenario = {
       );
 
       // Wait for notification
-      await sleep(2000);
+      await sleep(1000);
 
       // Step 5: Planner should get a friend_accepted notification
       ctx.log("Step 5: Checking Planner's notifications for friend_accepted");
-      const plannerNotifs = await planner.getNotifications();
+      const plannerNotifs = await waitFor(
+        () => planner.getNotifications(),
+        (notifs) => notifs.some((n) => n.type === "friend_accepted"),
+        5,
+        1000,
+      );
       const acceptNotif = plannerNotifs.find((n) => n.type === "friend_accepted");
       results.push(
         assert(
@@ -120,17 +130,20 @@ const friendsScenario: Scenario = {
     }
 
     // -----------------------------------------------------------------------
-    // Step 6: Check for duplicate notifications (Tamer's bug)
+    // Step 6: Check for duplicate notifications from Spontaneous specifically
     // -----------------------------------------------------------------------
     ctx.log("Step 6: Checking for duplicate notifications");
     const plannerNotifsAll = await planner.getNotifications();
-    const acceptNotifs = plannerNotifsAll.filter((n) => n.type === "friend_accepted");
+    const spontUserId = (await spontaneous.getMe()).id;
+    const acceptNotifsFromSpont = plannerNotifsAll.filter(
+      (n) => n.type === "friend_accepted" && n.related_user_id === spontUserId,
+    );
     results.push(
       assert(
         "no-duplicate-friend-accepted-notifications",
-        acceptNotifs.length <= 1,
-        `Planner has ${acceptNotifs.length} friend_accepted notification(s) (expected ≤ 1)`,
-        acceptNotifs.length > 1 ? "critical" : "info",
+        acceptNotifsFromSpont.length <= 1,
+        `Planner has ${acceptNotifsFromSpont.length} friend_accepted notification(s) from Spontaneous (expected ≤ 1)`,
+        acceptNotifsFromSpont.length > 1 ? "critical" : "info",
       ),
     );
 

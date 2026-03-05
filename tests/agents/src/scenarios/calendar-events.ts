@@ -5,7 +5,7 @@
 //        event invite flow between agents
 // ---------------------------------------------------------------------------
 
-import { Scenario, ScenarioContext, TestResult, assert, timed, sleep } from "../scenario.js";
+import { Scenario, ScenarioContext, TestResult, assert, timed, sleep, waitFor } from "../scenario.js";
 
 const calendarEventsScenario: Scenario = {
   name: "calendar-events",
@@ -73,6 +73,7 @@ const calendarEventsScenario: Scenario = {
     nextFridayEnd.setHours(23, 0, 0, 0);
 
     const testEvent = {
+      id: `agent-test-${Date.now()}`,
       title: "Agent Test: Comedy Show",
       start: nextFriday.toISOString(),
       end: nextFridayEnd.toISOString(),
@@ -102,7 +103,12 @@ const calendarEventsScenario: Scenario = {
     // -----------------------------------------------------------------------
     ctx.log("Step 4: List saved events");
     const { result: savedList, durationMs: savedListMs } = await timed(async () => {
-      return planner.getSavedEvents();
+      return waitFor(
+        () => planner.getSavedEvents(),
+        (events) => Array.isArray(events) && events.length > 0,
+        3,
+        1000,
+      );
     });
 
     const savedEvents = Array.isArray(savedList) ? savedList : (savedList as any)?.events || [];

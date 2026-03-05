@@ -57,6 +57,8 @@ export interface Friendship {
   created_at: string;
   user_a?: { id: string; display_name: string; email: string };
   user_b?: { id: string; display_name: string; email: string };
+  friend?: { id: string; displayName: string; email: string; [key: string]: unknown };
+  [key: string]: unknown;
 }
 
 export interface DashboardData {
@@ -221,8 +223,12 @@ export class SlottedClient {
   // Friends
   // -------------------------------------------------------------------------
   async getFriends(): Promise<Friendship[]> {
-    const { data } = await this.get<{ friends: Friendship[] } | Friendship[]>("/friends");
-    return Array.isArray(data) ? data : (data as any).friends || [];
+    const { data } = await this.get<{ friends: unknown[] } | unknown[]>("/friends");
+    const raw: any[] = Array.isArray(data) ? data : (data as any).friends || [];
+    return raw.map((f: any) => ({
+      ...f,
+      id: f.friendshipId || f.id,
+    }));
   }
 
   async sendFriendRequest(toEmail: string): Promise<unknown> {
@@ -231,12 +237,12 @@ export class SlottedClient {
   }
 
   async acceptFriendship(friendshipId: string): Promise<unknown> {
-    const { data } = await this.patch(`/friends/${friendshipId}`, { status: "accepted" });
+    const { data } = await this.patch(`/friends/${friendshipId}`, { action: "accept" });
     return data;
   }
 
   async declineFriendship(friendshipId: string): Promise<unknown> {
-    const { data } = await this.patch(`/friends/${friendshipId}`, { status: "declined" });
+    const { data } = await this.patch(`/friends/${friendshipId}`, { action: "decline" });
     return data;
   }
 
@@ -297,10 +303,10 @@ export class SlottedClient {
     activity?: string;
   }): Promise<unknown> {
     const { data } = await this.post("/meetups", {
-      friend_ids: opts.friendIds,
+      friendIds: opts.friendIds,
       title: opts.title || "Test Meetup",
-      start_time: opts.startTime,
-      end_time: opts.endTime,
+      startTime: opts.startTime,
+      endTime: opts.endTime,
       location: opts.location,
       activity: opts.activity,
     });
@@ -372,7 +378,7 @@ export class SlottedClient {
   }
 
   async createGroup(name: string, memberIds: string[], emoji?: string): Promise<unknown> {
-    const { data } = await this.post("/groups", { name, member_ids: memberIds, emoji });
+    const { data } = await this.post("/groups", { name, memberIds, emoji });
     return data;
   }
 

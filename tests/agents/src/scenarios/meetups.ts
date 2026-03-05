@@ -5,7 +5,7 @@
 //        decline → verify notification filtering → mark didn't happen
 // ---------------------------------------------------------------------------
 
-import { Scenario, ScenarioContext, TestResult, assert, timed, sleep } from "../scenario.js";
+import { Scenario, ScenarioContext, TestResult, assert, timed, sleep, waitFor } from "../scenario.js";
 
 const meetupsScenario: Scenario = {
   name: "meetups",
@@ -58,13 +58,18 @@ const meetupsScenario: Scenario = {
     const meetupId = (meetupResult as any)?.id || (meetupResult as any)?.meetup?.id;
     ctx.state.testMeetupId = meetupId;
 
-    await sleep(2000);
+    await sleep(1000);
 
     // -----------------------------------------------------------------------
     // Step 2: Spontaneous should get a meetup_request notification
     // -----------------------------------------------------------------------
     ctx.log("Step 2: Checking Spontaneous's meetup_request notification");
-    const spontNotifs = await spontaneous.getNotifications();
+    const spontNotifs = await waitFor(
+      () => spontaneous.getNotifications(),
+      (notifs) => notifs.some((n) => n.type === "meetup_request"),
+      5,
+      1000,
+    );
     const meetupReqNotif = spontNotifs.find(
       (n) => n.type === "meetup_request",
     );
@@ -122,11 +127,16 @@ const meetupsScenario: Scenario = {
         durationMs: rsvpMs,
       });
 
-      await sleep(2000);
+      await sleep(1000);
 
       // Step 6: Planner should get a meetup_confirmed notification
       ctx.log("Step 6: Checking Planner's meetup_confirmed notification");
-      const plannerNotifs = await planner.getNotifications();
+      const plannerNotifs = await waitFor(
+        () => planner.getNotifications(),
+        (notifs) => notifs.some((n) => n.type === "meetup_confirmed" && n.related_id === meetupId),
+        5,
+        1000,
+      );
       const confirmedNotif = plannerNotifs.find(
         (n) => n.type === "meetup_confirmed" && n.related_id === meetupId,
       );
@@ -182,7 +192,7 @@ const meetupsScenario: Scenario = {
       ),
     );
 
-    await sleep(2000);
+    await sleep(1000);
 
     // -----------------------------------------------------------------------
     // Step 9: Spontaneous accepts, Flaky declines
@@ -192,7 +202,7 @@ const meetupsScenario: Scenario = {
       await spontaneous.rsvpMeetup(groupMeetupId, "accepted");
       await flaky.rsvpMeetup(groupMeetupId, "declined");
 
-      await sleep(2000);
+      await sleep(1000);
 
       // Step 10: After declining, Flaky should not see meetup notifications for this meetup
       ctx.log("Step 10: Verifying Flaky's notifications are filtered after declining");

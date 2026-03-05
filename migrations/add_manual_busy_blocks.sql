@@ -16,3 +16,21 @@ CREATE TABLE manual_busy_blocks (
 CREATE INDEX idx_manual_busy_blocks_user_time ON manual_busy_blocks (user_id, start_time, end_time);
 
 ALTER TABLE manual_busy_blocks ENABLE ROW LEVEL SECURITY;
+
+-- RLS policies: users can only manage their own busy blocks
+CREATE POLICY "Users can view own busy blocks"
+  ON manual_busy_blocks FOR SELECT
+  USING (user_id = auth.uid());
+
+CREATE POLICY "Users can insert own busy blocks"
+  ON manual_busy_blocks FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Users can update own busy blocks"
+  ON manual_busy_blocks FOR UPDATE
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Users can delete own busy blocks"
+  ON manual_busy_blocks FOR DELETE
+  USING (user_id = auth.uid());

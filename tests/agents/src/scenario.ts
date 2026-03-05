@@ -60,3 +60,20 @@ export async function timed<T>(fn: () => Promise<T>): Promise<{ result: T; durat
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Poll a function until its result satisfies the predicate, with retries.
+ */
+export async function waitFor<T>(
+  fn: () => Promise<T>,
+  predicate: (result: T) => boolean,
+  maxAttempts = 5,
+  delayMs = 1000,
+): Promise<T> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const result = await fn();
+    if (predicate(result)) return result;
+    await sleep(delayMs);
+  }
+  return fn();
+}
