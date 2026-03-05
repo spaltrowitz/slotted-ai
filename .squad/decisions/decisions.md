@@ -136,3 +136,12 @@
 
 **Status:** RESOLVED — "How about Saturday 2pm?"  
 **Context:** Mimics how friends actually propose times. Lists of 8 ranked slots are spreadsheet UX, not social UX.
+
+### 2026-03-05 — Multi-Friend Homepage Treatment (Mai)
+
+**Status:** RESOLVED — Avatar row (Option A)  
+**Author:** Mai (Product Strategist)  
+**Document:** `docs/plans/mai-homepage-recommendation.md`  
+**Context:** Stage called `one-friend` but logic triggers for any user with friends + no hangouts. Users can add 10 friends at once, so single-friend CTA is jarring. Solution: horizontal scrollable row of all friend avatars with "Who do you want to hang out with?" heading. Each avatar links to scheduling flow.  
+**Approved:** Option A (avatar row) — reuses existing component, acknowledges full network, zero new complexity.  
+**Implementation:** Replace `StageOneFriend` component in DashboardPage.tsx with avatar row. Rename stage `one-friend` → `first-hangout` in userStage.ts. No social pressure signals.
