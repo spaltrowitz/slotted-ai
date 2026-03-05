@@ -38,6 +38,18 @@ const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePag
 const InvitePage = lazyWithRetry(() => import('./pages/InvitePage'), 'invite');
 const EventSharePage = lazyWithRetry(() => import('./pages/EventSharePage'), 'event-share');
 
+// Prefetch the dashboard chunk after initial page load
+if (typeof window !== 'undefined') {
+  window.addEventListener('load', () => {
+    const prefetch = () => { import('./pages/DashboardPage').catch(() => {}); };
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(prefetch);
+    } else {
+      setTimeout(prefetch, 2000);
+    }
+  }, { once: true });
+}
+
 /* ─── Error boundary ─── */
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
@@ -80,7 +92,24 @@ const queryClient = new QueryClient({
 function RouteLoadingFallback() {
   return (
     <div className="flex h-screen items-center justify-center bg-[#faf9f7]">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
+      <div className="w-full max-w-md px-6 space-y-5 animate-pulse">
+        <div className="space-y-2">
+          <div className="h-6 w-40 rounded-lg bg-gray-200/60" />
+          <div className="h-4 w-28 rounded-lg bg-gray-100" />
+        </div>
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 space-y-3">
+          <div className="h-4 w-28 rounded bg-gray-200/60" />
+          <div className="h-20 rounded-xl bg-gray-100" />
+        </div>
+        <div className="flex gap-4">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex flex-col items-center gap-1.5">
+              <div className="h-10 w-10 rounded-full bg-gray-200/60" />
+              <div className="h-3 w-14 rounded bg-gray-100" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

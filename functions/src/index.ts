@@ -1283,6 +1283,7 @@ app.delete("/users/me/fcm-token", requireAuth, async (req: AuthRequest, res: Res
 /** GET /friends — list current user's friendships with friend details */
 app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
+    res.set("Cache-Control", "no-store, max-age=0");
     const me = await getDbUser(req.uid!);
     if (!me) {
       res.status(404).json({ error: "User not found" });
@@ -1300,10 +1301,48 @@ app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    const rows = friendships || [];
+    const friendIds = rows.map((f: any) => (f.user_a_id === me.id ? f.user_b_id : f.user_a_id));
+    const uniqueFriendIds = [...new Set(friendIds)];
+
+    // Strict calendar "connected" signal:
+    // - has at least one selected provider calendar
+    // - has at least one recently-synced busy block in the active sync window
+    // This avoids showing "connected" for stale tokens/reconnect-required states.
+    const selectedCalendarUsers = new Set<string>();
+    const usersWithRecentBusy = new Set<string>();
+    if (uniqueFriendIds.length > 0) {
+      const { data: selectedRows } = await getSupabase()
+        .from("user_calendars")
+        .select("user_id")
+        .in("user_id", uniqueFriendIds)
+        .eq("is_selected", true);
+      for (const row of selectedRows || []) {
+        selectedCalendarUsers.add((row as any).user_id);
+      }
+
+      const nowIso = new Date().toISOString();
+      const windowEndIso = new Date(Date.now() + 14 * 86400000).toISOString();
+      const recentSyncCutoffIso = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
+      const { data: busyRows } = await getSupabase()
+        .from("availability")
+        .select("user_id")
+        .in("user_id", uniqueFriendIds)
+        .eq("status", "busy")
+        .gte("end_time", nowIso)
+        .lte("start_time", windowEndIso)
+        .gte("created_at", recentSyncCutoffIso);
+      for (const row of busyRows || []) {
+        usersWithRecentBusy.add((row as any).user_id);
+      }
+    }
+
     // Flatten: return the *other* user as "friend"
-    const friends = (friendships || []).map((f: any) => {
+    const friends = rows.map((f: any) => {
       const iAmA = f.user_a.id === me.id;
       const friend = iAmA ? f.user_b : f.user_a;
+      const strictCalendarConnected =
+        selectedCalendarUsers.has(friend.id) && usersWithRecentBusy.has(friend.id);
       // hangoutPref is MY private preference for this friend
       const hangoutPref = iAmA ? (f.user_a_hangout_pref || "both") : (f.user_b_hangout_pref || "both");
       const friendshipType = iAmA ? (f.user_a_friendship_type || "local") : (f.user_b_friendship_type || "local");
@@ -1323,7 +1362,7 @@ app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
           socialBattery: friend.social_battery,
           neighborhood: friend.neighborhood,
           timezone: friend.timezone,
-          calendarConnected: !!(friend.google_refresh_token || friend.apple_calendar_connected),
+          calendarConnected: strictCalendarConnected,
           eventInterests: friend.event_interests || [],
         },
       };
@@ -1638,23 +1677,31 @@ app.patch("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: R
     // Update hangout pref or friendship type on the correct side
     if (hasPref || hasType || hasVisitDuration) {
       // Fetch the friendship to determine which side I am
-      const { data: friendship } = await getSupabase()
+      const { data: friendship, error: lookupError } = await getSupabase()
         .from("friendships")
         .select("user_a_id, user_b_id")
         .eq("id", friendshipId)
         .or(`user_a_id.eq.${me.id},user_b_id.eq.${me.id}`)
         .single();
-      if (friendship) {
-        if (friendship.user_a_id === me.id) {
-          if (hasPref) updatePayload.user_a_hangout_pref = hangoutPref;
-          if (hasType) updatePayload.user_a_friendship_type = friendshipType;
-          if (hasVisitDuration) updatePayload.user_a_visit_duration_hours = visitDurationHours;
-        } else {
-          if (hasPref) updatePayload.user_b_hangout_pref = hangoutPref;
-          if (hasType) updatePayload.user_b_friendship_type = friendshipType;
-          if (hasVisitDuration) updatePayload.user_b_visit_duration_hours = visitDurationHours;
-        }
+      if (lookupError || !friendship) {
+        console.error(`Friendship lookup failed for ${friendshipId}, user ${me.id}:`, lookupError?.message);
+        res.status(404).json({ error: "Friendship not found" });
+        return;
       }
+      if (friendship.user_a_id === me.id) {
+        if (hasPref) updatePayload.user_a_hangout_pref = hangoutPref;
+        if (hasType) updatePayload.user_a_friendship_type = friendshipType;
+        if (hasVisitDuration) updatePayload.user_a_visit_duration_hours = visitDurationHours;
+      } else {
+        if (hasPref) updatePayload.user_b_hangout_pref = hangoutPref;
+        if (hasType) updatePayload.user_b_friendship_type = friendshipType;
+        if (hasVisitDuration) updatePayload.user_b_visit_duration_hours = visitDurationHours;
+      }
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      res.status(400).json({ error: "No valid fields to update" });
+      return;
     }
 
     const { data, error } = await getSupabase()
@@ -9525,6 +9572,17 @@ export const findCalendarMatches = onSchedule("every day 09:00", async (event) =
 
   // ─── Proactive free-time matching: "You and X are both free this weekend" ───
   try {
+    // Hard cap: at most one proactive weekend match nudge per user per calendar day.
+    const dayStart = new Date(now);
+    dayStart.setHours(0, 0, 0, 0);
+    const { data: sentToday } = await sb
+      .from("notifications")
+      .select("user_id")
+      .eq("type", "calendar_match")
+      .gte("created_at", dayStart.toISOString())
+      .ilike("title", "📅 You and % are both free this weekend");
+    const usersNudgedToday = new Set<string>((sentToday || []).map((n: any) => n.user_id));
+
     // Get all accepted friendships
     const { data: friendships } = await sb
       .from("friendships")
@@ -9598,6 +9656,8 @@ export const findCalendarMatches = onSchedule("every day 09:00", async (event) =
           // Throttle: skip if we already sent a calendar_match to either user about the other in the last 7 days
           const throttleCutoff = new Date(now.getTime() - 7 * 86400000).toISOString();
           for (const [userId, friendId] of [[f.user_a_id, f.user_b_id], [f.user_b_id, f.user_a_id]]) {
+            if (usersNudgedToday.has(userId)) continue;
+
             const { data: recentMatch } = await sb
               .from("notifications")
               .select("id")
@@ -9631,6 +9691,7 @@ export const findCalendarMatches = onSchedule("every day 09:00", async (event) =
               body: `Looks like you're both available ${windowStr}. Want to make plans?`,
               relatedUserId: friendId,
             });
+            usersNudgedToday.add(userId);
           }
         }
       }
