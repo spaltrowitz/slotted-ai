@@ -5,7 +5,7 @@ export const queryKeys = {
   activityFeed: ['activity-feed'] as const,
   meetups: ['meetups'] as const,
   friends: ['friends'] as const,
-  groups: ['groups'] as const,
+
   notifications: ['notifications'] as const,
   settings: ['settings'] as const,
   events: {
@@ -92,12 +92,6 @@ export interface FriendRecord {
   };
 }
 
-export interface SavedGroup {
-  id: string;
-  name: string;
-  members: { id: string; displayName: string; photoUrl?: string }[];
-  pendingEmails?: string[];
-}
 
 export interface UserSettings {
   social_frequency?: string;
@@ -210,10 +204,6 @@ export const fetchFriends = async (): Promise<FriendRecord[]> => {
   return data.friends ?? [];
 };
 
-export const fetchGroups = async (): Promise<SavedGroup[]> => {
-  const { data } = await api.get<{ groups?: SavedGroup[] }>('/groups');
-  return data.groups ?? [];
-};
 
 export const fetchEventSuggestions = async (): Promise<EventSuggestion[]> => {
   const { data } = await api.get<{ suggestions?: EventSuggestion[] }>('/events/suggestions');

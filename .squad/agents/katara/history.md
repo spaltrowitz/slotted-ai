@@ -10,6 +10,22 @@
 
 <!-- Append learnings below -->
 
+### Phase 1 UI Simplification Removals Completed (2026-03-05T18:22:54Z)
+Phase 1 frontend removals completed successfully. Orchestration log: `.squad/orchestration-log/2026-03-05T18:22:54Z-agent-11-katara.md`. Decision merged to `.squad/decisions.md`. Cross-agent dependency: GroupAvailability.tsx API call needs update from `/availability/group-overlap` to `/availability/multi-friend-overlap` (Zuko's backend rename). Type check passes clean.
+
+### Phase 1 UI Simplification Removals (2026-07)
+- **Groups removed from FriendsPage:** All group state (11 useState vars), 3 mutations (create/delete/add-member), all group handlers, the groups query, group UI sections (groups list, create form, delete modal, add-member panel, non-friend request buttons). The GroupAvailability component still exists for multi-friend scheduling — just no longer triggered through saved groups.
+- **Groups removed from queries.ts:** `SavedGroup` interface, `fetchGroups()`, `groups` query key all deleted. No group-related API calls existed in `api.ts` (they were inline via `api.post/delete` in FriendsPage).
+- **Events route removed from App.tsx:** `EventsPage` lazy import and `/events` route removed. The `EventSharePage` public route (`/e/:code`) remains. Events was NOT in AppShell nav — it was already only accessible via direct URL or links.
+- **Calendar view removed from DashboardPage:** Entire desktop calendar grid (week/month/agenda views), mark-busy mode (drag-to-select), busy block mutations, all calendar view helpers (weekDays, monthGrid, eventStyle, formatEventTime, etc.), and the "calendar connected but no events" nudge. Calendar data still fetched (14 days) for the header "today at a glance" summary. AddToCalendarModal kept (it's for meetup confirmation, not the calendar view). The "Mark Busy" reference in the connect-calendar CTA was also removed.
+- **HowItWorks removed from DashboardPage:** `<HowItWorks />` rendering removed. The component function still exists in the file — will be repurposed for /help page later.
+- **Score emojis removed from FriendAvailability, GroupAvailability, EventsPage:** `scoreEmoji()` function and its 🔥👍🤔😐 display removed from all three files. Numeric score badge also removed from FriendAvailability and GroupAvailability time slots. EventsPage keeps its score badge (different context: event-friend match quality, not time slot scoring).
+- **Group notification detection removed from NotificationsPage:** `isGroupMembershipUpdate` regex removed; `isFriendJoinedNotification` simplified to just check `type === 'friend_accepted'`.
+- **Dependency chain:** `inviteFriendMutation` in FriendsPage was only used by `handleGroupMemberFriendRequest` — removing groups made it dead code, so it was also removed.
+- **`useCallback` removed from DashboardPage imports:** All useCallback usages were in busy-block handlers which were removed.
+- **`calEventsLoading` no longer exists:** Was the `isFetching` from the calendar query, only used by the removed calendar UI and the "no events" nudge. Simplified query no longer destructures it.
+- Type check: `cd client && npx tsc --noEmit` passes clean after all changes.
+
 ### Routing (QW-6)
 - Public routes in App.tsx go before the `<Route element={<ProtectedRoute />}>` wrapper — alongside `/`, `/login`, `/privacy`
 - InvitePage uses `/invite/:code` pattern — the code maps to `users.invite_code` in the DB

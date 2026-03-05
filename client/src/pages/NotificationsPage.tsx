@@ -289,12 +289,7 @@ export default function NotificationsPage() {
     }
 
     const isSharedEvent = notification.body.startsWith('[EVENT_SHARE]');
-    const isGroupMembershipUpdate = /\bgroup\b|added to|removed from|left "/i.test(
-      `${notification.title} ${notification.body}`
-    );
-    const isFriendJoinedNotification =
-      notification.type === 'friend_accepted' &&
-      !isGroupMembershipUpdate;
+    const isFriendJoinedNotification = notification.type === 'friend_accepted';
 
     if (notification.type === 'calendar_match' && notification.related_user_id && !isSharedEvent) {
       navigate(`/friends?findTimes=${encodeURIComponent(notification.related_user_id)}`);

@@ -10,6 +10,31 @@
 
 <!-- Append learnings below -->
 
+### Phase 1 Groups Backend Removal Completed (2026-03-05T18:22:54Z)
+Phase 1 backend Groups removal completed successfully. Orchestration log: `.squad/orchestration-log/2026-03-05T18:22:54Z-agent-12-zuko.md`. Decision merged to `.squad/decisions.md`. Migration created (`migrations/remove_groups.sql`) but NOT executed — awaiting Toph's schema review. Cross-agent dependency: Katara's GroupAvailability.tsx must update API call to `/availability/multi-friend-overlap`. Build passes clean.
+
+### Phase 1: Groups Backend Removal (2026-XX-XX)
+
+**Removed (~434 lines net):**
+- 5 group endpoints: GET /groups, POST /groups, PUT /groups/:id, POST /groups/:id/members, DELETE /groups/:id (lines 3344–3776 original)
+- Group auto-join on signup: removed `friend_group_members` upsert from pending invite processing (~18 lines, around line 933)
+- Removed `group_id` from `pending_invites` select in signup flow (line 888)
+- Removed 4 group notification creation calls (added to group, removed from group, left group, joined group)
+- Renamed route `/availability/group-overlap` → `/availability/multi-friend-overlap` (route + EXPENSIVE_PATHS constant)
+
+**Kept:**
+- `scoreGroupOverlaps()` helper function — still used by both 1-on-1 `scoreOverlaps()` and the multi-friend overlap endpoint. Name is internal-only.
+- POST `/availability/multi-friend-overlap` endpoint — core multi-friend scheduling logic, just renamed.
+
+**Dependencies found:**
+- `group_id` column on `pending_invites` — referenced in signup auto-connect. Removed from backend code; migration file created but not executed.
+- Line 5701 comment mentions `self_groups` — this refers to Meetup.com API, NOT Slotted groups. No change needed.
+- No orphaned imports found (groups code only used standard helpers like `getDbUser`, `getSupabase`, `createNotification`, `getAcceptedFriendIdSet`).
+
+**Migration created:** `migrations/remove_groups.sql` — drops `friend_group_members`, `friend_groups`, removes `group_id` from `pending_invites`, restores original unique constraint. NOT executed — awaiting Toph's review.
+
+**Build status:** `npm run build` passes clean.
+
 ## Core Context (Summarized prior work)
 
 ### 2026-03-03 & Earlier: Critical Production Fixes

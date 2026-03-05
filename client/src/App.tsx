@@ -32,7 +32,7 @@ const FriendsPage = lazyWithRetry(() => import('./pages/FriendsPage'), 'friends'
 const OnboardingPage = lazyWithRetry(() => import('./pages/OnboardingPage'), 'onboarding');
 const SettingsPage = lazyWithRetry(() => import('./pages/SettingsPage'), 'settings');
 const NotificationsPage = lazyWithRetry(() => import('./pages/NotificationsPage'), 'notifications');
-const EventsPage = lazyWithRetry(() => import('./pages/EventsPage'), 'events');
+
 const PrivacyPolicyPage = lazyWithRetry(() => import('./pages/PrivacyPolicyPage'), 'privacy');
 const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePage'), 'terms');
 const InvitePage = lazyWithRetry(() => import('./pages/InvitePage'), 'invite');
@@ -134,7 +134,7 @@ export default function App() {
                 <Route path="/onboarding" element={<OnboardingPage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/friends" element={<FriendsPage />} />
-                <Route path="/events" element={<EventsPage />} />
+
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Route>

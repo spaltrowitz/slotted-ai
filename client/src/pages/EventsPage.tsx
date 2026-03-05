@@ -632,9 +632,6 @@ export default function EventsPage() {
       : score >= 60 ? 'text-amber-600 bg-amber-50 border-amber-200'
       : 'text-gray-500 bg-gray-50 border-gray-200';
 
-  const scoreEmoji = (score: number) =>
-    score >= 85 ? '🔥' : score >= 70 ? '👍' : score >= 55 ? '🤔' : '😐';
-
   // ─── Save/bookmark event ───
   const handleSaveEvent = async (ev: EventResult) => {
     setSavingEventId(ev.id);
@@ -1205,7 +1202,6 @@ export default function EventsPage() {
                       <p className="text-[11px] text-slotted-600 font-medium mt-0.5">{m.note}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-lg">{scoreEmoji(m.availabilityScore)}</span>
                       {formatPrice(m.priceMin, m.priceMax) && <span className="text-[11px] font-semibold text-gray-500">{formatPrice(m.priceMin, m.priceMax)}</span>}
                     </div>
                   </a>

@@ -123,18 +123,6 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
     }
   };
 
-  const scoreColor = (score: number) => {
-    if (score >= 75) return 'text-emerald-600 bg-emerald-50 border-emerald-200';
-    if (score >= 50) return 'text-amber-600 bg-amber-50 border-amber-200';
-    return 'text-gray-500 bg-gray-50 border-gray-200';
-  };
-
-  const scoreEmoji = (score: number) => {
-    if (score >= 80) return '🔥';
-    if (score >= 65) return '👍';
-    if (score >= 50) return '🤔';
-    return '😐';
-  };
 
   return (
     <div className="rounded-2xl border border-gray-200/60 bg-white shadow-lg overflow-hidden">
@@ -290,11 +278,6 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
                 }`}
               >
-                {/* Score badge */}
-                <div className={`flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg border ${scoreColor(slot.score)}`}>
-                  <span className="text-xs font-bold">{slot.score}</span>
-                </div>
-
                 {/* Time info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -317,9 +300,8 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
                   )}
                 </div>
 
-                {/* Score emoji + book button */}
+                {/* Book button */}
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-lg">{scoreEmoji(slot.score)}</span>
                   <button
                     onClick={() => handleBook(slot)}
                     disabled={bookingSlot === slot.start}

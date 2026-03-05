@@ -1249,3 +1249,58 @@ These are backend issues, not test bugs:
 
 **Critical pattern:** Always match client payload keys to backend `req.body` destructuring. Backend uses camelCase for meetups/groups (`friendIds`, `startTime`, `memberIds`) and snake_case for busy-blocks (`start_time`, `end_time`). No consistency — must inspect each endpoint.
 
+
+---
+
+## Decision: Phase 1 Frontend Removals (Katara, 2026-07)
+
+**Author:** Katara (Frontend Dev)  
+**Date:** 2026-07  
+**Status:** Implemented
+
+### What was removed
+
+1. **Groups feature** — entirely removed from FriendsPage, queries.ts. GroupAvailability component still exists but is no longer invoked through saved groups.
+2. **Events route** — `/events` route and EventsPage import removed from App.tsx. Files (`EventsPage.tsx`, `EventSharePage.tsx`) preserved. EventSharePage public route (`/e/:code`) kept.
+3. **Calendar view** — desktop calendar grid (week/month/agenda), mark-busy mode, and all related state/handlers removed from DashboardPage. Calendar data still fetched for header summary.
+4. **HowItWorks banner** — rendering removed from DashboardPage. Component preserved for future /help page.
+5. **Score emojis** — `scoreEmoji()` function and 🔥👍🤔😐 display removed from FriendAvailability, GroupAvailability, and EventsPage. Numeric score badge removed from time slot components.
+
+### What was kept
+
+- `GroupAvailability.tsx` component (accepts `friendIds[]`, works without saved groups)
+- `AddToCalendarModal` and `calendarModal` state (part of meetup confirmation flow, not the calendar view)
+- Calendar data fetching (14 days) for DashboardPage header summary
+- `HowItWorks` function definition (will be repurposed)
+- `EventsPage.tsx` and `EventSharePage.tsx` files
+- `scoreColor()` in EventsPage (different context: event-friend match quality)
+- Mobile "Upcoming Hangouts" section on DashboardPage
+
+### Backend impact
+
+Groups endpoints (`GET/POST/PUT/DELETE /groups`, `POST /groups/:id/members`) still exist on the backend — frontend no longer calls them. Backend cleanup is a separate task for Zuko.
+
+---
+
+## Decision: Phase 1 Groups Backend Removal (Zuko, 2026-03-05)
+
+**Author:** Zuko (Backend Dev)  
+**Date:** 2026-03-05  
+**Status:** Implemented — pending migration execution
+
+### What Changed
+
+Removed all 5 group CRUD endpoints from `functions/src/index.ts` (~434 lines). Renamed `/availability/group-overlap` to `/availability/multi-friend-overlap` — the core multi-friend scheduling logic is preserved, only the route name changed.
+
+### Frontend Impact
+
+- **Katara must update** the API call in `GroupAvailability.tsx` (line 46) from `/availability/group-overlap` to `/availability/multi-friend-overlap`.
+- All group-related API calls (`fetchGroups`, create/delete/update group mutations) will now 404. Frontend code for these should be removed.
+
+### Migration Pending
+
+`migrations/remove_groups.sql` is created but NOT executed. It drops `friend_groups`, `friend_group_members`, and removes `group_id` from `pending_invites`. **Toph must review before execution** since it involves schema changes.
+
+### Key Decision: Keep `scoreGroupOverlaps` function name
+
+The internal helper `scoreGroupOverlaps()` was NOT renamed because it's called by both the 1-on-1 `scoreOverlaps()` wrapper and the multi-friend endpoint. Renaming it would be a cosmetic-only change with risk of introducing bugs. Can be renamed in a future cleanup pass.
