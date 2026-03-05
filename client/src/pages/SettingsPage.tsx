@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import AppShell from '../components/AppShell';
@@ -8,7 +8,7 @@ import InstallPrompt from '../components/InstallPrompt';
 import { useAuth } from '../contexts/AuthContext';
 import { trackSettingsSaved } from '../lib/analytics';
 import api from '../lib/api';
-import { fetchUserSettings, queryKeys } from '../lib/queries';
+import { fetchUserSettings, fetchMeetups, queryKeys } from '../lib/queries';
 
 export default function SettingsPage() {
   const { user, onboardingComplete, googleCalendarConnected, googleCalendarStale, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, outlookCalendarConnected, connectOutlookCalendar, disconnectOutlookCalendar, verifyCalendarHealth, signInWithGoogle, signOut } = useAuth();
@@ -43,6 +43,20 @@ export default function SettingsPage() {
     queryFn: fetchUserSettings,
     enabled: !!user,
   });
+
+  const { data: meetupsData = [] } = useQuery({
+    queryKey: queryKeys.meetups,
+    queryFn: fetchMeetups,
+    enabled: !!user,
+  });
+
+  const completedHangoutCount = useMemo(() => {
+    const now = new Date();
+    return meetupsData.filter((m) => {
+      const end = new Date(m.end_time);
+      return end < now && (m.status === 'confirmed' || (m.status === 'proposed' && m.myRsvp === 'accepted'));
+    }).length;
+  }, [meetupsData]);
 
   const [socialRecharge, setSocialRecharge] = useState('2-3-week');
   const [rechargingDays, setRechargingDays] = useState<number[]>([]);
@@ -475,7 +489,8 @@ export default function SettingsPage() {
                 </p>
               </div>
 
-              {/* Social Battery */}
+              {/* Social Battery — hidden until user has 3+ completed hangouts */}
+              {completedHangoutCount >= 3 && (
               <div className="rounded-2xl border border-gray-200/60 bg-white p-3 sm:p-4 shadow-sm">
                 <h3 className="text-xs font-bold text-gray-700 mb-2">Social Battery</h3>
                 <label className="block text-[11px] font-semibold text-gray-700 mb-2">How often do you want to see friends?</label>
@@ -511,6 +526,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Sharing */}
               <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">

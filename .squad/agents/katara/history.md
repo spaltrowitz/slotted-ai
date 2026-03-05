@@ -113,3 +113,9 @@ Toph designed webhook + incremental sync architecture. Frontend doesn't change f
 - **Typography follows Ty Lee's hierarchy:** text-xl font-semibold for page titles, text-sm text-gray-500 for descriptions, standard gradient-btn for CTAs, text-xs text-gray-400 for metadata.
 - **Emoji policy maintained:** Only ❤️ and ✅/⏳ used (allowed set).
 - Type check: `cd client && npx tsc --noEmit` passes clean.
+
+### Phase 4: Scheduling UX Improvements (2026-07)
+- **Single-suggestion scheduling (FriendAvailability.tsx):** Added `completedHangouts` prop (default 0). When 0, renders single-suggestion mode: top slot shown prominently ("How about Saturday at 2pm?") with "Book it" CTA, collapsed "Other times that work ↓" expander showing up to 4 alternates. When >= 1, renders existing full list. FriendsPage now fetches meetups query to derive `completedHangouts` count and passes it down. `showOtherTimes` boolean state toggles the expand.
+- **Star rating for hangout logging (StarRating.tsx + DashboardPage):** New `StarRating` component with 5 tappable SVG stars (44px hit targets), fill-left-to-right UX, Submit + Skip buttons. DashboardPage renders it as a card above stage content for the most recent unrated completed meetup. Rating submits to `POST /meetup-logs` with rating + friend name + date. Dismissed/rated meetup IDs tracked in localStorage (`slotted_rated_meetups`) to avoid re-prompting.
+- **Social Battery gated behind milestone (SettingsPage):** Entire Social Battery section (frequency, no-plans days, social goal) wrapped in `{completedHangoutCount >= 3 && ...}`. SettingsPage now fetches meetups query to derive count. Default for new users remains "2-3-week" (existing useState default) — the section simply doesn't appear until the threshold is met.
+- Type check: `cd client && npx tsc --noEmit` passes clean.

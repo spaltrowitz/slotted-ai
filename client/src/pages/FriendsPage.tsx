@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
@@ -8,6 +8,7 @@ import FriendAvailability from '../components/FriendAvailability';
 import api from '../lib/api';
 import {
   fetchFriends,
+  fetchMeetups,
   queryKeys,
   type FriendRecord,
 } from '../lib/queries';
@@ -37,6 +38,20 @@ export default function FriendsPage() {
     enabled: !!user,
     refetchOnWindowFocus: true,
   });
+
+  const { data: meetups = [] } = useQuery({
+    queryKey: queryKeys.meetups,
+    queryFn: fetchMeetups,
+    enabled: !!user,
+  });
+
+  const completedHangouts = useMemo(() => {
+    const now = new Date();
+    return meetups.filter((m) => {
+      const end = new Date(m.end_time);
+      return end < now && (m.status === 'confirmed' || (m.status === 'proposed' && m.myRsvp === 'accepted'));
+    }).length;
+  }, [meetups]);
 
   const friendActionMutation = useMutation({
     mutationFn: async ({ friendshipId, action }: { friendshipId: string; action: 'accept' | 'decline' }) => {
@@ -246,6 +261,7 @@ export default function FriendsPage() {
             friendId={selectedFriendId}
             friendName={selectedFriendName}
             onClose={handleCloseFindTimes}
+            completedHangouts={completedHangouts}
           />
         </div>
       )}

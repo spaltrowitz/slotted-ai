@@ -1370,3 +1370,78 @@ The internal helper `scoreGroupOverlaps()` was NOT renamed because it's called b
 ### Cross-Agent Impact
 - None — all changes are frontend-only, no API or schema changes
 - Onboarding mutation still sends to same endpoint, just with empty preferredTimes
+
+---
+
+## Decision: Phase 3 — Progressive Dashboard Architecture (Katara, 2026-03-05)
+
+| Field | Value |
+|---|---|
+| **Author** | Katara (Frontend Dev) |
+| **Date** | 2026-03-05 |
+| **Status** | Implemented |
+| **Scope** | Phase 3 Dashboard Refactor |
+
+### Decision
+
+DashboardPage now renders different full-screen experiences based on a `UserStage` computed from existing data (calendar connection, friend count, pending invites, hangout counts). The stage logic lives in `client/src/lib/userStage.ts` as a pure function.
+
+### Rationale
+
+All three designers (Ty Lee, Suki, Mai) agreed the Dashboard should reflect reality — not show empty sections with headers. The progressive approach means Day 1 users see a single invite CTA (not 15 empty widgets), while active users see upcoming hangouts and reconnect suggestions.
+
+### What Changed
+
+- `client/src/lib/userStage.ts` — new file, 6-stage type union + pure function
+- `client/src/pages/DashboardPage.tsx` — full rewrite, 1341 → ~370 lines
+- Removed: calendar view, activity feed, event suggestions, saved events, hangout history/log form, HowItWorks, all related state/mutations
+- Kept: dashboard/friends/meetups queries, friend action mutation, AddToCalendarModal
+
+### Impact
+
+- **No backend changes needed** — all data already fetched by existing queries
+- **FriendsPage unaffected** — scheduling flow still works via `/friends?findTimes=<id>`
+- **NotificationDropdown unaffected** — bell icon still in AppShell
+- **Activity feed, event suggestions, saved events queries** still exist in queries.ts but are no longer imported by DashboardPage. They may be used elsewhere or can be cleaned up later.
+
+### Trade-offs
+
+- The "Log hangout" form and hangout history section were removed from Dashboard. If needed, they could be added to a dedicated History page or under Settings.
+- Event suggestions/saved events are no longer surfaced on Dashboard. If Events returns in V2, it would get its own surface.
+
+---
+
+## Decision: Phase 4 — Single-Suggestion Scheduling, Star Rating, Social Battery Gating (Katara, 2026-03-05)
+
+| Field | Value |
+|---|---|
+| **Author** | Katara (Frontend Dev) |
+| **Date** | 2026-03-05 |
+| **Status** | Implemented |
+| **Scope** | Phase 4 UX Improvements |
+
+### Decisions
+
+#### completedHangouts derived client-side from meetups query
+
+Rather than adding a new backend endpoint, all three Phase 4 features derive `completedHangouts` count from the existing `fetchMeetups` query (filtering by `end_time < now` and confirmed/accepted status). This means FriendsPage, DashboardPage, and SettingsPage all share the same cached `queryKeys.meetups` data — no extra network calls.
+
+#### Star rating uses localStorage for dismiss tracking
+
+Rated/dismissed meetup IDs are stored in `localStorage` under `slotted_rated_meetups` to avoid re-prompting. This is intentionally ephemeral — if a user clears storage, they may see a rating prompt again, which is acceptable. No new backend "has_been_rated" column was added.
+
+#### Social Battery defaults to "open" for hidden state
+
+While the Social Battery UI is hidden (< 3 hangouts), the backend default of `2-3-week` for `social_frequency` still applies to scheduling. The user just can't see or change it yet. This avoids needing a separate default-setting mechanism.
+
+### Key Changes
+
+- `client/src/components/StarRating.tsx` — New interactive star picker for rating completed hangouts
+- `client/src/pages/FriendsPage.tsx` — Single-suggestion scheduling for users with no hangouts
+- `client/src/pages/SettingsPage.tsx` — Social Battery UI gated behind `completedHangouts >= 3`
+
+### Impact
+
+- **No backend changes required** — all data derived client-side
+- **One new component** — StarRating; reusable for future rating flows
+- **FriendsPage UX improved** — First-timers see simpler, single-suggestion flow vs. multi-slot picker

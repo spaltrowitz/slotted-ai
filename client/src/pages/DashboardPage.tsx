@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
+import StarRating from '../components/StarRating';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 import { getUserStage, type UserStage } from '../lib/userStage';
@@ -564,6 +565,62 @@ export default function DashboardPage() {
 
   const isLoading = dashboardLoading;
 
+  /* ─── hangout rating prompt ─── */
+  const RATED_KEY = 'slotted_rated_meetups';
+  const getRatedIds = useCallback((): Set<string> => {
+    try {
+      const raw = localStorage.getItem(RATED_KEY);
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  }, []);
+
+  const [ratedIds, setRatedIds] = useState<Set<string>>(() => getRatedIds());
+
+  const meetupToRate = useMemo(() => {
+    if (completedHangouts.length === 0) return null;
+    const sorted = [...completedHangouts].sort(
+      (a, b) => new Date(b.end_time).getTime() - new Date(a.end_time).getTime(),
+    );
+    return sorted.find((m) => !ratedIds.has(m.id)) ?? null;
+  }, [completedHangouts, ratedIds]);
+
+  const ratingFriendName = useMemo(() => {
+    if (!meetupToRate) return '';
+    const others = meetupToRate.participants.filter((p) => p.userId !== currentUserId);
+    return others[0]?.displayName?.split(' ')[0] || 'your friend';
+  }, [meetupToRate, currentUserId]);
+
+  const rateMutation = useMutation({
+    mutationFn: async ({ meetupId, rating }: { meetupId: string; rating: number }) => {
+      const meetup = meetups.find((m) => m.id === meetupId);
+      const others = meetup?.participants.filter((p) => p.userId !== currentUserId) ?? [];
+      await api.post('/meetup-logs', {
+        friend_name: others[0]?.displayName || '',
+        hangout_date: meetup?.start_time ? new Date(meetup.start_time).toISOString().slice(0, 10) : undefined,
+        rating,
+      });
+    },
+    onSuccess: (_data, { meetupId }) => {
+      const updated = new Set(ratedIds);
+      updated.add(meetupId);
+      setRatedIds(updated);
+      try {
+        localStorage.setItem(RATED_KEY, JSON.stringify([...updated]));
+      } catch { /* ignore */ }
+    },
+  });
+
+  const dismissRating = useCallback((meetupId: string) => {
+    const updated = new Set(ratedIds);
+    updated.add(meetupId);
+    setRatedIds(updated);
+    try {
+      localStorage.setItem(RATED_KEY, JSON.stringify([...updated]));
+    } catch { /* ignore */ }
+  }, [ratedIds]);
+
   /* ─── render ─── */
   return (
     <AppShell>
@@ -585,6 +642,18 @@ export default function DashboardPage() {
       )}
 
       {isLoading && <DashboardSkeleton />}
+
+      {/* Hangout rating prompt */}
+      {!isLoading && meetupToRate && (
+        <div className="mb-5 rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
+          <StarRating
+            friendName={ratingFriendName}
+            onSubmit={(rating) => rateMutation.mutate({ meetupId: meetupToRate.id, rating })}
+            onSkip={() => dismissRating(meetupToRate.id)}
+            submitting={rateMutation.isPending}
+          />
+        </div>
+      )}
 
       {!isLoading && stage === 'no-calendar' && <StageNoCalendar />}
 
