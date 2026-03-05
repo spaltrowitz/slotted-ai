@@ -11,6 +11,7 @@
 | Google Calendar, calendar sync, OAuth tokens | Zuko | Toph |
 | AI features, suggestions, ranking, prompts | Toph + Zuko | — |
 | UI/UX design, visual design, layout, design tokens, accessibility | Suki | Katara |
+| Visual craft, interaction patterns, Apple design review, pixel-level critique | Ty Lee | Suki |
 | Product strategy, feature prioritization, MVP scoping, "should we build this?" | Mai | Toph |
 | UX critique, user journey review, scope challenge | Mai | Suki |
 | Performance, bundle size, loading | Katara (frontend) / Zuko (backend) | Toph |

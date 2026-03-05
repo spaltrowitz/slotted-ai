@@ -1174,3 +1174,78 @@ If implemented, a new user's first experience would be: OAuth → Connect Calend
 **Source Documents:**
 - `docs/plans/suki-response-to-mai.md` (full context and Suki's reasoning)
 - `.squad/decisions/inbox/suki-mai-disagreements.md` (decision matrix)
+
+---
+
+## Decision: Backend API Accepts Both camelCase and snake_case (Zuko, 2026-03-05)
+
+**Author:** Zuko (Backend Dev)  
+**Date:** 2026-03-05  
+**Status:** Applied (E2E fixes)  
+
+### Decision
+
+All Express endpoints now accept both camelCase and snake_case for request body fields to support multiple client conventions and test clients. GET /friends response includes both `id` and `friendshipId` plus raw DB fields. PATCH /friends endpoint accepts `{ status: "accepted" }` as an alias for `{ action: "accept" }`.
+
+### Examples
+
+- `friendIds` / `friend_ids`
+- `startTime` / `start_time`
+- `memberIds` / `member_ids`
+
+### Rationale
+
+Test client and potential future clients naturally use snake_case to match database column names. Rather than enforcing one convention, the backend is permissive on input and consistent on output, reducing friction across the ecosystem.
+
+### Impact
+
+- **Sokka (QA):** Fixes enable 12–16 of the remaining 16 E2E test scenarios (after migration applied)
+- **Katara (Frontend):** No changes needed; camelCase calls continue to work
+- **Toph (Schema):** `manual_busy_blocks` migration must be applied in Supabase
+
+### Files Changed
+
+- `functions/src/index.ts` — POST /groups, PATCH /friends, GET /friends, POST /meetups, POST /events/save
+- `migrations/add_manual_busy_blocks.sql` — New migration for busy blocks table + RLS
+
+---
+
+## Decision: E2E Test Infrastructure Fixes (Sokka, 2026-03-05)
+
+**From:** Sokka (QA)  
+**Date:** 2026-03-05  
+**Status:** Applied
+
+### Summary
+
+Fixed 22 test failures (53→75 passing, 94% pass rate) in the E2E agent test suite. All fixes were infrastructure and test-client logic — no backend changes (though Zuko's backend compatibility fixes are prerequisites).
+
+### What Changed
+
+**Test Client Fixes** (`tests/agents/src/client.ts`):
+- `acceptFriendship` / `declineFriendship`: Send `{ action: "accept" }` matching backend (was `{ status: "accepted" }`)
+- `createMeetup`: Send camelCase keys (`friendIds`, `startTime`, `endTime`)
+- `createGroup`: Send `memberIds` (camelCase)
+- `getFriends()`: Map `friendshipId` → `id` for response normalization
+
+**Polling Infrastructure** (`tests/agents/src/scenario.ts`):
+- Added `waitFor<T>()` helper — retries async checks up to N times with delay
+- Used for all notification assertions depending on backend-side async processing
+
+**Scenario Fixes**:
+- **friends.ts**: Polling for notifications; scoped duplicate check to per-sender
+- **meetups.ts**: Polling for meetup_request and meetup_confirmed notifications
+- **notification-dedup.ts**: Use `friend.id` instead of `user_a_id/user_b_id`; polling for notifications
+- **calendar-events.ts**: Added required `id` field to test event; polling for saved events list
+
+### Remaining Blockers (5 test failures)
+
+These are backend issues, not test bugs:
+
+1. **Missing `manual_busy_blocks` table** (3 failures) — Backend references the table but it doesn't exist in the database. Needs migration application.
+2. **Authorization gap in DELETE /groups** (1 failure) — Returns 200 for non-creator members (expected 403 or 404).
+
+### Key Learnings
+
+**Critical pattern:** Always match client payload keys to backend `req.body` destructuring. Backend uses camelCase for meetups/groups (`friendIds`, `startTime`, `memberIds`) and snake_case for busy-blocks (`start_time`, `end_time`). No consistency — must inspect each endpoint.
+
