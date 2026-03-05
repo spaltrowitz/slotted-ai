@@ -59,3 +59,26 @@
 - **What stays:** Multi-friend scheduling flow (select 2+ friends → find times → book). Just needs rebranding: rename `GroupAvailability` → `MultiFriendAvailability`, rename endpoint `/availability/group-overlap` → `/availability/multi-friend`, remove all "group" language from UI.
 - **Key risk:** `pending_invites` migration must reverse cleanly. Drop `group_id` column, restore `UNIQUE (inviter_id, invited_email)` constraint. Any pending group invites become orphaned.
 - **User impact:** All saved groups will be deleted. Users can still schedule with multiple friends, just can't save those collections for reuse.
+
+### 2026-03-05 — Mai Joins Team; Product Architecture Review Complete
+
+**New hire:** Mai (Product Strategist) joined as critical reviewer of product strategy, feature prioritization, and MVP scoping.
+
+**Mai's key findings** (from `docs/plans/research-product-strategy-review.md`):
+- Current Dashboard is "Week 4 feature designed for Day 1" — all features visible to new users
+- Solution: State-aware progressive disclosure architecture (unlock features by milestone: 0→1→3+ friends, hangout count, time on platform)
+- Proposed Day 1: OAuth → Calendar → Invite → Friend joins → Single suggestion → Book (< 3 min)
+- Removes: Events page (from V1), Social Battery (gate behind milestones), Activity Feed (gate), Hangout Logging (gate), advanced settings (gate)
+- First scheduling uses "How about Saturday 2pm?" (single suggestion), not ranked lists
+- Onboarding simplified to calendar connect only; preferred times learned from behavior
+- Dashboard header dual CTAs (Log + Invite) collapsed to single contextual action
+
+**Implication for architecture:**
+- Dashboard routing and visibility logic becomes state-dependent (not just authenticated/unauthenticated)
+- May require Milestone enum/status column on `users` table or computed milestone in API response
+- Potential refactor: DashboardPage component tree must switch sections dynamically based on milestone
+
+**Alignment with Suki's audit:**
+- Both recommend removing Events page
+- Emoji reduction supports progressive disclosure (less visual chaos for new users)
+- Groups removal aligns with simplified Day 1 (focus on 1:1 and immediate multi-friend need)

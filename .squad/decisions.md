@@ -1015,3 +1015,119 @@ Use `vite-plugin-pwa` with `generateSW` mode and `importScripts` to add Workbox-
 - `build/workbox-*.js` — Workbox runtime library
 - `build/firebase-messaging-sw.js` — Copied from public/, imported by sw.js
 
+
+---
+
+## Decision: Strict Emoji Policy — Text First, Emojis Must Earn Their Place (Suki, 2026-03-05)
+
+| Field | Value |
+|---|---|
+| **Author** | Suki (Designer) |
+| **Date** | 2026-03-05 |
+| **Status** | Proposed |
+| **Triggered by** | Shari feedback that 84 "functional" emojis is still too many |
+
+### Decision
+
+Flip the default emoji stance from "keep functional emojis" to **"use text/icons by default, emojis must pass a 4-criteria test."**
+
+### The 4-Criteria Test
+
+An emoji earns its place ONLY if ALL are true:
+1. Communicates something text alone cannot convey as quickly
+2. Not redundant with an adjacent text label
+3. Not one of many in a set where text labels work just as well
+4. Removing it would genuinely make the UI harder to understand
+
+### Result
+
+- **100 → 13 unique emojis** (87% reduction)
+- **678 → ~45 instances** (93% reduction)
+- Only keep: traffic-light status (🟢🟡🔴), checkmarks (✅✓✕), star (⭐), warning (⚠️), heart (❤️), hourglass (⏳)
+- Replace all emoji+text label pairs with text-only buttons/pills
+- Replace notification type emojis with colored dots (already have colored backgrounds)
+
+### Companion Decision: How It Works → /help page
+
+Move Dashboard and Events "How It Works" content to a dedicated `/help` page accessible from Settings. Dashboard becomes fully actionable on first load.
+
+### Rationale
+
+- Every emoji next to a text label fails the redundancy test
+- Text pills are more scannable than emoji+text pairs at mobile sizes
+- Major apps (Google Maps, Airbnb, Spotify) use text-first category filters
+- Reduces cognitive load and visual noise significantly
+- 13 remaining emojis are all universally understood status indicators
+
+### Impact
+
+- All page files need emoji removal/replacement
+- Settings preference pickers need redesign (text pills)
+- Notification type config needs update (colored dots)
+- New `/help` route and page needed
+- HowItWorks component removed from Dashboard and Events
+
+### Full Details
+
+See `docs/plans/research-product-design-audit.md` — sections "Revised Emoji Policy (Strict)" and "How It Works Relocation".
+
+---
+
+## Decision: User Directive — Stricter Emoji Policy & How It Works Relocation (Shari Paltrowitz, 2026-03-05)
+
+| Field | Value |
+|---|---|
+| **Issued by** | Shari Paltrowitz (Product Owner) |
+| **Date** | 2026-03-05 |
+| **Status** | Directive |
+
+### Directive
+
+1. **Emoji audit must cut deeper** — 84 "functional" emojis is still too many. Default: text-first approach, emojis only if they earn their place.
+2. **"How It Works" relocation** — Banners should exist (help users) but not inline on Dashboard/Events. Move to separate `/help` page, accessible from Settings and subtle "?" affordance.
+
+### Rationale
+
+- User feedback: Visual clutter from too many emojis even when "functional"
+- Dashboard should be 100% actionable on first load, not teaching users how to use it
+
+### Follow-Up
+
+Suki's strict emoji audit (above) addresses this directive.
+
+---
+
+## Decision: Product Strategy — State-Aware Progressive Disclosure (Mai, 2026-03-05)
+
+| Field | Value |
+|---|---|
+| **Author** | Mai (Product Strategist) |
+| **Date** | 2026-03-05 |
+| **Status** | Proposed — awaiting Shari's review |
+| **Scope** | Dashboard architecture, feature visibility, Day 1 experience |
+
+### Decision
+
+The Dashboard and feature visibility should be **state-aware** — showing different content based on the user's stage in the product lifecycle, not a fixed layout for all users.
+
+### Key Recommendations
+
+1. **Dashboard should progressively unlock sections** based on user milestones (0 friends → 1 friend → first hangout → 3+ friends → active user), not show all sections to everyone
+2. **Smart scheduling features (scores, rankings, emojis) should be hidden** until the AI has 2+ interactions of behavioral data
+3. **First-time scheduling should use "How about Saturday 2pm?"** (single suggestion + book) rather than ranked lists of 8 options
+4. **Events page should be removed from V1** entirely (not demoted, removed)
+5. **Social Battery, Activity Feed, Hangout Logging form, and advanced settings** should be gated behind user milestones (friends count, hangout count, time on platform)
+6. **Onboarding should be 1 step** (calendar connect only) — preferred times learned from behavior
+7. **Dashboard header dual CTAs (Log + Invite)** should be replaced with a single contextual action
+
+### Rationale
+
+Beta feedback says the app is "too busy." The previous audit correctly identified what to cut but didn't go deep enough on WHEN remaining features should appear. The core insight: every feature is a Week 4 feature. Nothing is designed for Minute 1. A state-aware Dashboard is the single architectural change that solves this at the root.
+
+### Impact
+
+If implemented, a new user's first experience would be: OAuth → Connect Calendar → "Invite a friend" screen → Friend joins → "How about Saturday 2pm?" → Book → Done in under 3 minutes. Current path requires scrolling past 10+ sections and processing 297 buttons.
+
+### Source Document
+
+`docs/plans/research-product-strategy-review.md`

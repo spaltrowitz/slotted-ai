@@ -69,3 +69,35 @@
 - Tamer: Simplified dashboard shows value immediately
 - Emma: Multi-friend scheduling (her interest) stays core; calendar removal helps non-calendar-native users
 - Tom: Multi-friend selection handles parent/playdate use case without Groups overhead
+
+### 2025-07-25 — Strict Emoji Audit & How It Works Relocation (Suki)
+
+**Trigger:** Shari said 84 "functional" emojis is still way too many. Default stance must flip to text-first.
+
+**Strict audit results:**
+- Applied 4-criteria test to all 100 unique emojis (678 instances)
+- **KEEP: 13 emojis** — only traffic-light status (🟢🟡🔴), checkmarks (✅✓✕), star (⭐), warning (⚠️), heart (❤️), hourglass (⏳)
+- **REPLACE WITH TEXT: 72 emojis** — activity pickers, time-of-day, cancel reasons, event categories, score emojis, notification types, settings preferences, platform pickers, all button-label emojis
+- **REMOVE: 15 emojis** — decorative (empty states, personality emojis, flourishes)
+- **87% reduction** (100 → 13 unique), **93% instance reduction** (678 → ~45)
+
+**Key insight:** Every emoji-with-text-label pair fails the test. If there's a text label next to the emoji, the emoji is redundant. This covers activity pickers (11), time-of-day (4×3 sets), event categories (10×3 sets), notification types (10), and all Settings preference pickers (~15).
+
+**How It Works relocation:** Both Dashboard and Events "How It Works" sections should move to a dedicated `/help` page, accessible from Settings and a subtle "?" affordance. Dashboard becomes 100% actionable, Events search tab is cleaner.
+
+### 2026-03-05 — Mai Joins Team as Product Strategist
+
+**New hire:** Mai (Product Strategist) joined the team to provide critical product review and "less is more" counterweight to feature expansion.
+
+**Mai's core positions** (from `docs/plans/research-product-strategy-review.md`):
+- Dashboard must be state-aware, progressively unlocking features by user milestone (0→1→3+ friends, hangout count, time on platform)
+- Day 1 experience should be: OAuth → Calendar → Invite → Friend joins → Single suggestion ("How about Saturday 2pm?") → Book → Done in <3 min
+- Events page should be removed from V1 entirely (not demoted, removed)
+- Social Battery, Activity Feed, Hangout Logging, advanced settings gated behind milestones
+- First-time scheduling uses single suggestion, not ranked lists
+- Onboarding is 1 step (calendar connect), preferred times learned from behavior
+
+**Alignment with Suki's work:**
+- Mai's progressive disclosure aligns with emoji reduction (removes visual chaos)
+- Both recommend removing Events page
+- Mai goes deeper on WHEN features appear, not just WHAT to remove

@@ -16,5 +16,6 @@
 | Zuko | Backend Dev | Firebase Functions, Express, Supabase, APIs | 🔧 |
 | Sokka | Tester | Tests, quality, edge cases | 🧪 |
 | Suki | Designer | UI/UX design, visual consistency, accessibility | 🎨 |
+| Mai | Product Strategist | Feature prioritization, MVP scoping, critical review | 🔍 |
 | Scribe | Session Logger | Memory, decisions, session logs | 📋 |
 | Ralph | Work Monitor | Work queue, backlog, keep-alive | 🔄 |
