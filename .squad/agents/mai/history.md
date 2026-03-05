@@ -35,4 +35,31 @@ Suki reviewed Mai's product strategy critique and provided detailed feedback on 
 - **Option C scheduling ("How about Saturday 2pm?") is the right Day 1 UX**: One suggestion + "Book" + "See other times" link mimics how friends actually propose times. Lists of 8 ranked slots are spreadsheet UX, not social UX.
 - **Events is a different product**: 1683 lines, 4 tabs, dual-API search — this is a fully-featured event discovery app inside a scheduling app. Non-negotiable V2 deferral.
 - **The dual CTA anti-pattern**: Dashboard header has "📝 Log" and "👋 Invite" buttons side by side with equal visual weight. When two CTAs compete, neither wins.
-- **Interest badges on friend cards are AI data, not user data**: "You and Alex both like Comedy" tells the user what they already know about their own friend. These serve the AI's event ranking (V2), not the user's scheduling decision (V1).
+**Broader learning:** My audit was structural (WHAT to remove); Mai's was temporal (WHEN things appear). The temporal dimension is more impactful. Progressive disclosure based on user milestones subsumes most structural simplification. Future design work should always ask "for this user at this moment" not just "for this page."
+
+---
+
+## Cross-Agent Context — Ty Lee's Apple Design Review (2026-03-05)
+
+**Context:** Ty Lee (UI Designer) reviewed Suki's audit and Mai's temporal strategy through Apple design lens. Found the diagnosis correct and agreed with 8/12 positions. Made 4 adjustments that affect Mai's recommendations:
+
+**Points of alignment:**
+- Progressive Dashboard by user milestone — Ty Lee confirms this is architecturally sound
+- Events page removal — agreed, non-negotiable
+- Zero onboarding — agreed
+- Single-suggestion scheduling — agreed
+- All simplification recommendations — agreed
+
+**Points of adjustment affecting Mai's positions:**
+1. **Notifications:** Mai said remove entirely + inline banners only. Suki + Ty Lee say: keep lightweight dropdown/sheet from bell icon. This is the right middle ground (Apple HIG compliant, scales past 2–3 items).
+2. **Help resources:** Mai said remove entirely. Suki + Ty Lee say: keep discoverable `/help` from Settings. Zero help is too extreme; Apple apps have help.
+3. **Emoji policy:** Mai's 13-emoji reduction was solid. Ty Lee goes further: 13 → 8 emojis (🟢🟡🔴✅⏳⭐⚠️❤️) for even stricter minimalism. "Every pixel must earn its place."
+
+**New recommendations from Ty Lee (not in Mai's review):**
+- Define 5-level type scale globally (no accidental cascades)
+- Reduce color palette: one accent + grayscale (removes visual noise)
+- Nav: 4 → 3 tabs + move Settings to avatar (Mai didn't specifically address nav consolidation)
+- Empty state design: warm whitespace + illustration + single CTA (critical for Day 1 "Invite friend" moment)
+- Animate state transitions (friend joins, hangout booked) — micro-interactions = emotional moments
+
+**Key quote from Ty Lee:** "Visual diet, not redesign. Features work. AI matching is clever. Visual layer is drowning. Strip, then polish." This validates Mai's temporal thinking at a design-system level.

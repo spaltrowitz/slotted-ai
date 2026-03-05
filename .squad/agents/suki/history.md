@@ -122,3 +122,24 @@
 - Removing ALL help resources: a discoverable /help page (from Settings or subtle "?" icon) costs nothing and catches users who are genuinely confused. Pragmatism over ideology.
 
 **Broader learning:** My audit was structural (WHAT to remove); Mai's was temporal (WHEN things appear). The temporal dimension is more impactful. Progressive disclosure based on user milestones subsumes most structural simplification. Future design work should always ask "for this user at this moment" not just "for this page."
+
+### 2026-03-05 — Ty Lee Joins as UI Designer (Apple Design Review)
+
+**New hire:** Ty Lee joined team to review Suki and Mai's work through Apple design lens (minimalism, hardware affordances, soft interactions).
+
+**Ty Lee's alignment and adjustments** (from `docs/plans/tylee-apple-design-review.md`):
+- **Fully aligned:** 8/12 recommendations from Suki + Mai (progressive Dashboard, Events removal, zero onboarding, single-suggestion scheduling, star-rating hangout logging, Social Battery gating, score emoji removal, friend card simplification, Advanced accordion)
+- **Adjusted 4 Suki/Mai positions:**
+  1. **Notifications:** Keep lightweight dropdown/sheet from bell icon (Suki's position) — NOT inline banners only (Mai's position). Dropdown aligns with Apple's human interface guidelines for grouped notifications.
+  2. **Friend list:** Convert cards to list rows (Suki + Ty Lee) — cleaner, less visual weight, faster scanning
+  3. **Help page:** Keep hidden `/help` accessible from Settings (Suki + Ty Lee) — NOT removed entirely (Mai's position). Apple apps use discoverable help; zero help violates UX norms.
+  4. **Emoji policy:** Further reduce 13 → 8 emojis (🟢🟡🔴✅⏳⭐⚠️❤️) for stricter minimalism. Ty Lee reasoning: "every visible pixel must earn its place; 13 is borderline, 8 is clean."
+
+**Additional recommendations (unique to Ty Lee):**
+- Define 5-level type scale (H1–H5 + body + caption) and enforce globally — prevents accidental cascade
+- Reduce color palette: one accent (slotted indigo), everything else grayscale + social battery colors — removes visual chaos
+- Nav: 4 → 3 tabs (move Settings to header avatar) — reduces bottom real estate, makes phone use easier
+- Empty states need design attention: warm whitespace + illustration + single CTA — Day 1 "Invite a friend" must feel like an opportunity, not void
+- State transitions should animate: friend joins → celebration moment; hangout booked → emotional reinforcement — micro-interactions make app feel responsive
+
+**Key insight from Ty Lee:** "Visual diet, not redesign. Features work. AI matching is clever. Visual layer is drowning. Strip, then polish." This aligns with Mai's temporal thinking — the UI isn't the problem, the density is.
