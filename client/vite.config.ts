@@ -8,6 +8,9 @@ export default defineConfig({
   build: {
     outDir: '../build',
     emptyOutDir: true,
+    target: 'es2020',
+    cssMinify: true,
+    reportCompressedSize: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
