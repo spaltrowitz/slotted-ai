@@ -430,7 +430,7 @@ export default function FriendsPage() {
     >
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         {f.friend.photoUrl ? (
-          <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" />
+          <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" loading="lazy" />
         ) : (
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white">
             {f.friend.displayName?.[0] ?? '?'}
@@ -655,7 +655,7 @@ export default function FriendsPage() {
                               }`}
                             >
                               {m.photoUrl ? (
-                                <img src={m.photoUrl} alt="" className="h-4 w-4 rounded-full" />
+                                <img src={m.photoUrl} alt="" className="h-4 w-4 rounded-full" loading="lazy" />
                               ) : (
                                 <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-fuchsia-500 text-[8px] font-bold text-white">
                                   {m.displayName?.[0] ?? '?'}
@@ -695,7 +695,7 @@ export default function FriendsPage() {
                                   }`}
                                 >
                                   {f.friend.photoUrl ? (
-                                    <img src={f.friend.photoUrl} alt="" className="h-4 w-4 rounded-full" />
+                                    <img src={f.friend.photoUrl} alt="" className="h-4 w-4 rounded-full" loading="lazy" />
                                   ) : (
                                     <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-fuchsia-500 text-[8px] font-bold text-white">
                                       {f.friend.displayName?.[0] ?? '?'}
@@ -757,7 +757,7 @@ export default function FriendsPage() {
                   className="h-4 w-4 rounded border-gray-300 text-purple-500 focus:ring-purple-400"
                 />
                 {f.friend.photoUrl ? (
-                  <img src={f.friend.photoUrl} alt="" className="h-7 w-7 rounded-full" />
+                  <img src={f.friend.photoUrl} alt="" className="h-7 w-7 rounded-full" loading="lazy" />
                 ) : (
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[10px] font-semibold text-white">
                     {f.friend.displayName?.[0] ?? '?'}
@@ -841,7 +841,7 @@ export default function FriendsPage() {
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   {f.friend.photoUrl ? (
-                    <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-amber-100" />
+                    <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-amber-100" loading="lazy" />
                   ) : (
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-sm font-semibold text-white">
                       {f.friend.displayName?.[0] ?? '?'}
@@ -886,7 +886,7 @@ export default function FriendsPage() {
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   {f.friend.photoUrl ? (
-                    <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-gray-100" />
+                    <img src={f.friend.photoUrl} alt="" className="h-10 w-10 rounded-full ring-2 ring-gray-100" loading="lazy" />
                   ) : (
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-gray-400 to-gray-500 text-sm font-semibold text-white">
                       {f.friend.displayName?.[0] ?? '?'}

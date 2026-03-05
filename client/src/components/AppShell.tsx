@@ -152,7 +152,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
             <Link to="/settings" aria-label="Settings" className="cursor-pointer rounded-full p-1 -m-1">
               {user?.photoURL ? (
-                <img src={user.photoURL} alt="" className="h-8 w-8 rounded-full ring-2 ring-slotted-100 transition-opacity hover:opacity-80" />
+                <img src={user.photoURL} alt="" className="h-8 w-8 rounded-full ring-2 ring-slotted-100 transition-opacity hover:opacity-80" loading="lazy" />
               ) : (
                 <div className="flex h-8 w-8 items-center justify-center rounded-full gradient-btn text-xs font-bold text-white transition-opacity hover:opacity-80">
                   {user?.displayName?.[0] ?? '?'}

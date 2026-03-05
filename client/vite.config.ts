@@ -15,6 +15,8 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return;
+          // Analytics is now dynamically imported, let Vite split it automatically
+          if (id.includes('/firebase/analytics')) return;
           if (id.includes('/firebase/')) return 'vendor-firebase';
           if (id.includes('/@tanstack/')) return 'vendor-query';
           if (id.includes('/react-router')) return 'vendor-router';

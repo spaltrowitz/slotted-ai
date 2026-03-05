@@ -236,7 +236,7 @@ export default function SettingsPage() {
             <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-3">
                 {user?.photoURL ? (
-                  <img src={user.photoURL} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" />
+                  <img src={user.photoURL} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" loading="lazy" />
                 ) : (
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-bold text-white">
                     {user?.displayName?.[0] ?? '?'}

@@ -701,7 +701,7 @@ export default function EventsPage() {
           window.open(primaryUrl, '_blank');
         }}
       >        {ev.imageUrl ? (
-          <img src={ev.imageUrl} alt="" className="hidden sm:block h-14 w-14 rounded-xl object-cover shrink-0 shadow-sm" />
+          <img src={ev.imageUrl} alt="" className="hidden sm:block h-14 w-14 rounded-xl object-cover shrink-0 shadow-sm" loading="lazy" />
         ) : (
           <div className="hidden sm:flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 text-xl">
             {typeEmoji(ev.type)}
@@ -783,7 +783,7 @@ export default function EventsPage() {
       className="block rounded-xl border border-gray-100 bg-white p-3 transition-all hover:shadow-md hover:-translate-y-0.5 overflow-hidden"
     >
       {ev.imageUrl && (
-        <img src={ev.imageUrl} alt="" className="h-28 w-full rounded-lg object-cover mb-2" />
+        <img src={ev.imageUrl} alt="" className="h-28 w-full rounded-lg object-cover mb-2" loading="lazy" />
       )}
       <p className="text-xs font-semibold text-gray-900 truncate">{ev.title}</p>
       <p className="text-[10px] text-gray-500 truncate mt-0.5">
@@ -836,7 +836,7 @@ export default function EventsPage() {
             {smartSuggestions.slice(0, 4).map((ev: any) => (
               <div key={ev.id} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-white/50">
                 {ev.imageUrl ? (
-                  <img src={ev.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0 shadow-sm" />
+                  <img src={ev.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0 shadow-sm" loading="lazy" />
                 ) : (
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 text-lg">🎟️</div>
                 )}
@@ -852,7 +852,7 @@ export default function EventsPage() {
                   <div className="flex -space-x-1.5">
                     {(ev.matchingFriends || []).slice(0, 3).map((f: any) => (
                       f.photo ? (
-                        <img key={f.id} src={f.photo} alt="" className="h-6 w-6 rounded-full ring-2 ring-white" title={f.name} />
+                        <img key={f.id} src={f.photo} alt="" className="h-6 w-6 rounded-full ring-2 ring-white" title={f.name} loading="lazy" />
                       ) : (
                         <div key={f.id} className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[8px] font-bold text-white ring-2 ring-white" title={f.name}>
                           {f.name?.[0]}
@@ -950,7 +950,7 @@ export default function EventsPage() {
                         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-slotted-50/50 border-b border-gray-50 last:border-b-0"
                       >
                         {s.imageUrl ? (
-                          <img src={s.imageUrl} alt="" className="h-9 w-9 rounded-lg object-cover shrink-0" />
+                          <img src={s.imageUrl} alt="" className="h-9 w-9 rounded-lg object-cover shrink-0" loading="lazy" />
                         ) : (
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 text-sm">
                             {s.type === 'performer' ? '🎤' : s.type === 'venue' ? '📍' : '🎟️'}
@@ -1144,7 +1144,7 @@ export default function EventsPage() {
                     <div className={`flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg border ${scoreColor(m.availabilityScore)}`}>
                       <span className="text-xs font-bold">{m.availabilityScore}</span>
                     </div>
-                    {m.imageUrl && <img src={m.imageUrl} alt="" className="h-12 w-12 rounded-lg object-cover shrink-0 hidden sm:block" />}
+                    {m.imageUrl && <img src={m.imageUrl} alt="" className="h-12 w-12 rounded-lg object-cover shrink-0 hidden sm:block" loading="lazy" />}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-semibold text-gray-900 truncate">{m.title}</p>
@@ -1266,7 +1266,7 @@ export default function EventsPage() {
                         {friends.slice(0, 5).map((f) => (
                           <span key={f.id} className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-600">
                             {f.photoUrl ? (
-                              <img src={f.photoUrl} alt="" className="h-4 w-4 rounded-full" />
+                              <img src={f.photoUrl} alt="" className="h-4 w-4 rounded-full" loading="lazy" />
                             ) : (
                               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[8px] font-bold text-white">
                                 {f.displayName?.[0] ?? '?'}
@@ -1570,7 +1570,7 @@ export default function EventsPage() {
             {/* Event preview */}
             <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-4 bg-gray-50/50">
               {shareEvent.imageUrl ? (
-                <img src={shareEvent.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0" />
+                <img src={shareEvent.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0" loading="lazy" />
               ) : (
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 text-lg">
                   {typeEmoji(shareEvent.type)}
@@ -1622,7 +1622,7 @@ export default function EventsPage() {
                             }`}
                           >
                             {f.photoUrl ? (
-                              <img src={f.photoUrl} alt="" className="h-5 w-5 rounded-full" />
+                              <img src={f.photoUrl} alt="" className="h-5 w-5 rounded-full" loading="lazy" />
                             ) : (
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[9px] font-semibold text-white">
                                 {f.displayName?.[0] ?? '?'}

@@ -860,7 +860,7 @@ export default function DashboardPage() {
                       <div className="flex -space-x-2 shrink-0">
                         {others.slice(0, 3).map((p) => (
                           p.photoUrl ? (
-                            <img key={p.userId} src={p.photoUrl} alt="" className="h-8 w-8 rounded-full ring-2 ring-white" />
+                            <img key={p.userId} src={p.photoUrl} alt="" className="h-8 w-8 rounded-full ring-2 ring-white" loading="lazy" />
                           ) : (
                             <div key={p.userId} className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-xs font-semibold text-white ring-2 ring-white">
                               {p.displayName?.[0] ?? '?'}
@@ -981,7 +981,7 @@ export default function DashboardPage() {
                       <div className="flex -space-x-2 shrink-0">
                         {others.slice(0, 3).map((p) => (
                           p.photoUrl ? (
-                            <img key={p.userId} src={p.photoUrl} alt="" className="h-8 w-8 rounded-full ring-2 ring-white" />
+                            <img key={p.userId} src={p.photoUrl} alt="" className="h-8 w-8 rounded-full ring-2 ring-white" loading="lazy" />
                           ) : (
                             <div key={p.userId} className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xs font-semibold text-white ring-2 ring-white">
                               {p.displayName?.[0] ?? '?'}
@@ -1440,7 +1440,7 @@ export default function DashboardPage() {
                 title={`${f.displayName} — ${f.lastHangout ? timeAgo(f.lastHangout) : "Haven't hung out"}`}
               >
                 {f.photoUrl ? (
-                  <img src={f.photoUrl} alt="" className="h-11 w-11 rounded-full ring-2 ring-white shadow-sm group-hover:ring-slotted-300 transition-all" />
+                  <img src={f.photoUrl} alt="" className="h-11 w-11 rounded-full ring-2 ring-white shadow-sm group-hover:ring-slotted-300 transition-all" loading="lazy" />
                 ) : (
                   <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white shadow-sm ring-2 ring-white group-hover:ring-slotted-300 transition-all">
                     {f.displayName?.[0] ?? '?'}
@@ -1470,7 +1470,7 @@ export default function DashboardPage() {
             {eventSuggestions.slice(0, 3).map((ev: any) => (
               <Link key={ev.id} to={`/events`} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-slotted-50/30">
                 {ev.imageUrl ? (
-                  <img src={ev.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0 shadow-sm" />
+                  <img src={ev.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0 shadow-sm" loading="lazy" />
                 ) : (
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 text-lg">
                     🎟️
@@ -1487,7 +1487,7 @@ export default function DashboardPage() {
                 <div className="flex -space-x-1.5 shrink-0">
                   {(ev.matchingFriends || []).slice(0, 3).map((f: any) => (
                     f.photo ? (
-                      <img key={f.id} src={f.photo} alt="" className="h-6 w-6 rounded-full ring-2 ring-white" title={f.name} />
+                      <img key={f.id} src={f.photo} alt="" className="h-6 w-6 rounded-full ring-2 ring-white" title={f.name} loading="lazy" />
                     ) : (
                       <div key={f.id} className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[8px] font-bold text-white ring-2 ring-white" title={f.name}>
                         {f.name?.[0]}
@@ -1521,7 +1521,7 @@ export default function DashboardPage() {
                 className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-gray-50/50"
               >
                 {ev.image_url ? (
-                  <img src={ev.image_url} alt="" className="h-11 w-11 rounded-xl object-cover shrink-0 shadow-sm" />
+                  <img src={ev.image_url} alt="" className="h-11 w-11 rounded-xl object-cover shrink-0 shadow-sm" loading="lazy" />
                 ) : (
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 text-lg">
                     🎟️
@@ -1569,6 +1569,7 @@ export default function DashboardPage() {
                       src={activity.friendPhoto}
                       alt={activity.friendName}
                       className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                      loading="lazy"
                     />
                   ) : (
                     <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
@@ -1742,7 +1743,7 @@ export default function DashboardPage() {
                       }`}
                     >
                       {f.photoUrl ? (
-                        <img src={f.photoUrl} alt="" className="w-4 h-4 rounded-full object-cover" />
+                        <img src={f.photoUrl} alt="" className="w-4 h-4 rounded-full object-cover" loading="lazy" />
                       ) : (
                         <span className="w-4 h-4 rounded-full bg-gradient-to-br from-slotted-400 to-purple-400 flex items-center justify-center text-[8px] text-white font-bold">{f.displayName[0]}</span>
                       )}

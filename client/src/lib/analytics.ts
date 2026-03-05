@@ -1,12 +1,15 @@
-import { getAnalytics, logEvent, isSupported } from 'firebase/analytics';
 import { app } from './firebase';
+import type { Analytics } from 'firebase/analytics';
 
-let analyticsInstance: ReturnType<typeof getAnalytics> | null = null;
+let analyticsInstance: Analytics | null = null;
 
 async function getAnalyticsInstance() {
   if (analyticsInstance) return analyticsInstance;
+  
+  const { getAnalytics, isSupported } = await import('firebase/analytics');
   const supported = await isSupported();
   if (!supported) return null;
+  
   analyticsInstance = getAnalytics(app);
   return analyticsInstance;
 }
@@ -18,6 +21,8 @@ export async function trackEvent(eventName: string, params?: Record<string, stri
   try {
     const analytics = await getAnalyticsInstance();
     if (!analytics) return;
+    
+    const { logEvent } = await import('firebase/analytics');
     logEvent(analytics, eventName, params);
   } catch {
     // silently fail — analytics should never break the app

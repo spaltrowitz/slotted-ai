@@ -341,6 +341,7 @@ export default function NotificationsPage() {
                     src={notification.related_user.photo_url}
                     alt=""
                     className="mt-0.5 h-8 w-8 rounded-full ring-2 ring-white shadow-sm"
+                    loading="lazy"
                   />
                 ) : (
                   <span className="mt-0.5 text-base">{config.emoji}</span>
@@ -365,7 +366,7 @@ export default function NotificationsPage() {
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {sharedEvent.imageUrl ? (
-                                  <img src={sharedEvent.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover shrink-0 shadow-sm" />
+                                  <img src={sharedEvent.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover shrink-0 shadow-sm" loading="lazy" />
                                 ) : (
                                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-purple-100 to-pink-100 text-base">
                                     🎟️

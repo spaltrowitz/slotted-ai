@@ -104,7 +104,7 @@ export default function EventSharePage() {
         {/* Sharer info */}
         <div className="flex items-center justify-center gap-3">
           {event.sharer.photoUrl ? (
-            <img src={event.sharer.photoUrl} alt="" className="h-10 w-10 rounded-full object-cover shadow-sm" />
+            <img src={event.sharer.photoUrl} alt="" className="h-10 w-10 rounded-full object-cover shadow-sm" loading="lazy" />
           ) : (
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slotted-100 text-slotted-600 font-bold text-sm shadow-sm">
               {event.sharer.displayName[0]?.toUpperCase()}
