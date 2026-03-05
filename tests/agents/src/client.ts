@@ -191,7 +191,8 @@ export class SlottedClient {
 
   async upsertMe(overrides: Record<string, unknown> = {}): Promise<SlottedUser> {
     const { data } = await this.post<SlottedUser>("/users/me", {
-      display_name: this.persona.displayName,
+      email: this.persona.email,
+      displayName: this.persona.displayName,
       timezone: this.persona.timezone,
       ...overrides,
     });
@@ -220,8 +221,8 @@ export class SlottedClient {
   // Friends
   // -------------------------------------------------------------------------
   async getFriends(): Promise<Friendship[]> {
-    const { data } = await this.get<Friendship[]>("/friends");
-    return data;
+    const { data } = await this.get<{ friends: Friendship[] } | Friendship[]>("/friends");
+    return Array.isArray(data) ? data : (data as any).friends || [];
   }
 
   async sendFriendRequest(toEmail: string): Promise<unknown> {
@@ -307,8 +308,8 @@ export class SlottedClient {
   }
 
   async getMeetups(): Promise<Meetup[]> {
-    const { data } = await this.get<Meetup[]>("/meetups");
-    return data;
+    const { data } = await this.get<{ meetups: Meetup[] } | Meetup[]>("/meetups");
+    return Array.isArray(data) ? data : (data as any).meetups || [];
   }
 
   async rsvpMeetup(meetupId: string, rsvp: "accepted" | "declined" | "maybe"): Promise<unknown> {
@@ -366,8 +367,8 @@ export class SlottedClient {
   // Groups
   // -------------------------------------------------------------------------
   async getGroups(): Promise<unknown[]> {
-    const { data } = await this.get<unknown[]>("/groups");
-    return data;
+    const { data } = await this.get<{ groups: unknown[] } | unknown[]>("/groups");
+    return Array.isArray(data) ? data : (data as any).groups || [];
   }
 
   async createGroup(name: string, memberIds: string[], emoji?: string): Promise<unknown> {
@@ -450,8 +451,8 @@ export class SlottedClient {
   // Events (saved & invites)
   // -------------------------------------------------------------------------
   async getSavedEvents(): Promise<unknown[]> {
-    const { data } = await this.get<unknown[]>("/events/saved");
-    return data;
+    const { data } = await this.get<{ events: unknown[] } | unknown[]>("/events/saved");
+    return Array.isArray(data) ? data : (data as any).events || [];
   }
 
   async saveEvent(event: Record<string, unknown>): Promise<unknown> {
@@ -474,8 +475,8 @@ export class SlottedClient {
   }
 
   async getEventInvites(): Promise<unknown[]> {
-    const { data } = await this.get<unknown[]>("/events/invites");
-    return data;
+    const { data } = await this.get<{ invites: unknown[] } | unknown[]>("/events/invites");
+    return Array.isArray(data) ? data : (data as any).invites || [];
   }
 
   async respondToEventInvite(inviteId: string, rsvp: "accepted" | "declined"): Promise<unknown> {
