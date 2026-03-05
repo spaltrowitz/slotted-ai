@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { trackFriendInvited, trackInviteLinkCopied, trackFriendAdded } from '../lib/analytics';
 import FriendAvailability from '../components/FriendAvailability';
 import api from '../lib/api';
+import { getSmartDisplayName } from '../lib/utils';
 import {
   fetchFriends,
   fetchMeetups,
@@ -166,6 +167,11 @@ export default function FriendsPage() {
   );
   const acceptedFriends = friends.filter((f) => f.status === 'accepted');
 
+  const allFriendNames = useMemo(
+    () => friends.map((f) => f.friend.displayName),
+    [friends],
+  );
+
   const lastSeenLabel = (f: FriendRecord) => {
     const days = f.daysSinceLastHangout;
     if (days === undefined || days === null || !f.lastHangoutDate) return '';
@@ -217,7 +223,7 @@ export default function FriendsPage() {
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-gray-900 truncate">
-            {f.friend.displayName}
+            {getSmartDisplayName(f.friend.displayName, allFriendNames)}
             {seen && <span className="ml-1.5 text-xs font-normal text-gray-400"> · {seen}</span>}
           </p>
         </div>
@@ -255,6 +261,7 @@ export default function FriendsPage() {
           <FriendAvailability
             friendId={selectedFriendId}
             friendName={selectedFriendName}
+            allFriendNames={allFriendNames}
             onClose={handleCloseFindTimes}
             completedHangouts={completedHangouts}
           />
@@ -281,7 +288,7 @@ export default function FriendsPage() {
                       {f.friend.displayName?.[0] ?? '?'}
                     </div>
                   )}
-                  <p className="text-sm font-medium text-gray-900 truncate">{f.friend.displayName}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">{getSmartDisplayName(f.friend.displayName, allFriendNames)}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
                   <button
@@ -323,7 +330,7 @@ export default function FriendsPage() {
                       {f.friend.displayName?.[0] ?? '?'}
                     </div>
                   )}
-                  <p className="text-sm font-medium text-gray-900 truncate">{f.friend.displayName}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">{getSmartDisplayName(f.friend.displayName, allFriendNames)}</p>
                 </div>
                 <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
                   Pending
@@ -410,7 +417,7 @@ export default function FriendsPage() {
               </div>
               <h3 className="text-lg font-semibold text-gray-900">Remove friend?</h3>
               <p className="mt-2 text-sm text-gray-500">
-                Are you sure you want to remove <span className="font-medium text-gray-700">{removingFriend.friend.displayName}</span>? You won't be able to see each other's availability anymore.
+                Are you sure you want to remove <span className="font-medium text-gray-700">{getSmartDisplayName(removingFriend.friend.displayName, allFriendNames)}</span>? You won't be able to see each other's availability anymore.
               </p>
             </div>
             <div className="mt-5 flex gap-3">

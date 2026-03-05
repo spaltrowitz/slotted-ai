@@ -130,3 +130,21 @@ Toph designed webhook + incremental sync architecture. Frontend doesn't change f
 - **Team review passed:** Suki (Designer) confirmed no sparse whitespace, avatar a11y valid. Ty Lee (UI Designer) recommended pending polish (auto-save, flatten accordion, extract feedback, destructive sign out styling). Mai (Product Strategist) confirmed all removals safe, recommended future learning of durations from meetup logs.
 - Orchestration logs: `.squad/orchestration-log/2026-03-05T19:57:27Z-suki-settings-review.md`, `.squad/orchestration-log/2026-03-05T19:57:27Z-ty-lee-visual-design.md`, `.squad/orchestration-log/2026-03-05T19:57:27Z-mai-product-strategy.md`, `.squad/orchestration-log/2026-03-05T19:57:27Z-katara-mobile-nav.md`, `.squad/orchestration-log/2026-03-05T19:57:27Z-katara-mobile-notifications.md`. Decision merged to `.squad/decisions.md`.
 - Type check: `cd client && npx tsc --noEmit` passes clean.
+
+### First-Name-Only Display Names (2026-07)
+- Created `client/src/lib/utils.ts` with `getFirstName(displayName)` utility — splits on space, returns first token, handles null/undefined/empty gracefully.
+- Applied `getFirstName()` across 10 files: DashboardPage, FriendsPage, InvitePage, EventSharePage, OnboardingPage, NotificationsPage, NotificationDropdown, FriendAvailability, GroupAvailability, AppShell (avatar initial unchanged — already single char).
+- Replaced all inline `.split(' ')[0]` patterns with the centralized utility.
+- Display-layer only: DB values, API responses, and meetup-log payloads (`friend_name`) still use full names.
+- Type check: `cd client && npx tsc --noEmit` passes clean.
+
+### Duplicate First Name Disambiguation (2026-07)
+- Created `getSmartDisplayName(displayName, allNames)` in `client/src/lib/utils.ts` alongside existing `getFirstName()`. When multiple people share a first name, appends last initial (e.g. "Mike S.", "Mike J."). Unique first names still show just the first name. Handles nulls, single-word names, and empty arrays gracefully.
+- Applied in **FriendsPage**: computed `allFriendNames` via `useMemo` from `friends` array. All 5 friend-name render sites updated (accepted list row, incoming invites, outgoing invites, remove confirmation modal).
+- Applied in **DashboardPage**: computed `allFriendNames` via `useMemo` from `friendsData`. Threaded as prop to `StagePendingInvite`, `StageOneFriend`, `StageHasHangouts`, `StageActiveUser`. Updated meetup title generation (participant names), `friendsToSee` avatar labels, and `ratingFriendName`. Greeting line (`"Hi, Mike"`) kept as `getFirstName` since it's the current user — no disambiguation needed.
+- Applied in **FriendAvailability**: added optional `allFriendNames` prop. Used for `friendFirst` display and header/confirmation text. Passed from FriendsPage.
+- Applied in **GroupAvailability**: added optional `allFriendNames` prop. Falls back to `friendNames` (group participants) if not provided.
+- Applied in **NotificationDropdown** and **NotificationsPage**: added `fetchFriends` query (React Query caches it — no extra network call if already fetched by another page). Used `getSmartDisplayName` for counter-propose `friendName`.
+- **Not changed**: InvitePage, EventSharePage, OnboardingPage — these show a single person in isolation where disambiguation isn't meaningful.
+- `getFirstName` retained for current-user greeting and FriendAvailability's "Me" label. Unused imports cleaned up.
+- Type check: `cd client && npx tsc --noEmit` passes clean.

@@ -10,7 +10,7 @@ import api from '../lib/api';
 import { fetchUserSettings, fetchMeetups, queryKeys } from '../lib/queries';
 
 export default function SettingsPage() {
-  const { user, onboardingComplete, googleCalendarConnected, googleCalendarStale, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, outlookCalendarConnected, connectOutlookCalendar, disconnectOutlookCalendar, verifyCalendarHealth, signInWithGoogle, signOut } = useAuth();
+  const { user, onboardingComplete, googleCalendarConnected, googleCalendarStale, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, outlookCalendarConnected, connectOutlookCalendar, disconnectOutlookCalendar, verifyCalendarHealth, signInWithGoogle } = useAuth();
   const queryClient = useQueryClient();
   const [travelBuffer, setTravelBuffer] = useState(30);
   const [planningStyle, setPlanningStyle] = useState('flexible');
@@ -76,17 +76,6 @@ export default function SettingsPage() {
 
   // Scheduling preferences (moved from onboarding)
   const [socialGoal, setSocialGoal] = useState('');
-  const [preferredDuration, setPreferredDuration] = useState('');
-  const [preferredCallDuration, setPreferredCallDuration] = useState('');
-
-  // Event interest preferences
-  const [eventInterests, setEventInterests] = useState<string[]>([]);
-  const [eventCity, setEventCity] = useState('');
-
-  // Display name / nickname
-  const [displayName, setDisplayName] = useState(user?.displayName || '');
-  const [editingName, setEditingName] = useState(false);
-  const [nameBeforeEdit, setNameBeforeEdit] = useState(user?.displayName || '');
 
   // Advanced section accordion
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -111,11 +100,6 @@ export default function SettingsPage() {
     }
     if (me.office_schedule_varies !== undefined) setOfficeVaries(me.office_schedule_varies);
     if (me.social_goal) setSocialGoal(me.social_goal);
-    if (me.preferred_duration) setPreferredDuration(me.preferred_duration);
-    if (me.preferred_call_duration) setPreferredCallDuration(me.preferred_call_duration);
-    if (me.event_interests) setEventInterests(me.event_interests);
-    if (me.event_city) setEventCity(me.event_city);
-    if (me.display_name) setDisplayName(me.display_name);
   }, [settingsData]);
 
   const saveSettingsMutation = useMutation({
@@ -133,11 +117,6 @@ export default function SettingsPage() {
       callWindows: { day: number; start: string; end: string; label: string }[];
       videoPlatforms: string[];
       socialGoal?: string;
-      preferredDuration?: string;
-      preferredCallDuration?: string;
-      eventInterests: string[];
-      eventCity: string;
-      displayName?: string;
     }) => {
       await api.put('/users/me/settings', payload);
     },
@@ -182,11 +161,6 @@ export default function SettingsPage() {
         callWindows,
         videoPlatforms,
         socialGoal: socialGoal || undefined,
-        preferredDuration: preferredDuration || undefined,
-        preferredCallDuration: preferredCallDuration || undefined,
-        eventInterests,
-        eventCity,
-        displayName: displayName.trim() || undefined,
       });
     } catch (err) {
       console.error('Settings save error:', err);
@@ -412,48 +386,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ═══════════════════════════════════════════════ */}
-        {/* SECTION 2: ACCOUNT                              */}
-        {/* ═══════════════════════════════════════════════ */}
-        <section>
-          <div className="flex items-center gap-3 mb-3">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">👤</span>
-            <h2 className="text-sm font-bold text-gray-800">Account</h2>
-          </div>
-
-          <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm space-y-4">
-            <div className="flex items-center gap-3">
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt="" className="h-10 w-10 rounded-full ring-2 ring-slotted-100" loading="lazy" />
-              ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-bold text-white">{user?.displayName?.[0] ?? '?'}</div>
-              )}
-              <div className="flex-1 min-w-0">
-                {editingName ? (
-                  <div className="flex items-center gap-2">
-                    <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') setEditingName(false); }} className="w-full rounded-lg border border-slotted-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-slotted-200" placeholder="Your display name" autoFocus />
-                    <button onClick={() => setEditingName(false)} className="rounded-lg bg-slotted-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slotted-600 transition-colors">Done</button>
-                    <button onClick={() => { setDisplayName(nameBeforeEdit); setEditingName(false); }} className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors" title="Cancel editing name">✕</button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-gray-900">{displayName || user?.displayName}</p>
-                    <button onClick={() => { setNameBeforeEdit(displayName); setEditingName(true); }} className="rounded-md p-1 text-gray-400 hover:text-slotted-500 hover:bg-slotted-50 transition-all" title="Edit display name">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                    </button>
-                  </div>
-                )}
-                <p className="text-xs text-gray-400 truncate">{user?.email}</p>
-              </div>
-            </div>
-
-            <div className="flex gap-2 border-t border-gray-100 pt-3">
-              <button onClick={signOut} className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:border-gray-300 shadow-sm">Sign out</button>
-            </div>
-          </div>
-        </section>
-
-        {/* ═══════════════════════════════════════════════ */}
-        {/* SECTION 3: ADVANCED (collapsed by default)      */}
+        {/* SECTION 2: ADVANCED (collapsed by default)      */}
         {/* ═══════════════════════════════════════════════ */}
         <section>
           <button onClick={() => setAdvancedOpen(!advancedOpen)} className="flex w-full items-center justify-between rounded-2xl border border-gray-200/60 bg-white px-4 py-3.5 shadow-sm transition-colors hover:bg-gray-50">
@@ -575,12 +508,6 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <div className="border-t border-teal-100 pt-3">
-                    <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">Default hangout length</label>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {[{ value: 'quick', label: '30–60 min' },{ value: 'medium', label: '1–2 hrs' },{ value: 'long', label: '2–4 hrs' },{ value: 'half-day', label: '4+ hrs' }].map((opt) => (<button key={opt.value} onClick={() => setPreferredDuration(opt.value)} className={`rounded-lg border px-3 py-2 text-[11px] transition-all ${preferredDuration === opt.value ? 'border-teal-400 bg-teal-50 text-teal-700 shadow-sm font-semibold' : 'border-gray-200 text-gray-500 hover:border-teal-200 hover:bg-gray-50'}`}>{opt.label}</button>))}
-                    </div>
-                  </div>
-                  <div className="border-t border-teal-100 pt-3">
                     <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">Travel buffer</label>
                     <div className="flex items-center gap-3">
                       <input type="range" min={0} max={60} step={15} value={travelBuffer} onChange={(e) => setTravelBuffer(Number(e.target.value))} className="flex-1 accent-teal-500 h-1.5 cursor-pointer" />
@@ -593,12 +520,6 @@ export default function SettingsPage() {
               {/* Calls & FaceTime */}
               <div className="rounded-2xl border-2 border-violet-200 bg-gradient-to-b from-violet-50/60 to-white p-4 shadow-sm">
                 <h3 className="text-xs font-bold text-gray-700 mb-3">Calls & FaceTime</h3>
-                <div className="mb-4">
-                  <label className="block text-[11px] font-semibold text-violet-700 mb-2">Default call length</label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[{ value: 'quick', label: '10–20 min' },{ value: 'medium', label: '30–60 min' },{ value: 'long', label: '1–2 hrs' },{ value: 'none', label: "I don't do calls" }].map((opt) => (<button key={opt.value} onClick={() => setPreferredCallDuration(opt.value)} className={`rounded-lg border px-3 py-2 text-[11px] transition-all ${preferredCallDuration === opt.value ? 'border-violet-400 bg-violet-50 text-violet-700 shadow-sm font-semibold' : 'border-gray-200 text-gray-500 hover:border-violet-200 hover:bg-violet-50/50'}`}>{opt.label}</button>))}
-                  </div>
-                </div>
                 <div className="mb-4">
                   <label className="block text-[11px] font-semibold text-violet-700 mb-2">Preferred video call platforms</label>
                   <div className="flex flex-wrap gap-1.5">
@@ -626,21 +547,6 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </details>
-              </div>
-
-              {/* Event Interests */}
-              <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
-                <h3 className="text-xs font-bold text-gray-700 mb-2">Event Interests</h3>
-                <div>
-                  <label className="text-[11px] font-semibold text-gray-700">What are you into?</label>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {[{ value: 'theater', label: 'Theater & Broadway' },{ value: 'concerts', label: 'Concerts & Live Music' },{ value: 'sports', label: 'Sports Games' },{ value: 'comedy', label: 'Comedy Shows' },{ value: 'festivals', label: 'Festivals' },{ value: 'dance', label: 'Dance & Ballet' },{ value: 'opera', label: 'Opera & Classical' }].map((interest) => { const selected = eventInterests.includes(interest.value); return (<button key={interest.value} type="button" onClick={() => setEventInterests((prev) => prev.includes(interest.value) ? prev.filter((v) => v !== interest.value) : [...prev, interest.value])} className={`rounded-xl border px-2 py-1.5 text-[11px] font-medium whitespace-nowrap transition-all ${selected ? 'border-slotted-400 bg-slotted-50 text-slotted-700 shadow-sm' : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-slotted-50/30'}`}>{interest.label}</button>); })}
-                  </div>
-                </div>
-                <div className="mt-4 border-t border-gray-100 pt-3">
-                  <label className="text-[11px] font-semibold text-gray-700">Default city for events</label>
-                  <input type="text" value={eventCity} onChange={(e) => setEventCity(e.target.value)} placeholder="e.g. New York, Los Angeles, Chicago" className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100 transition-all" />
-                </div>
               </div>
 
               {/* Notification preferences */}

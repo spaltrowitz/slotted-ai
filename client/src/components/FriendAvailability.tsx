@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
 import { trackMeetupScheduled } from '../lib/analytics';
+import { getFirstName, getSmartDisplayName } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import AddToCalendarModal from './AddToCalendarModal';
 
@@ -40,15 +41,16 @@ interface SyncStatus {
 interface FriendAvailabilityProps {
   friendId: string;
   friendName: string;
+  allFriendNames?: string[];
   onClose: () => void;
   onBook?: (slot: ScoredSlot) => void;
   completedHangouts?: number;
 }
 
-export default function FriendAvailability({ friendId, friendName, onClose, onBook, completedHangouts = 0 }: FriendAvailabilityProps) {
+export default function FriendAvailability({ friendId, friendName, allFriendNames = [], onClose, onBook, completedHangouts = 0 }: FriendAvailabilityProps) {
   const { user } = useAuth();
-  const myFirstName = user?.displayName?.split(' ')[0] || 'Me';
-  const friendFirst = friendName.split(' ')[0];
+  const myFirstName = getFirstName(user?.displayName) || 'Me';
+  const friendFirst = getSmartDisplayName(friendName, allFriendNames);
   const isFirstTime = completedHangouts === 0;
   const [loading, setLoading] = useState(true);
   const [suggestions, setSuggestions] = useState<ScoredSlot[]>([]);
@@ -133,7 +135,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
       <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-5 py-4 bg-gradient-to-r from-slotted-50/30 to-purple-50/30">
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-sm font-bold text-gray-900 truncate">
-            Suggestions with {friendName}
+            Suggestions with {getSmartDisplayName(friendName, allFriendNames)}
           </h3>
           <p className="mt-0.5 text-[11px] text-gray-400">
             Best times to meet based on both your calendars &amp; preferences
@@ -217,7 +219,7 @@ export default function FriendAvailability({ friendId, friendName, onClose, onBo
                 <div className="flex items-start gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs">1</span>
                   <div>
-                    <p className="text-sm font-medium text-gray-800">{friendName} gets notified</p>
+                    <p className="text-sm font-medium text-gray-800">{getSmartDisplayName(friendName, allFriendNames)} gets notified</p>
                     <p className="text-[11px] text-gray-400">They'll see the invite in their Slotted.ai notifications</p>
                   </div>
                 </div>

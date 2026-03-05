@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
 import { trackMeetupScheduled } from '../lib/analytics';
+import { getSmartDisplayName } from '../lib/utils';
 import AddToCalendarModal from './AddToCalendarModal';
 
 interface ScoredSlot {
@@ -22,11 +23,12 @@ interface ParticipantSync {
 interface GroupAvailabilityProps {
   friendIds: string[];
   friendNames: string[];
+  allFriendNames?: string[];
   onClose: () => void;
   onBook?: (slot: ScoredSlot) => void;
 }
 
-export default function GroupAvailability({ friendIds, friendNames, onClose, onBook }: GroupAvailabilityProps) {
+export default function GroupAvailability({ friendIds, friendNames, allFriendNames = [], onClose, onBook }: GroupAvailabilityProps) {
   const [loading, setLoading] = useState(true);
   const [suggestions, setSuggestions] = useState<ScoredSlot[]>([]);
   const [overlaps, setOverlaps] = useState<{ start: string; end: string }[]>([]);
@@ -143,7 +145,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
               <span className={`h-1.5 w-1.5 rounded-full ${
                 p.synced ? 'bg-emerald-500' : p.calendarConnected ? 'bg-amber-400' : 'bg-gray-300'
               }`} />
-              {p.displayName.split(' ')[0]}
+              {getSmartDisplayName(p.displayName, allFriendNames.length > 0 ? allFriendNames : friendNames)}
               {p.synced ? '' : p.calendarConnected ? ' (syncing…)' : ' (no cal)'}
             </span>
           ))}

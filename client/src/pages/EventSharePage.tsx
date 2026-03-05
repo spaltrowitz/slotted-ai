@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { getFirstName } from '../lib/utils';
 
 interface SharedEvent {
   title: string;
@@ -111,7 +112,7 @@ export default function EventSharePage() {
             </div>
           )}
           <p className="text-sm text-gray-600">
-            Shared by <span className="font-semibold text-gray-900">{event.sharer.displayName}</span>
+            Shared by <span className="font-semibold text-gray-900">{getFirstName(event.sharer.displayName)}</span>
           </p>
         </div>
 

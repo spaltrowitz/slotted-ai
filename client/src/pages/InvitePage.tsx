@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
+import { getFirstName } from '../lib/utils';
 
 interface Inviter {
   uid: string;
@@ -99,7 +100,7 @@ export default function InvitePage() {
               </div>
             )}
             <h2 className="mt-5 font-display text-xl font-bold text-gray-900">
-              {inviter.displayName} invited you!
+              {getFirstName(inviter.displayName)} invited you!
             </h2>
             <p className="mt-2 text-sm text-gray-500 leading-relaxed">
               Join Slotted.ai to find the perfect time to hang out. It syncs your calendars so you never have to text back and forth.
@@ -108,7 +109,7 @@ export default function InvitePage() {
               onClick={signInWithGoogle}
               className="mt-6 inline-flex w-full items-center justify-center gap-3 rounded-xl gradient-btn px-6 py-3 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
             >
-              Sign up & connect with {inviter.displayName.split(' ')[0]}
+              Sign up & connect with {getFirstName(inviter.displayName)}
             </button>
             <p className="mt-3 text-xs text-gray-400">Free · Takes 30 seconds · Google sign-in</p>
           </div>
@@ -121,7 +122,7 @@ export default function InvitePage() {
         ) : connecting ? (
           <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
             <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slotted-400 border-t-transparent" />
-            <p className="mt-4 text-sm text-gray-500">Connecting you with {inviter?.displayName}…</p>
+            <p className="mt-4 text-sm text-gray-500">Connecting you with {getFirstName(inviter?.displayName)}…</p>
           </div>
         ) : null}
       </div>

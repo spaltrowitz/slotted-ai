@@ -5,8 +5,9 @@ import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
 import CounterProposePanel from '../components/CounterProposePanel';
 import api from '../lib/api';
+import { getSmartDisplayName } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchMeetups, fetchNotifications, queryKeys, type Notification } from '../lib/queries';
+import { fetchFriends, fetchMeetups, fetchNotifications, queryKeys, type Notification } from '../lib/queries';
 
 export default function NotificationsPage() {
   const { user } = useAuth();
@@ -31,6 +32,14 @@ export default function NotificationsPage() {
     queryFn: fetchNotifications,
     enabled: !!user,
   });
+
+  const { data: friendsData = [] } = useQuery({
+    queryKey: queryKeys.friends,
+    queryFn: fetchFriends,
+    enabled: !!user,
+  });
+
+  const allFriendNames = friendsData.map((f) => f.friend.displayName);
 
   useEffect(() => {
     if (notifications.length === 0) return;
@@ -541,7 +550,7 @@ export default function NotificationsPage() {
                         <CounterProposePanel
                           meetupId={notification.related_id}
                           friendId={notification.related_user_id}
-                          friendName={notification.related_user?.display_name || 'your friend'}
+                          friendName={getSmartDisplayName(notification.related_user?.display_name, allFriendNames) || 'your friend'}
                           originalTime={notification.body}
                           onCounterProposed={() => {
                             setCounterProposeFor(null);

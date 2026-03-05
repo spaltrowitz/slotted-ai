@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 import { queryKeys } from '../lib/queries';
+import { getFirstName } from '../lib/utils';
 
 export default function OnboardingPage() {
   const { user, clearNewUser, completeOnboarding, skipOnboarding, connectCalendar, calendarConnected } = useAuth();
@@ -47,7 +48,7 @@ export default function OnboardingPage() {
         <div className="space-y-5">
           <div>
             <h2 className="font-display text-xl font-bold text-gray-900">
-              Hey {user?.displayName?.split(' ')[0]}! Let's get started.
+              Hey {getFirstName(user?.displayName)}! Let's get started.
             </h2>
             <p className="mt-2 text-sm text-gray-500 leading-relaxed">
               Connect your calendar to get started. Slotted finds times when you and your friends are both free.

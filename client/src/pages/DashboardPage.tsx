@@ -6,6 +6,7 @@ import AddToCalendarModal from '../components/AddToCalendarModal';
 import StarRating from '../components/StarRating';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
+import { getFirstName, getSmartDisplayName } from '../lib/utils';
 import { getUserStage, type UserStage } from '../lib/userStage';
 import {
   fetchDashboard,
@@ -100,11 +101,13 @@ function StageNoFriends({ inviteUrl }: { inviteUrl: string }) {
 
 function StagePendingInvite({
   invites,
+  allFriendNames,
   onAccept,
   onDecline,
   accepting,
 }: {
   invites: FriendRecord[];
+  allFriendNames: string[];
   onAccept: (friendshipId: string) => void;
   onDecline: (friendshipId: string) => void;
   accepting: boolean;
@@ -127,7 +130,7 @@ function StagePendingInvite({
         </div>
       )}
       <h2 className="mt-5 text-xl font-semibold text-gray-900">
-        {primary.friend.displayName} wants to connect!
+        {getSmartDisplayName(primary.friend.displayName, allFriendNames)} wants to connect!
       </h2>
       {othersCount > 0 && (
         <p className="mt-1 text-sm text-gray-400">
@@ -155,15 +158,17 @@ function StagePendingInvite({
 
 function StageOneFriend({
   friends,
+  allFriendNames,
 }: {
   friends: FriendRecord[];
+  allFriendNames: string[];
 }) {
   const recent = friends[friends.length - 1];
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-24 text-center">
       <h2 className="text-xl font-semibold text-gray-900">
-        You and {recent.friend.displayName} are connected! ❤️
+        You and {getSmartDisplayName(recent.friend.displayName, allFriendNames)} are connected! ❤️
       </h2>
       <p className="mt-3 max-w-xs text-sm text-gray-500 leading-relaxed">
         Ready to find time to hang out?
@@ -172,7 +177,7 @@ function StageOneFriend({
         to={`/friends?findTimes=${recent.friend.id}`}
         className="mt-8 rounded-xl gradient-btn px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
       >
-        Find times with {recent.friend.displayName.split(' ')[0]} →
+        Find times with {getSmartDisplayName(recent.friend.displayName, allFriendNames)} →
       </Link>
     </div>
   );
@@ -182,6 +187,7 @@ function StageHasHangouts({
   upcoming,
   inviteUrl,
   currentUserId,
+  allFriendNames,
   onExpand: _onExpand,
   expandedId: _expandedId,
   calendarModal,
@@ -190,6 +196,7 @@ function StageHasHangouts({
   upcoming: Meetup[];
   inviteUrl: string;
   currentUserId: string;
+  allFriendNames: string[];
   onExpand: (id: string | null) => void;
   expandedId: string | null;
   calendarModal: { meetupId: string; title: string; startTime: string; endTime: string } | null;
@@ -197,7 +204,7 @@ function StageHasHangouts({
 }) {
   const hero = upcoming[0];
   const others = hero.participants.filter((p) => p.userId !== currentUserId);
-  const displayTitle = hero.title || others.map((p) => p.displayName.split(' ')[0]).join(', ');
+  const displayTitle = hero.title || others.map((p) => getSmartDisplayName(p.displayName, allFriendNames)).join(', ');
 
   return (
     <div className="space-y-6">
@@ -240,7 +247,7 @@ function StageHasHangouts({
         <div className="space-y-2">
           {upcoming.slice(1, 4).map((m) => {
             const mOthers = m.participants.filter((p) => p.userId !== currentUserId);
-            const mTitle = m.title || mOthers.map((p) => p.displayName.split(' ')[0]).join(', ');
+            const mTitle = m.title || mOthers.map((p) => getSmartDisplayName(p.displayName, allFriendNames)).join(', ');
             return (
               <div key={m.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3">
                 <div className="min-w-0">
@@ -287,6 +294,7 @@ function StageActiveUser({
   friendsToSee,
   inviteUrl,
   currentUserId,
+  allFriendNames,
   calendarModal,
   onCalendarModal,
 }: {
@@ -294,6 +302,7 @@ function StageActiveUser({
   friendsToSee: FriendToSee[];
   inviteUrl: string;
   currentUserId: string;
+  allFriendNames: string[];
   calendarModal: { meetupId: string; title: string; startTime: string; endTime: string } | null;
   onCalendarModal: (m: { meetupId: string; title: string; startTime: string; endTime: string } | null) => void;
 }) {
@@ -306,7 +315,7 @@ function StageActiveUser({
           <div className="space-y-2">
             {upcoming.slice(0, 3).map((m) => {
               const others = m.participants.filter((p) => p.userId !== currentUserId);
-              const displayTitle = m.title || others.map((p) => p.displayName.split(' ')[0]).join(', ');
+              const displayTitle = m.title || others.map((p) => getSmartDisplayName(p.displayName, allFriendNames)).join(', ');
               const isConfirmed = m.status === 'confirmed' || m.participants.every((p) => p.rsvp === 'accepted');
               return (
                 <div
@@ -385,7 +394,7 @@ function StageActiveUser({
                   </div>
                 )}
                 <p className="w-full text-center text-xs font-medium text-gray-600 group-hover:text-slotted-600 transition-colors truncate">
-                  {f.displayName?.split(' ')[0]}
+                  {getSmartDisplayName(f.displayName, allFriendNames)}
                 </p>
                 {f.lastHangout && (
                   <p className="text-[10px] text-gray-400">{timeAgo(f.lastHangout)}</p>
@@ -528,6 +537,11 @@ export default function DashboardPage() {
     [friendsData],
   );
 
+  const allFriendNames = useMemo(
+    () => friendsData.map((f) => f.friend.displayName),
+    [friendsData],
+  );
+
   const pendingInbound = useMemo(
     () => friendsData.filter((f) => f.status === 'pending' && f.invitedBy === f.friend.id),
     [friendsData],
@@ -589,8 +603,8 @@ export default function DashboardPage() {
   const ratingFriendName = useMemo(() => {
     if (!meetupToRate) return '';
     const others = meetupToRate.participants.filter((p) => p.userId !== currentUserId);
-    return others[0]?.displayName?.split(' ')[0] || 'your friend';
-  }, [meetupToRate, currentUserId]);
+    return getSmartDisplayName(others[0]?.displayName, allFriendNames) || 'your friend';
+  }, [meetupToRate, currentUserId, allFriendNames]);
 
   const rateMutation = useMutation({
     mutationFn: async ({ meetupId, rating }: { meetupId: string; rating: number }) => {
@@ -628,7 +642,7 @@ export default function DashboardPage() {
       {(stage === 'has-hangouts' || stage === 'active-user') && (
         <div className="mb-5">
           <h1 className="font-display text-xl font-semibold tracking-tight text-gray-900">
-            {greeting}, {user?.displayName?.split(' ')[0]}
+            {greeting}, {getFirstName(user?.displayName)}
           </h1>
         </div>
       )}
@@ -662,6 +676,7 @@ export default function DashboardPage() {
       {!isLoading && stage === 'pending-invite' && (
         <StagePendingInvite
           invites={pendingInbound}
+          allFriendNames={allFriendNames}
           onAccept={(id) => friendActionMutation.mutate({ friendshipId: id, action: 'accept' })}
           onDecline={(id) => friendActionMutation.mutate({ friendshipId: id, action: 'decline' })}
           accepting={friendActionMutation.isPending}
@@ -669,7 +684,7 @@ export default function DashboardPage() {
       )}
 
       {!isLoading && stage === 'one-friend' && (
-        <StageOneFriend friends={acceptedFriends} />
+        <StageOneFriend friends={acceptedFriends} allFriendNames={allFriendNames} />
       )}
 
       {!isLoading && stage === 'has-hangouts' && (
@@ -677,6 +692,7 @@ export default function DashboardPage() {
           upcoming={upcoming}
           inviteUrl={inviteUrl}
           currentUserId={currentUserId}
+          allFriendNames={allFriendNames}
           onExpand={setExpandedMeetupId}
           expandedId={expandedMeetupId}
           calendarModal={calendarModal}
@@ -690,6 +706,7 @@ export default function DashboardPage() {
           friendsToSee={friendsToSee}
           inviteUrl={inviteUrl}
           currentUserId={currentUserId}
+          allFriendNames={allFriendNames}
           calendarModal={calendarModal}
           onCalendarModal={setCalendarModal}
         />

@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import { getSmartDisplayName } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchMeetups, fetchNotifications, queryKeys, type Notification } from '../lib/queries';
+import { fetchFriends, fetchMeetups, fetchNotifications, queryKeys, type Notification } from '../lib/queries';
 import AddToCalendarModal from './AddToCalendarModal';
 import CounterProposePanel from './CounterProposePanel';
 
@@ -38,6 +39,14 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
     queryFn: fetchNotifications,
     enabled: !!user,
   });
+
+  const { data: friendsData = [] } = useQuery({
+    queryKey: queryKeys.friends,
+    queryFn: fetchFriends,
+    enabled: !!user,
+  });
+
+  const allFriendNames = friendsData.map((f) => f.friend.displayName);
 
   useEffect(() => {
     if (notifications.length === 0) return;
@@ -276,7 +285,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
       {/* Sheet — bottom on mobile, dropdown on desktop */}
       <div
         ref={sheetRef}
-        className="fixed z-[70] md:absolute md:right-0 md:top-full md:mt-2 inset-x-0 bottom-0 md:inset-x-auto md:bottom-auto md:w-[420px] max-h-[60vh] flex flex-col rounded-t-2xl md:rounded-2xl border border-gray-200/80 bg-white shadow-2xl overflow-hidden animate-slide-up md:animate-none"
+        className="fixed z-[70] md:absolute md:right-0 md:top-full md:mt-2 inset-x-0 top-14 bottom-0 md:top-auto md:inset-x-auto md:bottom-auto md:w-[420px] md:max-h-[60vh] flex flex-col md:rounded-2xl border border-gray-200/80 bg-white shadow-2xl overflow-hidden animate-slide-down md:animate-none"
         style={{ animationDuration: '200ms' }}
       >
         {/* Drag handle — mobile only */}
@@ -475,7 +484,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                             <CounterProposePanel
                               meetupId={notification.related_id}
                               friendId={notification.related_user_id}
-                              friendName={notification.related_user?.display_name || 'your friend'}
+                              friendName={getSmartDisplayName(notification.related_user?.display_name, allFriendNames) || 'your friend'}
                               originalTime={notification.body}
                               onCounterProposed={() => {
                                 setCounterProposeFor(null);
