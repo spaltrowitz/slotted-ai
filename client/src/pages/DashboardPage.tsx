@@ -16,11 +16,7 @@ import {
   queryKeys,
   type ActivityFeedItem,
   type CalendarEvent,
-  type EventSuggestion,
-  type FriendRecord,
-  type FriendToSee,
   type Meetup,
-  type SavedEvent,
 } from '../lib/queries';
 
 /** Responsive breakpoint — true when viewport < 640px */
@@ -307,6 +303,7 @@ export default function DashboardPage() {
       return { previousEvents };
     },
     onError: (err, blocks, context) => {
+      void blocks;
       if (context?.previousEvents) {
         queryClient.setQueryData(calendarQueryKey, context.previousEvents);
       }
@@ -331,6 +328,7 @@ export default function DashboardPage() {
       return { previousEvents };
     },
     onError: (err, eventId, context) => {
+      void eventId;
       if (context?.previousEvents) {
         queryClient.setQueryData(calendarQueryKey, context.previousEvents);
       }

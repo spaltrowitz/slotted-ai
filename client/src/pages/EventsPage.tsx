@@ -1,8 +1,19 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
+import {
+  fetchDiscoverEvents,
+  fetchEventSuggestions,
+  fetchFriends,
+  fetchSavedEvents,
+  fetchUserSettings,
+  queryKeys,
+  type EventSuggestion,
+  type SavedEvent,
+} from '../lib/queries';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,6 +56,8 @@ interface Suggestion {
   imageUrl?: string;
   source: string;
 }
+
+type ShareableEvent = EventResult | EventSuggestion;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -244,6 +257,7 @@ function extractMajorCity(input: string): string {
 // ---------------------------------------------------------------------------
 export default function EventsPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const friendIdParam = searchParams.get('friend');
   const friendNameParam = searchParams.get('name');
@@ -272,21 +286,13 @@ export default function EventsPage() {
   const [matchMessage, setMatchMessage] = useState('');
 
   // Discover
-  const [discoverEvents, setDiscoverEvents] = useState<EventResult[]>([]);
-  const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverCategory, setDiscoverCategory] = useState('');
-  const [discoverLoaded, setDiscoverLoaded] = useState(false);
   const [discoverTimeFilter, setDiscoverTimeFilter] = useState<'all' | 'today' | 'tomorrow' | 'weekend'>('all');
-
-  // Trending (preloaded on page mount)
-  const [trendingEvents, setTrendingEvents] = useState<EventResult[]>([]);
-  const [trendingLoaded, setTrendingLoaded] = useState(false);
 
   // Calendar view
   const [calMonthOffset, setCalMonthOffset] = useState(0);
 
   // Friends
-  const [friends, setFriends] = useState<Friend[]>([]);
   const [selectedFriends, setSelectedFriends] = useState<Set<string>>(new Set());
   const [showFriendPicker, setShowFriendPicker] = useState(false);
   const [mode, setMode] = useState<'search' | 'match'>('search');
@@ -295,10 +301,9 @@ export default function EventsPage() {
   const [tab, setTab] = useState<'discover' | 'search' | 'saved' | 'calendar'>('discover');
 
   // Share modal
-  const [shareEvent, setShareEvent] = useState<EventResult | null>(null);
+  const [shareEvent, setShareEvent] = useState<ShareableEvent | null>(null);
   const [shareFriends, setShareFriends] = useState<Set<string>>(new Set());
   const [shareMessage, setShareMessage] = useState('');
-  const [shareSending, setShareSending] = useState(false);
   const [shareSent, setShareSent] = useState(false);
 
   // Recent searches (localStorage-backed)
@@ -306,70 +311,130 @@ export default function EventsPage() {
     try { return JSON.parse(localStorage.getItem('slotted_recent_searches') || '[]'); } catch { return []; }
   });
 
-  // Saved/bookmarked event IDs
-  const [savedEventIds, setSavedEventIds] = useState<Set<string>>(new Set());
   const [savingEventId, setSavingEventId] = useState<string | null>(null);
-  const [savedEventsList, setSavedEventsList] = useState<EventResult[]>([]);
-  const [savedEventsLoaded, setSavedEventsLoaded] = useState(false);
 
   // Price filter
   const [priceFilter, setPriceFilter] = useState<'any' | 'free' | 'under50' | 'under100' | 'under200'>('any');
 
   // Smart suggestions (events matched to shared interests + availability)
-  const [smartSuggestions, setSmartSuggestions] = useState<any[]>([]);
-  const [smartLoaded, setSmartLoaded] = useState(false);
 
-  // ─── Load friends + city + saved events ───
+  const { data: friendsData = [] } = useQuery({
+    queryKey: queryKeys.friends,
+    queryFn: fetchFriends,
+    enabled: !!user,
+  });
+
+  const { data: settingsData } = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: fetchUserSettings,
+    enabled: !!user,
+  });
+
+  const { data: savedEventsData = [], isLoading: savedEventsLoading } = useQuery({
+    queryKey: queryKeys.events.saved,
+    queryFn: fetchSavedEvents,
+    enabled: !!user,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: smartSuggestions = [], isSuccess: smartLoaded } = useQuery({
+    queryKey: queryKeys.events.suggestions,
+    queryFn: fetchEventSuggestions,
+    enabled: !!city,
+  });
+
+  const { data: trendingEvents = [] } = useQuery({
+    queryKey: queryKeys.events.discover({ city, perPage: 8 }),
+    queryFn: () => fetchDiscoverEvents({ city, perPage: 8 }),
+    enabled: !!city,
+  });
+
+  const friends = useMemo<Friend[]>(() => {
+    return friendsData
+      .filter((f) => f.status === 'accepted')
+      .map((f) => f.friend);
+  }, [friendsData]);
+
+  const savedEventIds = useMemo(() => {
+    return new Set(
+      savedEventsData
+        .map((e) => e.external_id ?? e.id)
+        .filter((id): id is string => Boolean(id))
+    );
+  }, [savedEventsData]);
+
+  const savedEventsList = useMemo<EventResult[]>(() => {
+    return savedEventsData
+      .map((e) => ({
+        id: e.external_id || e.id || '',
+        source: e.source || '',
+        title: e.title,
+        type: e.event_type || 'event',
+        venue: e.venue || '',
+        city: e.city || '',
+        datetime: e.datetime_utc || '',
+        datetimeLocal: e.datetime_local || e.datetime_utc || '',
+        url: e.url || '',
+        imageUrl: e.image_url || '',
+        priceMin: e.price_min !== undefined ? Number(e.price_min) : undefined,
+        priceMax: e.price_max !== undefined ? Number(e.price_max) : undefined,
+        performers: e.performers || [],
+      }))
+      .filter((e) => e.id);
+  }, [savedEventsData]);
+
   useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        const [friendsRes, meRes, savedRes] = await Promise.all([
-          api.get('/friends'),
-          api.get('/users/me'),
-          api.get('/events/saved').catch(() => ({ data: { events: [] } })),
-        ]);
-        const accepted = (friendsRes.data.friends || [])
-          .filter((f: any) => f.status === 'accepted')
-          .map((f: any) => f.friend);
-        setFriends(accepted);
-        const me = meRes.data;
-        const rawCity = me.event_city || me.neighborhood || '';
-        const majorCity = extractMajorCity(rawCity);
-        if (majorCity) {
-          setDefaultCity(majorCity);
-          if (!city) setCity(majorCity);
-        }
-        // Load saved event IDs
-        const savedIds = new Set<string>((savedRes.data.events || savedRes.data || []).map((e: any) => e.external_id as string));
-        setSavedEventIds(savedIds);
+    const rawCity = settingsData?.event_city || settingsData?.neighborhood || '';
+    const majorCity = extractMajorCity(rawCity);
+    if (majorCity) {
+      setDefaultCity(majorCity);
+      if (!city) setCity(majorCity);
+    }
+  }, [settingsData, city]);
 
-        // If navigated from Friends tab with a friend param, auto-enter match mode
-        if (friendIdParam) {
-          setMode('match');
-          setSelectedFriends(new Set([friendIdParam]));
-          setTab('search');
-        }
-      } catch { /* ignore */ }
-    })();
-  }, [user]);
-
-  // ─── Preload trending events + smart suggestions ───
   useEffect(() => {
-    if (!city || trendingLoaded) return;
-    (async () => {
-      try {
-        const [discoverRes, suggestRes] = await Promise.all([
-          api.get('/events/discover', { params: { city, perPage: 8 } }),
-          api.get('/events/suggestions').catch(() => ({ data: { suggestions: [] } })),
-        ]);
-        setTrendingEvents(discoverRes.data.events || []);
-        setTrendingLoaded(true);
-        setSmartSuggestions(suggestRes.data.suggestions || []);
-        setSmartLoaded(true);
-      } catch { /* ignore */ }
-    })();
-  }, [city, trendingLoaded]);
+    if (!friendIdParam) return;
+    setMode('match');
+    setSelectedFriends(new Set([friendIdParam]));
+    setTab('search');
+  }, [friendIdParam]);
+
+  const saveEventMutation = useMutation({
+    mutationFn: async (event: EventResult) => {
+      await api.post('/events/save', { event });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.events.saved });
+    },
+  });
+
+  const matchEventsMutation = useMutation({
+    mutationFn: async (payload: {
+      query: string;
+      friendIds: string[];
+      city?: string;
+      type?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    }) => {
+      const { data } = await api.post('/events/match', payload);
+      return data as { events?: EventResult[]; matches?: MatchedEvent[]; message?: string };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.events.suggestions });
+    },
+  });
+
+  const shareEventMutation = useMutation({
+    mutationFn: async (payload: { friendIds: string[]; event: ShareableEvent; message?: string }) => {
+      await api.post('/events/share', payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+
+  const shareSending = shareEventMutation.isPending;
 
   // ─── Click-outside to close suggestions ───
   useEffect(() => {
@@ -446,7 +511,7 @@ export default function EventsPage() {
     setShowSuggestions(false);
     try {
       if (mode === 'match' && selectedFriends.size > 0) {
-        const { data } = await api.post('/events/match', {
+        const data = await matchEventsMutation.mutateAsync({
           query: q,
           friendIds: Array.from(selectedFriends),
           city: city || undefined,
@@ -466,9 +531,9 @@ export default function EventsPage() {
         const { data } = await api.get('/events/search', { params });
         setEvents(data.events || []);
       }
-    } catch (err: any) { console.error('Event search failed:', err); }
+    } catch (err) { console.error('Event search failed:', err); }
     finally { setLoading(false); }
-  }, [query, city, eventType, dateFrom, dateTo, mode, selectedFriends]);
+  }, [query, city, eventType, dateFrom, dateTo, mode, selectedFriends, matchEventsMutation]);
 
   // ─── Discover ───
   const getTimeFilterDates = useCallback((filter: 'all' | 'today' | 'tomorrow' | 'weekend') => {
@@ -495,63 +560,33 @@ export default function EventsPage() {
     return {}; // 'all' — no date filter, API defaults to next 30 days
   }, []);
 
-  const loadDiscover = useCallback(async (category?: string, timeFilter?: 'all' | 'today' | 'tomorrow' | 'weekend') => {
-    setDiscoverLoading(true);
-    try {
-      const params: Record<string, string> = {};
-      if (city) params.city = city;
-      if (category) params.type = category;
-      const dates = getTimeFilterDates(timeFilter || discoverTimeFilter);
-      if (dates.dateFrom) params.dateFrom = dates.dateFrom;
-      if (dates.dateTo) params.dateTo = dates.dateTo;
-      const { data } = await api.get('/events/discover', { params });
-      setDiscoverEvents(data.events || []);
-      setDiscoverLoaded(true);
-    } catch { /* ignore */ }
-    finally { setDiscoverLoading(false); }
-  }, [city, discoverTimeFilter, getTimeFilterDates]);
+  const discoverParams = useMemo(() => {
+    const params: Record<string, string> = {};
+    if (city) params.city = city;
+    if (discoverCategory) params.type = discoverCategory;
+    const dates = getTimeFilterDates(discoverTimeFilter);
+    if (dates.dateFrom) params.dateFrom = dates.dateFrom;
+    if (dates.dateTo) params.dateTo = dates.dateTo;
+    return params;
+  }, [city, discoverCategory, discoverTimeFilter, getTimeFilterDates]);
+
+  const {
+    data: discoverEvents = [],
+    isFetching: discoverLoading,
+    isSuccess: discoverLoaded,
+  } = useQuery({
+    queryKey: queryKeys.events.discover(discoverParams),
+    queryFn: () => fetchDiscoverEvents(discoverParams),
+    enabled: !!city && (tab === 'discover' || tab === 'calendar'),
+  });
 
   const handleDiscoverCategory = (cat: string) => {
     setDiscoverCategory(cat);
-    loadDiscover(cat);
   };
 
   const handleTimeFilter = (filter: 'all' | 'today' | 'tomorrow' | 'weekend') => {
     setDiscoverTimeFilter(filter);
-    loadDiscover(discoverCategory, filter);
   };
-
-  useEffect(() => {
-    if (tab === 'discover' && !discoverLoaded && city) loadDiscover(discoverCategory);
-  }, [tab, city]);
-
-  // ─── Load saved events when switching to saved tab ───
-  const loadSavedEvents = useCallback(async () => {
-    try {
-      const { data } = await api.get('/events/saved');
-      const events = (data.events || data || []).map((e: any) => ({
-        id: e.external_id || e.id,
-        source: e.source,
-        title: e.title,
-        type: e.event_type || 'event',
-        venue: e.venue || '',
-        city: e.city || '',
-        datetime: e.datetime_utc || '',
-        datetimeLocal: e.datetime_local || e.datetime_utc || '',
-        url: e.url,
-        imageUrl: e.image_url || '',
-        priceMin: e.price_min ? parseFloat(e.price_min) : undefined,
-        priceMax: e.price_max ? parseFloat(e.price_max) : undefined,
-        performers: e.performers || [],
-      }));
-      setSavedEventsList(events);
-      setSavedEventsLoaded(true);
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    if (tab === 'saved' && !savedEventsLoaded) loadSavedEvents();
-  }, [tab, savedEventsLoaded]);
 
   // ─── Calendar helpers ───
   const calViewDate = useMemo(() => {
@@ -591,13 +626,6 @@ export default function EventsPage() {
     });
   }, [calEvents]);
 
-  // Load calendar events when switching to calendar tab
-  useEffect(() => {
-    if (tab === 'calendar' && !discoverLoaded && city) {
-      loadDiscover('');
-    }
-  }, [tab, city]);
-
   // ─── Scoring helpers ───
   const scoreColor = (score: number) =>
     score >= 80 ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
@@ -610,16 +638,37 @@ export default function EventsPage() {
   // ─── Save/bookmark event ───
   const handleSaveEvent = async (ev: EventResult) => {
     setSavingEventId(ev.id);
+    const previousSavedEvents = queryClient.getQueryData<SavedEvent[]>(queryKeys.events.saved) ?? savedEventsData;
     try {
       if (savedEventIds.has(ev.id)) {
-        setSavedEventIds((prev) => { const next = new Set(prev); next.delete(ev.id); return next; });
-        setSavedEventsList((prev) => prev.filter((e) => e.id !== ev.id));
+        queryClient.setQueryData(
+          queryKeys.events.saved,
+          previousSavedEvents.filter((e) => (e.external_id ?? e.id) !== ev.id),
+        );
       } else {
-        await api.post('/events/save', { event: ev });
-        setSavedEventIds((prev) => new Set(prev).add(ev.id));
-        setSavedEventsList((prev) => [ev, ...prev]);
+        await saveEventMutation.mutateAsync(ev);
+        const savedEvent: SavedEvent = {
+          external_id: ev.id,
+          id: ev.id,
+          source: ev.source,
+          title: ev.title,
+          event_type: ev.type,
+          venue: ev.venue,
+          city: ev.city,
+          datetime_utc: ev.datetime,
+          datetime_local: ev.datetimeLocal,
+          url: ev.url,
+          image_url: ev.imageUrl,
+          price_min: ev.priceMin,
+          price_max: ev.priceMax,
+          performers: ev.performers,
+        };
+        queryClient.setQueryData(queryKeys.events.saved, [savedEvent, ...previousSavedEvents]);
       }
-    } catch (err) { console.error('Save failed:', err); }
+    } catch (err) {
+      console.error('Save failed:', err);
+      queryClient.setQueryData(queryKeys.events.saved, previousSavedEvents);
+    }
     finally { setSavingEventId(null); }
   };
 
@@ -643,7 +692,7 @@ export default function EventsPage() {
   const quickSuggestions = CITY_SUGGESTIONS[city] || CITY_SUGGESTIONS['New York'] || [];
 
   // ─── Share event with friends ───
-  const openShareModal = (ev: EventResult) => {
+  const openShareModal = (ev: ShareableEvent) => {
     setShareEvent(ev);
     setShareFriends(new Set());
     setShareMessage('');
@@ -660,9 +709,8 @@ export default function EventsPage() {
 
   const handleShare = async () => {
     if (!shareEvent || shareFriends.size === 0) return;
-    setShareSending(true);
     try {
-      await api.post('/events/share', {
+      await shareEventMutation.mutateAsync({
         friendIds: Array.from(shareFriends),
         event: shareEvent,
         message: shareMessage || undefined,
@@ -671,8 +719,6 @@ export default function EventsPage() {
       setTimeout(() => { setShareEvent(null); setShareSent(false); }, 1500);
     } catch (err) {
       console.error('Share failed:', err);
-    } finally {
-      setShareSending(false);
     }
   };
 
@@ -773,6 +819,11 @@ export default function EventsPage() {
     );
   };
 
+  const shareEventType = shareEvent && 'type' in shareEvent ? shareEvent.type : 'event';
+  const shareEventDate = shareEvent
+    ? shareEvent.datetimeLocal || ('datetime' in shareEvent ? shareEvent.datetime : '')
+    : '';
+
   // Compact card for trending section
   const renderCompactCard = (ev: EventResult) => (
     <a
@@ -833,7 +884,7 @@ export default function EventsPage() {
             <span className="text-[10px] font-medium text-slotted-500">Based on shared interests &amp; availability</span>
           </div>
           <div className="divide-y divide-slotted-100/30">
-            {smartSuggestions.slice(0, 4).map((ev: any) => (
+            {smartSuggestions.slice(0, 4).map((ev) => (
               <div key={ev.id} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-white/50">
                 {ev.imageUrl ? (
                   <img src={ev.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0 shadow-sm" loading="lazy" />
@@ -850,7 +901,7 @@ export default function EventsPage() {
                 </div>
                 <div className="flex flex-col items-end gap-1.5 shrink-0">
                   <div className="flex -space-x-1.5">
-                    {(ev.matchingFriends || []).slice(0, 3).map((f: any) => (
+                    {(ev.matchingFriends || []).slice(0, 3).map((f) => (
                       f.photo ? (
                         <img key={f.id} src={f.photo} alt="" className="h-6 w-6 rounded-full ring-2 ring-white" title={f.name} loading="lazy" />
                       ) : (
@@ -1322,7 +1373,7 @@ export default function EventsPage() {
                 <p className="text-xs text-gray-400">Browse upcoming events across all sources</p>
               </div>
               <input type="text" value={city}
-                onChange={(e) => { setCity(e.target.value); setDiscoverLoaded(false); }}
+                onChange={(e) => { setCity(e.target.value); }}
                 placeholder="Your city"
                 className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 shadow-sm focus:border-slotted-400 focus:outline-none w-36" />
             </div>
@@ -1446,7 +1497,7 @@ export default function EventsPage() {
               </div>
               <div className="divide-y divide-gray-100">{savedEventsList.map(renderEventCard)}</div>
             </div>
-          ) : !savedEventsLoaded ? (
+          ) : savedEventsLoading ? (
             <div className="flex flex-col items-center justify-center py-16">
               <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slotted-400 border-t-transparent" />
               <p className="mt-3 text-sm text-gray-400">Loading saved events…</p>
@@ -1573,13 +1624,13 @@ export default function EventsPage() {
                 <img src={shareEvent.imageUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0" loading="lazy" />
               ) : (
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 text-lg">
-                  {typeEmoji(shareEvent.type)}
+                  {typeEmoji(shareEventType)}
                 </div>
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-900 truncate">{shareEvent.title}</p>
                 <p className="text-xs text-gray-500 truncate">
-                  {formatDateTime(shareEvent.datetimeLocal || shareEvent.datetime)}
+                  {formatDateTime(shareEventDate)}
                   {shareEvent.venue ? ` · ${shareEvent.venue}` : ''}
                 </p>
               </div>

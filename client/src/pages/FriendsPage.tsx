@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
@@ -86,6 +86,69 @@ export default function FriendsPage() {
 
   const myEventInterests = settingsData?.event_interests ?? [];
 
+  const friendActionMutation = useMutation({
+    mutationFn: async ({ friendshipId, action }: { friendshipId: string; action: 'accept' | 'decline' }) => {
+      await api.patch(`/friends/${friendshipId}`, { action });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.friends });
+    },
+  });
+
+  const removeFriendMutation = useMutation({
+    mutationFn: async (friendshipId: string) => {
+      await api.delete(`/friends/${friendshipId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.friends });
+    },
+  });
+
+  const updateFriendshipTypeMutation = useMutation({
+    mutationFn: async ({ friendshipId, friendshipType }: { friendshipId: string; friendshipType: 'local' | 'long_distance' }) => {
+      await api.patch(`/friends/${friendshipId}`, { friendshipType });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.friends });
+    },
+  });
+
+  const createGroupMutation = useMutation({
+    mutationFn: async (payload: { name: string; memberIds: string[]; invitedEmails?: string[] }) => {
+      await api.post('/groups', payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.groups });
+    },
+  });
+
+  const deleteGroupMutation = useMutation({
+    mutationFn: async (groupId: string) => {
+      await api.delete(`/groups/${groupId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.groups });
+    },
+  });
+
+  const addMemberMutation = useMutation({
+    mutationFn: async ({ groupId, memberId }: { groupId: string; memberId: string }) => {
+      await api.post(`/groups/${groupId}/members`, { memberIds: [memberId] });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.groups });
+    },
+  });
+
+  const inviteFriendMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      await api.post('/friends/invite', { userId: memberId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.friends });
+    },
+  });
+
   // Auto-open FriendAvailability from URL param
   useEffect(() => {
     const findTimesId = searchParams.get('findTimes');
@@ -116,17 +179,8 @@ export default function FriendsPage() {
   const handleFriendAction = async (friendshipId: string, action: 'accept' | 'decline') => {
     if (!user) return;
     try {
-      const token = await user.getIdToken();
-      await fetch(`/api/friends/${friendshipId}`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ action }),
-      });
+      await friendActionMutation.mutateAsync({ friendshipId, action });
       if (action === 'accept') trackFriendAdded();
-      fetchFriends();
     } catch (err) {
       console.error('Failed to update friendship:', err);
     }
@@ -136,14 +190,8 @@ export default function FriendsPage() {
     if (!user || !removingFriend) return;
     setRemoveLoading(true);
     try {
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/friends/${removingFriend.friendshipId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('Failed to remove friend');
+      await removeFriendMutation.mutateAsync(removingFriend.friendshipId);
       setRemovingFriend(null);
-      fetchFriends();
     } catch (err) {
       console.error('Failed to remove friend:', err);
     } finally {
@@ -153,30 +201,24 @@ export default function FriendsPage() {
 
   const handleToggleFriendshipType = async (friendship: FriendRecord, targetType: 'local' | 'long_distance') => {
     if (!user) return;
-    const previousFriends = [...friends];
-    setFriends(prevFriends =>
-      prevFriends.map(f =>
+    const previousFriends = queryClient.getQueryData<FriendRecord[]>(queryKeys.friends) ?? friends;
+    queryClient.setQueryData(
+      queryKeys.friends,
+      previousFriends.map(f =>
         f.friendshipId === friendship.friendshipId
           ? { ...f, friendshipType: targetType }
           : f
-      )
+      ),
     );
     try {
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/friends/${friendship.friendshipId}`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ friendshipType: targetType }),
+      await updateFriendshipTypeMutation.mutateAsync({
+        friendshipId: friendship.friendshipId,
+        friendshipType: targetType,
       });
-      if (!res.ok) throw new Error('Failed to update friendship type');
-      await fetchFriends();
       return true;
     } catch (err) {
       console.error('Failed to update friendship type:', err);
-      setFriends(previousFriends);
+      queryClient.setQueryData(queryKeys.friends, previousFriends);
       alert('Failed to update friend location. Please try again.');
       return false;
     }
@@ -237,24 +279,16 @@ export default function FriendsPage() {
     }
     setCreatingGroup(true);
     try {
-      const token = await user.getIdToken();
-      const res = await fetch('/api/groups', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newGroupName.trim(),
-          memberIds: Array.from(createGroupSelectedIds),
-          invitedEmails: invitedEmails.length > 0 ? invitedEmails : undefined,
-        }),
+      await createGroupMutation.mutateAsync({
+        name: newGroupName.trim(),
+        memberIds: Array.from(createGroupSelectedIds),
+        invitedEmails: invitedEmails.length > 0 ? invitedEmails : undefined,
       });
-      if (res.ok) {
-        setNewGroupName('');
-        setCreateGroupSelectedIds(new Set());
-        setInvitedEmails([]);
-        setInviteEmailInput('');
-        setShowCreateGroup(false);
-        fetchGroups();
-      }
+      setNewGroupName('');
+      setCreateGroupSelectedIds(new Set());
+      setInvitedEmails([]);
+      setInviteEmailInput('');
+      setShowCreateGroup(false);
     } catch {
       // silent
     } finally {
@@ -266,14 +300,9 @@ export default function FriendsPage() {
     if (!user) return;
     setDeleteGroupLoading(true);
     try {
-      const token = await user.getIdToken();
-      await fetch(`/api/groups/${groupId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await deleteGroupMutation.mutateAsync(groupId);
       setDeletingGroup(null);
       setAddMemberGroupId((current) => (current === groupId ? null : current));
-      fetchGroups();
     } catch (err) {
       console.error('Failed to delete group:', err);
     } finally {
@@ -286,9 +315,8 @@ export default function FriendsPage() {
   const handleAddMemberToGroup = async (groupId: string, memberId: string) => {
     setAddingMemberIds((prev) => new Set(prev).add(memberId));
     try {
-      await api.post(`/groups/${groupId}/members`, { memberIds: [memberId] });
+      await addMemberMutation.mutateAsync({ groupId, memberId });
       setAddedMemberIds((prev) => new Set(prev).add(memberId));
-      fetchGroups(); // refresh to show updated member list
       // Clear the success state after 2 seconds
       setTimeout(() => setAddedMemberIds((prev) => { const next = new Set(prev); next.delete(memberId); return next; }), 2000);
     } catch (err) {
@@ -327,9 +355,8 @@ export default function FriendsPage() {
   const handleGroupMemberFriendRequest = async (memberId: string) => {
     setGroupFriendRequesting((prev) => new Set(prev).add(memberId));
     try {
-      await api.post('/friends/invite', { userId: memberId });
+      await inviteFriendMutation.mutateAsync(memberId);
       setGroupFriendRequested((prev) => new Set(prev).add(memberId));
-      fetchFriends(); // refresh friend list
     } catch (err) {
       console.error('Failed to send friend request:', err);
     } finally {

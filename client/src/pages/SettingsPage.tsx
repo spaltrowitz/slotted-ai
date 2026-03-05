@@ -1,20 +1,23 @@
 import { useState, useRef, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import AppShell from '../components/AppShell';
 import CalendarPicker from '../components/CalendarPicker';
 import PushNotificationPrompt from '../components/PushNotificationPrompt';
 import InstallPrompt from '../components/InstallPrompt';
 import { useAuth } from '../contexts/AuthContext';
 import { trackSettingsSaved } from '../lib/analytics';
+import api from '../lib/api';
+import { fetchUserSettings, queryKeys } from '../lib/queries';
 
 export default function SettingsPage() {
   const { user, onboardingComplete, googleCalendarConnected, googleCalendarStale, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, outlookCalendarConnected, connectOutlookCalendar, disconnectOutlookCalendar, verifyCalendarHealth, signInWithGoogle, signOut } = useAuth();
+  const queryClient = useQueryClient();
   const [travelBuffer, setTravelBuffer] = useState(30);
   const [planningStyle, setPlanningStyle] = useState('flexible');
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['weekday-evening', 'weekend-afternoon']);
   const [saved, setSaved] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSent, setFeedbackSent] = useState(false);
-  const [feedbackSending, setFeedbackSending] = useState(false);
 
   const [showAppleConnect, setShowAppleConnect] = useState(false);
   const [appleEmail, setAppleEmail] = useState(user?.email || '');
@@ -33,6 +36,12 @@ export default function SettingsPage() {
       verifyCalendarHealth();
     }
   }, [googleCalendarConnected, verifyCalendarHealth]);
+
+  const { data: settingsData } = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: fetchUserSettings,
+    enabled: !!user,
+  });
 
   const [socialRecharge, setSocialRecharge] = useState('2-3-week');
   const [rechargingDays, setRechargingDays] = useState<number[]>([]);
@@ -67,88 +76,102 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'profile' | 'about' | 'in-person' | 'calls'>('profile');
 
   useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try{
-        const token = await user.getIdToken();
-        // Load user settings
-        const meRes = await fetch('/api/users/me', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (meRes.ok) {
-          const me = await meRes.json();
-          if (me.social_frequency) setSocialRecharge(me.social_frequency);
-          if (me.preferred_times) setPreferredTimes(me.preferred_times);
-          if (me.travel_buffer_min) setTravelBuffer(me.travel_buffer_min);
-          if (me.planning_style) setPlanningStyle(me.planning_style);
-          if (me.recharging_days) setRechargingDays(me.recharging_days);
-          if (me.share_hangouts !== undefined) setShareHangouts(me.share_hangouts);
-          if (me.call_windows && Array.isArray(me.call_windows)) setCallWindows(me.call_windows);
-          if (me.video_platforms && Array.isArray(me.video_platforms)) setVideoPlatforms(me.video_platforms);
-          if (me.neighborhood) setNeighborhood(me.neighborhood);
-          if (me.work_neighborhood) setWorkNeighborhood(me.work_neighborhood);
-          if (me.office_days && Array.isArray(me.office_days)) {
-            // Convert 0-6 integers to day names
-            const dayMap: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
-            setOfficeDays(me.office_days.map((d: number) => dayMap[d]).filter(Boolean));
-          }
-          if (me.office_schedule_varies !== undefined) setOfficeVaries(me.office_schedule_varies);
-          if (me.social_goal) setSocialGoal(me.social_goal);
-          if (me.preferred_duration) setPreferredDuration(me.preferred_duration);
-          if (me.preferred_call_duration) setPreferredCallDuration(me.preferred_call_duration);
-          if (me.event_interests) setEventInterests(me.event_interests);
-          if (me.event_city) setEventCity(me.event_city);
-          if (me.display_name) setDisplayName(me.display_name);
-        }
-      } catch {
-        // silently fail
-      }
-    })();
-  }, [user]);
+    if (!settingsData) return;
+    const me = settingsData;
+    if (me.social_frequency) setSocialRecharge(me.social_frequency);
+    if (me.preferred_times) setPreferredTimes(me.preferred_times);
+    if (me.travel_buffer_min) setTravelBuffer(me.travel_buffer_min);
+    if (me.planning_style) setPlanningStyle(me.planning_style);
+    if (me.recharging_days) setRechargingDays(me.recharging_days);
+    if (me.share_hangouts !== undefined) setShareHangouts(me.share_hangouts);
+    if (me.call_windows && Array.isArray(me.call_windows)) setCallWindows(me.call_windows);
+    if (me.video_platforms && Array.isArray(me.video_platforms)) setVideoPlatforms(me.video_platforms);
+    if (me.neighborhood) setNeighborhood(me.neighborhood);
+    if (me.work_neighborhood) setWorkNeighborhood(me.work_neighborhood);
+    if (me.office_days && Array.isArray(me.office_days)) {
+      // Convert 0-6 integers to day names
+      const dayMap: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
+      setOfficeDays(me.office_days.map((d) => dayMap[d]).filter(Boolean));
+    }
+    if (me.office_schedule_varies !== undefined) setOfficeVaries(me.office_schedule_varies);
+    if (me.social_goal) setSocialGoal(me.social_goal);
+    if (me.preferred_duration) setPreferredDuration(me.preferred_duration);
+    if (me.preferred_call_duration) setPreferredCallDuration(me.preferred_call_duration);
+    if (me.event_interests) setEventInterests(me.event_interests);
+    if (me.event_city) setEventCity(me.event_city);
+    if (me.display_name) setDisplayName(me.display_name);
+  }, [settingsData]);
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: async (payload: {
+      socialFrequency: string;
+      preferredTimes: string[];
+      travelBuffer: number;
+      rechargingDays: number[];
+      shareHangouts: boolean;
+      planningStyle: string;
+      neighborhood: string;
+      workNeighborhood: string;
+      officeDays: number[];
+      officeScheduleVaries: boolean;
+      callWindows: { day: number; start: string; end: string; label: string }[];
+      videoPlatforms: string[];
+      socialGoal?: string;
+      preferredDuration?: string;
+      preferredCallDuration?: string;
+      eventInterests: string[];
+      eventCity: string;
+      displayName?: string;
+    }) => {
+      await api.put('/users/me/settings', payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    },
+  });
+
+  const feedbackMutation = useMutation({
+    mutationFn: async (message: string) => {
+      await api.post('/feedback', { message });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    },
+  });
+
+  const feedbackSending = feedbackMutation.isPending;
 
   const handleSave = async () => {
     if (!user) return;
     try {
-      const token = await user.getIdToken();
-      
       // Convert day names to integers for officeDays
       const dayNameToInt: Record<string, number> = { 
         Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 
       };
-      const officeDaysInts = officeDays.map(day => dayNameToInt[day]).filter(n => n !== undefined);
-      
-      const response = await fetch('/api/users/me/settings', {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          socialFrequency: socialRecharge,
-          preferredTimes,
-          travelBuffer,
-          rechargingDays,
-          shareHangouts,
-          planningStyle,
-          neighborhood,
-          workNeighborhood,
-          officeDays: officeDaysInts,
-          officeScheduleVaries: officeVaries,
-          callWindows,
-          videoPlatforms,
-          socialGoal: socialGoal || undefined,
-          preferredDuration: preferredDuration || undefined,
-          preferredCallDuration: preferredCallDuration || undefined,
-          eventInterests,
-          eventCity,
-          displayName: displayName.trim() || undefined,
-        }),
+      const officeDaysInts = officeDays
+        .map((day) => dayNameToInt[day])
+        .filter((n): n is number => n !== undefined);
+
+      await saveSettingsMutation.mutateAsync({
+        socialFrequency: socialRecharge,
+        preferredTimes,
+        travelBuffer,
+        rechargingDays,
+        shareHangouts,
+        planningStyle,
+        neighborhood,
+        workNeighborhood,
+        officeDays: officeDaysInts,
+        officeScheduleVaries: officeVaries,
+        callWindows,
+        videoPlatforms,
+        socialGoal: socialGoal || undefined,
+        preferredDuration: preferredDuration || undefined,
+        preferredCallDuration: preferredCallDuration || undefined,
+        eventInterests,
+        eventCity,
+        displayName: displayName.trim() || undefined,
       });
-      if (!response.ok) {
-        console.error('Settings save failed:', await response.text());
-        alert('Failed to save settings. Please try again.');
-        return;
-      }
     } catch (err) {
       console.error('Settings save error:', err);
       alert('Failed to save settings. Please check your connection.');
@@ -1218,21 +1241,13 @@ export default function SettingsPage() {
             <button
               disabled={!feedbackText.trim() || feedbackSending}
               onClick={async () => {
-                setFeedbackSending(true);
                 try {
-                  const token = await user?.getIdToken();
-                  await fetch('/api/feedback', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ message: feedbackText.trim() }),
-                  });
+                  await feedbackMutation.mutateAsync(feedbackText.trim());
                   setFeedbackSent(true);
                   setFeedbackText('');
                   setTimeout(() => setFeedbackSent(false), 3000);
                 } catch {
                   // silently fail for now
-                } finally {
-                  setFeedbackSending(false);
                 }
               }}
               className={`rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-sm ${

@@ -1,6 +1,9 @@
 import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../lib/api';
+import { queryKeys } from '../lib/queries';
 
 interface OnboardingData {
   preferredTimes: string[];
@@ -16,36 +19,35 @@ const steps = [
 export default function OnboardingPage() {
   const { user, clearNewUser, completeOnboarding, skipOnboarding, connectCalendar, calendarConnected } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
-  const [saving, setSaving] = useState(false);
   const [data, setData] = useState<OnboardingData>({
     preferredTimes: [],
     city: '',
   });
 
+  const onboardingMutation = useMutation({
+    mutationFn: async (payload: { preferredTimes: string[]; city: string }) => {
+      await api.post('/users/me/onboarding', {
+        preferredTimes: payload.preferredTimes,
+        ...(payload.city.trim() && { neighborhood: payload.city.trim() }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    },
+  });
+
+  const saving = onboardingMutation.isPending;
+
   const currentStep = steps[step];
 
   const finishOnboarding = async () => {
-    setSaving(true);
     try {
-      const token = await user?.getIdToken();
-      if (token) {
-        await fetch('/api/users/me/onboarding', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            preferredTimes: data.preferredTimes,
-            ...(data.city.trim() && { neighborhood: data.city.trim() }),
-          }),
-        });
-      }
+      await onboardingMutation.mutateAsync({ preferredTimes: data.preferredTimes, city: data.city });
     } catch (err) {
       console.error('Failed to save onboarding:', err);
     }
-    setSaving(false);
     clearNewUser();
     completeOnboarding();
     navigate('/dashboard');
