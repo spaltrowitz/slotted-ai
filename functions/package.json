@@ -2,7 +2,7 @@
   "name": "functions",
   "scripts": {
     "lint": "eslint --ext .js,.ts .",
-    "build": "npx esbuild src/index.ts --bundle --platform=node --target=node24 --outfile=lib/index.js --sourcemap --format=cjs --external:firebase-functions --external:firebase-admin --external:@supabase/supabase-js --external:googleapis --external:tsdav --external:cors --external:express && npx esbuild src/supabase.ts --bundle --platform=node --target=node24 --outfile=lib/supabase.js --sourcemap --format=cjs --external:@supabase/supabase-js",
+    "build": "npx esbuild src/index.ts --bundle --platform=node --target=node24 --outfile=lib/index.js --sourcemap --format=cjs --external:firebase-functions --external:firebase-admin --external:@supabase/supabase-js --external:googleapis --external:tsdav --external:cors --external:express --external:@azure/msal-node --external:@microsoft/microsoft-graph-client && npx esbuild src/supabase.ts --bundle --platform=node --target=node24 --outfile=lib/supabase.js --sourcemap --format=cjs --external:@supabase/supabase-js",
     "build:tsc": "tsc",
     "build:watch": "tsc --watch",
     "serve": "npm run build && firebase emulators:start --only functions",

@@ -1173,22 +1173,28 @@ app.put("/users/me/settings", requireAuth, async (req: AuthRequest, res: Respons
 /** POST /users/me/onboarding — save onboarding answers */
 app.post("/users/me/onboarding", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { socialFrequency, preferredTimes, travelBuffer, socialBattery, rechargingDays, socialGoal, preferredDuration, preferredCallDuration } =
+    const { socialFrequency, preferredTimes, travelBuffer, socialBattery, rechargingDays, socialGoal, preferredDuration, preferredCallDuration, neighborhood } =
       req.body;
+
+    const updatePayload: Record<string, any> = {
+      social_frequency: socialFrequency,
+      preferred_times: preferredTimes,
+      travel_buffer_min: travelBuffer ? parseInt(travelBuffer, 10) : 30,
+      social_battery: socialBattery || "open",
+      recharging_days: rechargingDays || [],
+      social_goal: socialGoal || null,
+      preferred_duration: preferredDuration || null,
+      preferred_call_duration: preferredCallDuration || null,
+      onboarded: true,
+    };
+
+    if (neighborhood) {
+      updatePayload.neighborhood = neighborhood;
+    }
 
     const { data, error } = await getSupabase()
       .from("users")
-      .update({
-        social_frequency: socialFrequency,
-        preferred_times: preferredTimes,
-        travel_buffer_min: travelBuffer ? parseInt(travelBuffer, 10) : 30,
-        social_battery: socialBattery || "open",
-        recharging_days: rechargingDays || [],
-        social_goal: socialGoal || null,
-        preferred_duration: preferredDuration || null,
-        preferred_call_duration: preferredCallDuration || null,
-        onboarded: true,
-      })
+      .update(updatePayload)
       .eq("firebase_uid", req.uid!)
       .select()
       .single();
@@ -1197,6 +1203,12 @@ app.post("/users/me/onboarding", requireAuth, async (req: AuthRequest, res: Resp
       res.status(500).json({ error: error.message });
       return;
     }
+
+    // If neighborhood was provided, reclassify friendships for long-distance detection
+    if (neighborhood && data?.id) {
+      await reclassifyFriendships(data.id, neighborhood);
+    }
+
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -9674,6 +9686,16 @@ export const findCalendarMatches = onSchedule("every day 09:00", async (event) =
             const recipient = await getDbUserById(userId);
             if (!friendUser || !recipient) continue;
             if (friendUser.social_battery === "recharging") continue;
+            const recipientTz = recipient.timezone || "America/New_York";
+            const recipientHour = Number(
+              new Intl.DateTimeFormat("en-US", {
+                hour: "2-digit",
+                hour12: false,
+                timeZone: recipientTz,
+              }).format(now),
+            );
+            // Quiet hours: don't send proactive nudges overnight in recipient local time.
+            if (recipientHour < 9 || recipientHour >= 21) continue;
 
             // Re-filter using recipient's timezone for accurate day-of-week
             const recipientOverlaps = filterOverlapsToHangoutWindows([filteredOverlap], recipient.timezone);

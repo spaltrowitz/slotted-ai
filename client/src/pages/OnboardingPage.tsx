@@ -4,10 +4,12 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface OnboardingData {
   preferredTimes: string[];
+  city: string;
 }
 
 const steps = [
   'calendar',
+  'city',
   'times',
 ] as const;
 
@@ -18,6 +20,7 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState<OnboardingData>({
     preferredTimes: [],
+    city: '',
   });
 
   const currentStep = steps[step];
@@ -35,6 +38,7 @@ export default function OnboardingPage() {
           },
           body: JSON.stringify({
             preferredTimes: data.preferredTimes,
+            ...(data.city.trim() && { neighborhood: data.city.trim() }),
           }),
         });
       }
@@ -64,7 +68,7 @@ export default function OnboardingPage() {
     if (step > 0) setStep(step - 1);
   };
 
-  const stepEmojis = ['📅', '🌅'];
+  const stepEmojis = ['📅', '🏙️', '🌅'];
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white relative overflow-hidden">
@@ -148,7 +152,29 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 2: Preferred Times */}
+        {/* Step 2: City */}
+        {currentStep === 'city' && (
+          <div className="space-y-4">
+            <h2 className="font-display text-xl font-bold text-gray-900">
+              What city do you live in?
+            </h2>
+            <p className="text-sm text-gray-500">
+              This helps us figure out which friends are nearby vs. long-distance, so we can suggest the right kind of hangout.
+            </p>
+            <input
+              type="text"
+              value={data.city}
+              onChange={(e) => setData({ ...data, city: e.target.value })}
+              placeholder="e.g. New York, Los Angeles, Chicago"
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-slotted-400 focus:outline-none focus:ring-2 focus:ring-slotted-100 transition-all"
+            />
+            <p className="text-xs text-gray-400">
+              You can always change this later in Settings.
+            </p>
+          </div>
+        )}
+
+        {/* Step 3: Preferred Times */}
         {currentStep === 'times' && (
           <div className="space-y-4">
             <h2 className="font-display text-xl font-bold text-gray-900">
