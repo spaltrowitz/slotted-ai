@@ -101,3 +101,24 @@
 - Mai's progressive disclosure aligns with emoji reduction (removes visual chaos)
 - Both recommend removing Events page
 - Mai goes deeper on WHEN features appear, not just WHAT to remove
+
+### 2025-07-25 — Response to Mai's Product Strategy Review (Suki)
+
+**Reviewed Mai's full critique at `docs/plans/research-product-strategy-review.md`.** Response written to `docs/plans/suki-response-to-mai.md`.
+
+**Key areas of agreement with Mai:**
+- State-aware progressive Dashboard is the single most important change — my fixed 3-section proposal created "empty state cascade" for new users
+- Events removal should be non-negotiable, not optional — I was too timid
+- Zero onboarding questions (1 step: calendar connect) — preferred times should be learned from behavior
+- Strip friend cards to avatar + name + last seen — interest badges and sync status are noise
+- Hangout logging simplified to star rating for early interactions — 6-field form is excessive
+- Hide Social Battery until 3+ completed hangouts — it's a power-user control
+- Hide score emojis entirely — 🔥👍🤔😐 creates decision fatigue
+- Settings: single page with "Advanced" accordion beats my 2-tab proposal
+
+**Key areas of disagreement with Mai:**
+- Notifications: killing the page entirely is too aggressive — inline banners don't scale past 2-3 items. Keep a lightweight notification sheet/dropdown, not a full page.
+- First-time scheduling (Option C): single suggestion is right, but the "See other times" escape hatch needs more visual weight — expandable section, not a small link.
+- Removing ALL help resources: a discoverable /help page (from Settings or subtle "?" icon) costs nothing and catches users who are genuinely confused. Pragmatism over ideology.
+
+**Broader learning:** My audit was structural (WHAT to remove); Mai's was temporal (WHEN things appear). The temporal dimension is more impactful. Progressive disclosure based on user milestones subsumes most structural simplification. Future design work should always ask "for this user at this moment" not just "for this page."

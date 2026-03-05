@@ -1131,3 +1131,46 @@ If implemented, a new user's first experience would be: OAuth → Connect Calend
 ### Source Document
 
 `docs/plans/research-product-strategy-review.md`
+
+---
+
+## Decision Disagreements: Designer vs. Strategist (Suki–Mai, 2026-03-05)
+
+**Context:** Suki (Designer) reviewed Mai's product strategy critique and identified three points requiring team decision-making. Both agents agree on the broader architectural direction (state-aware Dashboard, Day 1 focus) but differ on specific implementation details.
+
+### 1. Notifications: Full Elimination vs. Lightweight Fallback
+
+| Perspective | Position | Rationale |
+|---|---|---|
+| **Mai (Strategist)** | Kill Notifications page entirely. Show all actionable items as **inline banners** on relevant pages (friend requests on Friends page, meetup RSVPs on Dashboard). | Banners are contextual and reduce page fragmentation. Less is more for Day 1. |
+| **Suki (Designer)** | Kill the Notifications *page* (agreement). Keep a **lightweight dropdown/sheet** accessible via nav bell icon for fallback. | Inline banners scale to ~1–2 items. With 5+ pending items in a week (multiple friend invites + hangout RSVPs), banners become a wall of cards before user reaches actual content. Dropdown catches high-activity scenarios without a full page. |
+
+**Decision Required:** Full kill, or keep dropdown fallback?
+
+---
+
+### 2. First-Time Scheduling: Minimal Escape Hatch vs. Expandable Section
+
+| Perspective | Position | Rationale |
+|---|---|---|
+| **Mai (Strategist)** | "How about Saturday at 2pm?" with a small **"See other times →" link**. Minimal visual weight on escape hatch. | Reduces decision fatigue. One suggestion mimics real friends. Most users accept first suggestion; escape hatch is secondary. |
+| **Suki (Designer)** | Same single suggestion, but escape hatch as a **collapsed "Other times that work" section** below the Book button (not a navigation link). Expandable inline without leaving screen. | Control-oriented / planner users feel restricted by single suggestion. More visual weight on escape hatch respects user autonomy. After first hangout, switch to full list (Mai's Option A). |
+
+**Decision Required:** Small link, or expandable inline section?
+
+---
+
+### 3. Help Resources: Complete Removal vs. Discoverable Fallback
+
+| Perspective | Position | Rationale |
+|---|---|---|
+| **Mai (Strategist)** | Remove "How It Works" banner and `/help` page entirely. **App should be self-explanatory.** No inline teaching or external help resources. | Help page is a symptom of poor UX. If the app needs explaining, the design failed. No compromise. |
+| **Suki (Designer)** | Kill the Dashboard "How It Works" banner (agreement). Kill inline Events teaching section (agreement). **Keep a discoverable `/help` page** linked from Settings + subtle "?" icon in header. | App can be self-explanatory AND have a help resource. Costs zero screen real estate (hidden by default). Catches the ~5% of edge-case confused users at 11pm who would otherwise uninstall. Pragmatism over ideology. |
+
+**Decision Required:** Zero help resources, or hidden-but-available help?
+
+---
+
+**Source Documents:**
+- `docs/plans/suki-response-to-mai.md` (full context and Suki's reasoning)
+- `.squad/decisions/inbox/suki-mai-disagreements.md` (decision matrix)

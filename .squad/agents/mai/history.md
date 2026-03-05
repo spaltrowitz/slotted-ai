@@ -12,6 +12,20 @@
 - Core value loop: Sign up → Connect calendar → Invite friend → Find times together → Book hangout
 - Key tension Shari is working through: more features FEEL better for users but distractions at start prevent users from doing the core thing
 
+## Designer Response (Suki, 2026-03-05)
+
+Suki reviewed Mai's product strategy critique and provided detailed feedback on all 11 recommendations. Full document: `docs/plans/suki-response-to-mai.md`
+
+**Suki's Position Summary:**
+- **Fully Agreed:** 8/11 recommendations (progressive Dashboard unlock, Events removal, single-step onboarding, star-rating hangout logging, social battery gating, score emoji removal, stricter friend card design, advanced settings accordion)
+- **Partially Agreed:** 2/11 recommendations
+  - Notifications: Agreed to kill page; advocated for lightweight dropdown fallback (not just inline banners) for high-activity users
+  - First-time scheduling: Agreed on single suggestion; advocated for more visual weight on escape hatch (expandable section vs. small link)
+- **Disagreed:** 1/11 recommendation
+  - Help resources: Suki maintains that a discoverable `/help` page + "?" icon should exist (zero screen cost, catches edge-case users)
+
+**Three points escalated to team decisions:** `.squad/decisions.md` now documents the disagreements with full context for Shari's decision-making.
+
 ## Learnings
 
 - **State-aware Dashboard is the key architectural insight**: The root cause of "too busy" isn't individual features — it's that the same 10+ sections render for every user regardless of stage (0 friends vs. 10 friends vs. active scheduler). Progressive disclosure based on user state (inviting → scheduling → maintaining) solves the problem at its source.
