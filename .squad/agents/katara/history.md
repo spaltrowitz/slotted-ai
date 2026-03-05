@@ -29,6 +29,10 @@
 - Design tokens: `slotted-50` through `slotted-700`, `font-display` for headings
 - Soft social language: "Ready to connect?" not "No friends yet", "Not this time" not "Decline"
 
+### React Query Migration (2026-07)
+- `client/src/lib/queries.ts` now centralizes React Query keys + fetchers for dashboard, friends, events, notifications, settings, and calendar events.
+- Page data loads use `useQuery`; POST/PATCH/DELETE flows use `useMutation` with query invalidation and cache updates for optimistic UI.
+
 ---
 
 ## Cross-Agent References (2026-02-27)

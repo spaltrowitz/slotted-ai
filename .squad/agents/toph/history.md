@@ -51,3 +51,11 @@
 - **Conflict resolution rule:** Calendar = source of truth for individual RSVP. Slotted = source of truth for multi-party state (who's invited, overall meetup status, time for everyone).
 - **Per-user watch on 'primary' calendar** is sufficient for Phase 1 since Slotted only writes events to primary. Per-calendar watches can be added later.
 - **Notification language for calendar-originated changes** must follow Slotted's soft social dynamics: "is no longer available" not "declined."
+
+### Groups Feature Scope (Feb 2026)
+- **Groups feature is fully implemented in V1** with 2 database tables (`friend_groups`, `friend_group_members`), 5 backend endpoints (`GET /groups`, `POST /groups`, `PUT /groups/:id`, `POST /groups/:id/members`, `DELETE /groups/:id`), and extensive FriendsPage UI for creating/editing/deleting saved groups.
+- **Critical finding:** The `GroupAvailability` component is NOT group-specific — it accepts any `friendIds[]` array and finds joint availability. Multi-friend scheduling works independently of saved groups.
+- **Removal scope:** 2 database tables, 5 endpoints, ~400 lines of FriendsPage.tsx state/handlers/UI, 4 notification types (all using `type: "friend_accepted"`), `group_id` column on `pending_invites`, `SavedGroup` interface and `fetchGroups()` query in queries.ts.
+- **What stays:** Multi-friend scheduling flow (select 2+ friends → find times → book). Just needs rebranding: rename `GroupAvailability` → `MultiFriendAvailability`, rename endpoint `/availability/group-overlap` → `/availability/multi-friend`, remove all "group" language from UI.
+- **Key risk:** `pending_invites` migration must reverse cleanly. Drop `group_id` column, restore `UNIQUE (inviter_id, invited_email)` constraint. Any pending group invites become orphaned.
+- **User impact:** All saved groups will be deleted. Users can still schedule with multiple friends, just can't save those collections for reuse.
