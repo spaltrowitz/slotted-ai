@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchNotifications, queryKeys } from '../lib/queries';
 import NotificationDropdown from './NotificationDropdown';
+import FeedbackButton from './FeedbackButton';
 
 const bottomNavItems = [
   {
@@ -214,9 +215,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     <div className="mx-3 my-1 border-t border-gray-100" />
                     <button
                       onClick={async () => { setProfileMenuOpen(false); await signOut(); }}
-                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                     >
-                      <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <svg className="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
                       </svg>
                       Sign out
@@ -233,6 +234,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex-1">
         <div className="mx-auto max-w-6xl px-4 py-6 pb-28 sm:px-6 sm:py-8 md:pb-8">{children}</div>
       </main>
+
+      <FeedbackButton />
 
       {/* Mobile bottom tab bar — 2 tabs: Home + Friends */}
       <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-gray-200/80 bg-white/95 backdrop-blur-xl md:hidden">

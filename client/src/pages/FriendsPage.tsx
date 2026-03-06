@@ -159,6 +159,12 @@ export default function FriendsPage() {
     setSelectedIds(new Set());
   };
 
+  useEffect(() => {
+    if (selectedIds.size === 0 && selectMode) {
+      setSelectMode(false);
+    }
+  }, [selectedIds, selectMode]);
+
   const incomingInvites = friends.filter(
     (f) => f.status === 'pending' && f.invitedBy === f.friend.id
   );
@@ -189,6 +195,14 @@ export default function FriendsPage() {
     const seen = lastSeenLabel(f);
     let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 
+    const handleCheckboxClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      toggleSelect(f.friend.id);
+      if (!selectedIds.has(f.friend.id)) {
+        setSelectMode(true);
+      }
+    };
+
     return (
       <div
         key={f.friendshipId}
@@ -204,6 +218,16 @@ export default function FriendsPage() {
           i !== arr.length - 1 ? 'border-b border-gray-100' : ''
         } ${isSelected ? 'bg-slotted-50/60' : 'hover:bg-gray-50/50'}`}
       >
+        <div className="flex shrink-0 items-center justify-center" style={{ minWidth: 44, minHeight: 44 }}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => {}}
+            onClick={handleCheckboxClick}
+            className="h-4 w-4 rounded border-gray-300 text-slotted-500 focus:ring-slotted-400 cursor-pointer"
+          />
+        </div>
+
         <div className="relative shrink-0">
           {f.friend.photoUrl ? (
             <img src={f.friend.photoUrl} alt="" className="h-9 w-9 rounded-full" loading="lazy" />
@@ -228,11 +252,9 @@ export default function FriendsPage() {
           </p>
         </div>
 
-        {!selectMode && (
-          <svg className="h-4 w-4 shrink-0 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-        )}
+        <svg className="h-4 w-4 shrink-0 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
       </div>
     );
   };
@@ -338,6 +360,15 @@ export default function FriendsPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Selection count header */}
+      {selectMode && acceptedFriends.length > 0 && (
+        <div className="mb-2">
+          <p className="text-xs font-medium text-gray-500">
+            {selectedIds.size} of {acceptedFriends.length} selected
+          </p>
         </div>
       )}
 

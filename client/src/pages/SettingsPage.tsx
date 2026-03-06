@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import AppShell from '../components/AppShell';
 import CalendarPicker from '../components/CalendarPicker';
@@ -15,9 +15,7 @@ export default function SettingsPage() {
   const [travelBuffer, setTravelBuffer] = useState(30);
   const [planningStyle, setPlanningStyle] = useState('flexible');
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['weekday-evening', 'weekend-afternoon']);
-  const [saved, setSaved] = useState(false);
-  const [feedbackText, setFeedbackText] = useState('');
-  const [feedbackSent, setFeedbackSent] = useState(false);
+  const [autoSaveIndicator, setAutoSaveIndicator] = useState(false);
 
   const [showAppleConnect, setShowAppleConnect] = useState(false);
   const [appleEmail, setAppleEmail] = useState(user?.email || '');
@@ -64,7 +62,6 @@ export default function SettingsPage() {
   const [workNeighborhood, setWorkNeighborhood] = useState('');
   const [officeDays, setOfficeDays] = useState<string[]>([]);
   const [officeVaries, setOfficeVaries] = useState(false);
-  const feedbackRef = useRef<HTMLTextAreaElement>(null);
 
   // Call windows for phone/video availability
   const [callWindows, setCallWindows] = useState<{ day: number; start: string; end: string; label: string }[]>([]);
@@ -77,8 +74,8 @@ export default function SettingsPage() {
   // Scheduling preferences (moved from onboarding)
   const [socialGoal, setSocialGoal] = useState('');
 
-  // Advanced section accordion
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Track whether initial settings have loaded (to prevent auto-save on mount)
+  const settingsLoaded = useRef(false);
 
   useEffect(() => {
     if (!settingsData) return;
@@ -100,6 +97,8 @@ export default function SettingsPage() {
     }
     if (me.office_schedule_varies !== undefined) setOfficeVaries(me.office_schedule_varies);
     if (me.social_goal) setSocialGoal(me.social_goal);
+    // Mark initial load complete so auto-save doesn't fire on mount
+    setTimeout(() => { settingsLoaded.current = true; }, 100);
   }, [settingsData]);
 
   const saveSettingsMutation = useMutation({
@@ -125,21 +124,9 @@ export default function SettingsPage() {
     },
   });
 
-  const feedbackMutation = useMutation({
-    mutationFn: async (message: string) => {
-      await api.post('/feedback', { message });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.settings });
-    },
-  });
-
-  const feedbackSending = feedbackMutation.isPending;
-
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!user) return;
     try {
-      // Convert day names to integers for officeDays
       const dayNameToInt: Record<string, number> = { 
         Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 
       };
@@ -164,16 +151,24 @@ export default function SettingsPage() {
       });
     } catch (err) {
       console.error('Settings save error:', err);
-      alert('Failed to save settings. Please check your connection.');
       return;
     }
     if (!onboardingComplete) {
       completeOnboarding();
     }
-    setSaved(true);
     trackSettingsSaved();
-    setTimeout(() => setSaved(false), 2000);
-  };
+    setAutoSaveIndicator(true);
+    setTimeout(() => setAutoSaveIndicator(false), 2000);
+  }, [user, socialRecharge, preferredTimes, travelBuffer, rechargingDays, shareHangouts, planningStyle, neighborhood, workNeighborhood, officeDays, officeVaries, callWindows, videoPlatforms, socialGoal, onboardingComplete, completeOnboarding, saveSettingsMutation]);
+
+  // Auto-save with debounce whenever settings change (skip initial load)
+  useEffect(() => {
+    if (!settingsLoaded.current) return;
+    const timer = setTimeout(() => {
+      handleSave();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [socialRecharge, preferredTimes, travelBuffer, rechargingDays, shareHangouts, planningStyle, neighborhood, workNeighborhood, officeDays, officeVaries, callWindows, videoPlatforms, socialGoal]);
 
   const toggleTime = (value: string) => {
     setPreferredTimes((prev) =>
@@ -200,19 +195,14 @@ export default function SettingsPage() {
   return (
     <AppShell>
       {/* ── Header ── */}
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div>
+      <div className="mb-6">
+        <div className="flex items-center justify-between gap-3">
           <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">Settings</h1>
-          <p className="mt-1 text-sm text-gray-500">Manage your calendar, account, and preferences</p>
+          {autoSaveIndicator && (
+            <span className="shrink-0 text-xs font-medium text-emerald-600 transition-opacity">Saved ✓</span>
+          )}
         </div>
-        <button
-          onClick={handleSave}
-          className={`shrink-0 rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
-            saved ? 'bg-emerald-500' : 'gradient-btn'
-          }`}
-        >
-          {saved ? 'Saved! \u2713' : 'Save Changes'}
-        </button>
+        <p className="mt-1 text-sm text-gray-500">Manage your calendar, account, and preferences</p>
       </div>
 
       <div className="space-y-6">
@@ -386,19 +376,16 @@ export default function SettingsPage() {
         </section>
 
         {/* ═══════════════════════════════════════════════ */}
-        {/* SECTION 2: ADVANCED (collapsed by default)      */}
+        {/* SECTION 2: ADVANCED                            */}
         {/* ═══════════════════════════════════════════════ */}
         <section>
-          <button onClick={() => setAdvancedOpen(!advancedOpen)} className="flex w-full items-center justify-between rounded-2xl border border-gray-200/60 bg-white px-4 py-3.5 shadow-sm transition-colors hover:bg-gray-50">
-            <div className="flex items-center gap-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gray-500 to-gray-600 text-xs font-bold text-white shadow-sm">⚙️</span>
-              <h2 className="text-sm font-bold text-gray-800">Advanced</h2>
-            </div>
-            <svg className={`h-4 w-4 text-gray-400 transition-transform ${advancedOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-          </button>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="h-px flex-1 bg-gray-200" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Advanced</span>
+            <div className="h-px flex-1 bg-gray-200" />
+          </div>
 
-          {advancedOpen && (
-            <div className="mt-3 space-y-6 animate-slide-up">
+          <div className="space-y-6">
 
               {/* Planning Style */}
               <div className="rounded-2xl border border-gray-200/60 bg-white p-3 sm:p-4 shadow-sm">
@@ -556,26 +543,8 @@ export default function SettingsPage() {
               </div>
 
             </div>
-          )}
-        </section>
 
-        {/* Feedback */}
-        <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-50 to-fuchsia-50 text-base"></div>
-            <div className="flex-1">
-              <h2 className="text-sm font-semibold text-gray-900">Feedback</h2>
-              <p className="text-[10px] text-gray-400">Bug or idea? Goes straight to the developer.</p>
-            </div>
-          </div>
-          <textarea ref={feedbackRef} value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} placeholder="What's on your mind?" rows={2} className="mt-3 w-full resize-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition-all focus:border-slotted-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slotted-100" />
-          <div className="mt-2 flex items-center justify-between">
-            <p className="text-[10px] text-gray-400">Sent from {user?.email}</p>
-            <button disabled={!feedbackText.trim() || feedbackSending} onClick={async () => { try { await feedbackMutation.mutateAsync(feedbackText.trim()); setFeedbackSent(true); setFeedbackText(''); setTimeout(() => setFeedbackSent(false), 3000); } catch { /* silently fail */ } }} className={`rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-sm ${feedbackSent ? 'bg-emerald-500' : 'gradient-btn'}`}>
-              {feedbackSending ? 'Sending\u2026' : feedbackSent ? 'Sent! Thank you \u2713' : 'Send Feedback'}
-            </button>
-          </div>
-        </div>
+        </section>
 
       </div>
     </AppShell>

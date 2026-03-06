@@ -156,29 +156,51 @@ function StagePendingInvite({
   );
 }
 
-function StageOneFriend({
+function StageFirstHangout({
   friends,
   allFriendNames,
 }: {
   friends: FriendRecord[];
   allFriendNames: string[];
 }) {
-  const recent = friends[friends.length - 1];
+  const sorted = [...friends].sort((a, b) =>
+    getFirstName(a.friend.displayName).localeCompare(getFirstName(b.friend.displayName)),
+  );
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6 py-24 text-center">
-      <h2 className="text-xl font-semibold text-gray-900">
-        You and {getSmartDisplayName(recent.friend.displayName, allFriendNames)} are connected! ❤️
+    <div className="flex flex-1 flex-col items-center justify-center px-6 py-12">
+      <h2 className="text-xl font-semibold text-gray-900 text-center">
+        Who do you want to hang out with?
       </h2>
-      <p className="mt-3 max-w-xs text-sm text-gray-500 leading-relaxed">
-        Ready to find time to hang out?
-      </p>
-      <Link
-        to={`/friends?findTimes=${recent.friend.id}`}
-        className="mt-8 rounded-xl gradient-btn px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
-      >
-        Find times with {getSmartDisplayName(recent.friend.displayName, allFriendNames)} →
-      </Link>
+      <p className="mt-2 text-sm text-gray-500">Tap anyone to find times together</p>
+
+      <div className="mt-8 w-full overflow-x-auto scrollbar-hide">
+        <div className="flex gap-4 px-4 pb-1 justify-center flex-wrap">
+          {sorted.map((f) => (
+            <Link
+              key={f.friend.id}
+              to={`/friends?findTimes=${f.friend.id}`}
+              className="flex flex-shrink-0 flex-col items-center gap-1.5 w-18 group"
+            >
+              {f.friend.photoUrl ? (
+                <img
+                  src={f.friend.photoUrl}
+                  alt=""
+                  className="h-14 w-14 rounded-full ring-2 ring-white shadow-sm group-hover:ring-slotted-300 transition-all"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-base font-semibold text-white shadow-sm ring-2 ring-white group-hover:ring-slotted-300 transition-all">
+                  {f.friend.displayName?.[0] ?? '?'}
+                </div>
+              )}
+              <p className="w-full text-center text-xs font-medium text-gray-600 group-hover:text-slotted-600 transition-colors truncate">
+                {getSmartDisplayName(f.friend.displayName, allFriendNames)}
+              </p>
+            </Link>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -683,8 +705,8 @@ export default function DashboardPage() {
         />
       )}
 
-      {!isLoading && stage === 'one-friend' && (
-        <StageOneFriend friends={acceptedFriends} allFriendNames={allFriendNames} />
+      {!isLoading && stage === 'first-hangout' && (
+        <StageFirstHangout friends={acceptedFriends} allFriendNames={allFriendNames} />
       )}
 
       {!isLoading && stage === 'has-hangouts' && (
