@@ -1535,3 +1535,122 @@ All user-facing display names across the frontend now show first name only (e.g.
 ### Affected Files
 
 DashboardPage, FriendsPage, InvitePage, EventSharePage, OnboardingPage, NotificationsPage, NotificationDropdown, FriendAvailability, GroupAvailability.
+
+---
+
+## Decision: Homepage Friend Avatar Row Replaces Single-Friend CTA (Katara, 2026-07)
+
+**Author:** Katara (Frontend)  
+**Date:** 2026-07  
+**Status:** Implemented  
+**Scope:** DashboardPage `first-hangout` stage
+
+### Decision
+
+The `one-friend` stage (renamed to `first-hangout`) now shows a horizontally scrollable row of ALL accepted friend avatars instead of a single-friend "Find times with {name} →" CTA. Friends are sorted alphabetically by first name. Tapping any avatar navigates to `/friends?findTimes={id}`.
+
+### Rationale
+
+The old CTA only showed the most recently added friend, which was misleading for users with multiple friends (e.g., Shari has 10). The avatar row presents all options equally with no ranking or social pressure — consistent with Slotted's design principles.
+
+### Files Changed
+
+- `client/src/lib/userStage.ts` — renamed `one-friend` → `first-hangout`
+- `client/src/pages/DashboardPage.tsx` — replaced `StageOneFriend` with `StageFirstHangout`
+
+---
+
+## Decision: Settings Auto-Save & Feedback Extraction (Katara, 2026-07)
+
+| Field | Value |
+|---|---|
+| **Author** | Katara (Frontend) |
+| **Date** | 2026-07 |
+| **Status** | Implemented |
+| **Scope** | SettingsPage, FriendsPage, AppShell, FeedbackButton |
+
+### Changes
+
+1. **Settings auto-save:** Replaced explicit Save button with 800ms debounced auto-save. Uses `useCallback` + `useEffect` with a `settingsLoaded` ref guard to avoid saving on mount.
+2. **Advanced section flattened:** Always-visible with divider heading instead of accordion.
+3. **Feedback extracted to FeedbackButton.tsx:** Floating action button in AppShell, renders modal on click. Same API call (`POST /feedback`).
+4. **FriendsPage checkboxes:** Multi-select mode now shows explicit checkboxes + count header.
+5. **Sign Out styled red** in AppShell dropdown to signal destructive action.
+
+### Rationale
+
+Settings auto-save reduces friction — users don't forget to hit Save. Feedback as a floating button is globally accessible, not buried in settings. Checkboxes make multi-select mode unmistakable.
+
+---
+
+## Decision: Settings & Friends UI Improvements (Katara, 2025-01-24)
+
+**Agent:** Katara (Frontend Dev)  
+**Date:** 2025-01-24  
+**Status:** Implemented
+
+### Context
+
+Post-beta user feedback and design review (Ty Lee) identified 5 UX friction points:
+1. Checkboxes hidden until multi-select mode → hard to discover
+2. Save button in Settings → confusing when auto-save already works
+3. Advanced section accordion → extra tap for common settings
+4. Feedback section buried in Settings → low discoverability
+5. Sign Out not visually distinct from other actions
+
+### Decisions Made
+
+#### 1. Checkboxes Always Visible (FriendsPage)
+- **Decision:** Show checkboxes on left side of every accepted friend row
+- **Rationale:** Improves discoverability of multi-select feature for group scheduling
+- **Implementation:** 
+  - Checkbox always rendered with interactive handlers (onChange + onClick)
+  - Checking any box auto-enters select mode
+  - Unchecking all boxes auto-exits select mode (new useEffect)
+  - Prevents row click-through with stopPropagation
+
+#### 2. Remove Save Button (SettingsPage)
+- **Decision:** Remove "Save Changes" gradient button from header
+- **Rationale:** Auto-save with 800ms debounce already works; button creates confusion about when changes persist
+- **Implementation:** 
+  - Removed button from header JSX
+  - Kept `autoSaveIndicator` ("Saved ✓") as subtle confirmation
+  - Debounced auto-save continues unchanged
+
+#### 3. Advanced Section (SettingsPage)
+- **Decision:** Keep as-is (already flat)
+- **Finding:** Advanced section had no accordion state or toggle button — was already statically rendered
+- **No changes needed**
+
+#### 4. Feedback Button (AppShell)
+- **Decision:** Keep as-is (already extracted)
+- **Finding:** FeedbackButton.tsx already exists as floating button in AppShell (line 238)
+- **No changes needed**
+
+#### 5. Destructive Sign Out Styling (AppShell)
+- **Decision:** Strengthen red color to emphasize destructive action
+- **Rationale:** Sign out is a high-consequence action; should be visually distinct from other menu items
+- **Implementation:** 
+  - Text color: `text-red-500` → `text-red-600`
+  - Icon color: `text-red-400` → `text-red-500`
+  - Kept soft hover: `hover:bg-red-50` (no harsh red background)
+
+### Team Impact
+
+- **Zuko (Backend):** No backend changes required
+- **Ty Lee (Design):** All changes approved via design review
+- **Suki (Content):** No copy changes needed
+- **Toph (Infra):** No infrastructure impact
+
+### Files Modified
+
+- `client/src/pages/FriendsPage.tsx` — Checkbox always-visible + auto-mode logic
+- `client/src/pages/SettingsPage.tsx` — Removed Save button
+- `client/src/components/AppShell.tsx` — Stronger destructive colors on Sign Out
+
+### Validation
+
+- ✅ TypeScript type check passes (`npx tsc --noEmit`)
+- ✅ No new dependencies
+- ✅ Follows existing Slotted design patterns (soft social dynamics, slotted-* tokens)
+- ✅ No breaking changes to backend API contracts

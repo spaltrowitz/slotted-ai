@@ -10,6 +10,12 @@
 
 <!-- Append learnings below -->
 
+### Homepage Friend Avatar Row (2026-07)
+- Renamed `one-friend` stage to `first-hangout` in `userStage.ts` — the old name was misleading since it triggers for any user with friends but 0 completed hangouts.
+- Replaced `StageOneFriend` (single-friend CTA) with `StageFirstHangout` — a horizontally scrollable avatar row showing ALL accepted friends sorted alphabetically.
+- Reused the avatar pattern from the active-user "Time to reconnect" section (56px circles, gradient fallback, `Link` to `/friends?findTimes={id}`).
+- Scrollbar hidden with combined CSS: `scrollbar-hide` class + `[&::-webkit-scrollbar]:hidden` + `[-ms-overflow-style:none]` + `[scrollbar-width:none]` for cross-browser support.
+
 ### Phase 1 UI Simplification Removals Completed (2026-03-05T18:22:54Z)
 Phase 1 frontend removals completed successfully. Orchestration log: `.squad/orchestration-log/2026-03-05T18:22:54Z-agent-11-katara.md`. Decision merged to `.squad/decisions.md`. Cross-agent dependency: GroupAvailability.tsx API call needs update from `/availability/group-overlap` to `/availability/multi-friend-overlap` (Zuko's backend rename). Type check passes clean.
 
@@ -167,3 +173,19 @@ Toph designed webhook + incremental sync architecture. Frontend doesn't change f
 - **Recommendation:** Extract to floating action button (FAB) in bottom-right corner, managed by AppShell. Click opens modal (reuse AddToCalendarModal pattern). Icon: chat bubble (friendly, conversational). Positioning: mobile `fixed bottom-20 right-4 z-40` (above tab bar), desktop `fixed bottom-6 right-6 z-40`.
 - **Implementation plan:** Create FeedbackModal.tsx component, add FAB to AppShell.tsx, remove feedback section from SettingsPage.tsx.
 - **Research doc:** `.squad/agents/katara/feedback-extraction-research.md`
+
+### Settings & Friends Cleanup (2026-07)
+- **FriendsPage multi-select checkboxes:** Added visible checkbox (CalendarPicker style: `h-4 w-4 rounded border-gray-300 text-slotted-500`) to LEFT of each friend row when `selectMode` is true. 44px min tap target. Selection count header "{N} of {total} selected" shown above friend list. Existing avatar checkmark badge preserved.
+- **Auto-save settings:** Removed Save Changes button. Added debounced (800ms) `useEffect` that auto-persists whenever settings state changes. `settingsLoaded` ref prevents save on mount. Shows "Saved ✓" text indicator for 2 seconds after each auto-save. `handleSave` wrapped in `useCallback`.
+- **Advanced accordion flattened:** Removed `advancedOpen` state and accordion toggle button. Advanced section contents always visible with a centered divider heading ("Advanced" with horizontal lines).
+- **Feedback extracted to floating button:** Removed feedback textarea/button/state (`feedbackText`, `feedbackSent`, `feedbackRef`, `feedbackMutation`, `feedbackSending`) from SettingsPage. Created `FeedbackButton.tsx` — fixed-position circular button (bottom-right, above mobile nav). Opens modal with textarea + send button. Shows "Sent! Thank you ✓" then auto-closes. Imported in AppShell after main content.
+- **Sign Out styled destructive:** In AppShell profile dropdown, Sign Out button changed from `text-gray-500` to `text-red-500` with `text-red-400` icon and `hover:bg-red-50`.
+- Type check: `cd client && npx tsc --noEmit` passes clean.
+
+### Settings & Friends UI Improvements (2025-01-24)
+- **FriendsPage checkboxes always visible:** Checkboxes now appear on the left side of every accepted friend row, not just in select mode. Checking any checkbox automatically enters multi-select mode. Added `handleCheckboxClick` to prevent row click-through and auto-enable select mode when first box is checked. Added useEffect to auto-exit select mode when all checkboxes are unchecked. Checkbox is now interactive (onChange + onClick handlers) instead of read-only.
+- **SettingsPage Save button removed:** The "Save Changes" gradient button in the header was removed. Auto-save with 800ms debounce already exists and continues to work. The `autoSaveIndicator` ("Saved ✓") still shows for 2 seconds after each auto-save as subtle confirmation.
+- **Advanced section already flat:** The Advanced section in SettingsPage had no `advancedOpen` state variable or accordion toggle — it was already statically rendered. No changes needed.
+- **FeedbackButton already integrated:** FeedbackButton.tsx already exists and is imported/rendered in AppShell.tsx (line 238). No changes needed.
+- **Sign Out styled as destructive:** Changed Sign Out button in AppShell profile dropdown from `text-red-500 hover:bg-red-50` to `text-red-600 hover:bg-red-50` for stronger emphasis. Icon color changed from `text-red-400` to `text-red-500` to match.
+- All changes approved by design review (Ty Lee) and validated from beta tester feedback. Type check passes clean.
