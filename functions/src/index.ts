@@ -1648,23 +1648,9 @@ app.post("/friends/connect-referral", requireAuth, async (req: AuthRequest, res:
       return;
     }
 
-    // Only notify the referrer if the friendship was just created (not an upsert no-op).
-    // Compare created_at to now — if older than 30 seconds, this was a pre-existing friendship.
-    if (data) {
-      const createdAt = new Date(data.created_at).getTime();
-      const isNew = Date.now() - createdAt < 30000;
-      if (isNew) {
-        await createNotification({
-          userId: referrer.id,
-          type: "friend_accepted",
-          title: "New friend connected!",
-          body: `${me.display_name || me.email} joined Slotted via your invite and you're now connected.`,
-          relatedUserId: me.id,
-          relatedId: data.id,
-        });
-      }
-    }
-
+    // Notification intentionally omitted here: POST /users/me already notifies the referrer
+    // via the pending_invites auto-connect loop, making this a second write for the same event.
+    // Removing it prevents duplicate friend_accepted notifications on signup-via-referral.
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

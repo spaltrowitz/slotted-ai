@@ -1654,3 +1654,36 @@ Post-beta user feedback and design review (Ty Lee) identified 5 UX friction poin
 - ✅ No new dependencies
 - ✅ Follows existing Slotted design patterns (soft social dynamics, slotted-* tokens)
 - ✅ No breaking changes to backend API contracts
+
+---
+
+## Decision: Deduplicate friend_accepted notifications (post-groups-removal) (2026-04-20)
+
+| Field | Value |
+|---|---|
+| **Author** | Copilot (via Shari Paltrowitz) |
+| **Date** | 2026-04-20 |
+| **Status** | Implemented |
+| **Scope** | Notification deduplication — `friend_accepted` on referral signup |
+| **Supersedes** | 2026-03-04 decision on notification dedup index scope |
+
+### Context
+
+Two independent code paths both emitted a `friend_accepted` notification to the referrer when a new user signed up via an invite/referral link:
+
+1. **`POST /users/me`** — pending-invites auto-connect loop creates `"New friend joined!"` (no `relatedId`).
+2. **`POST /friends/connect-referral`** — explicit referral connect creates `"New friend connected!"` (with `relatedId`).
+
+Because the two notifications had different titles, bodies, and `relatedId` values, the app-level dedup in `createNotification()` (1-hour window on `related_user_id`) failed to catch them. Firebase Function race conditions (separate instances, Supabase read-replica lag) allowed both INSERT paths to succeed.
+
+The 2026-03-04 migration (`deduplicate_notifications.sql`) intentionally excluded `friend_accepted` from a DB-level unique index because that type was overloaded for group-membership events. Groups have since been removed (see `docs/plans/research-groups-removal.md`), making that rationale stale.
+
+### Decision
+
+1. **Remove the `createNotification` call from `POST /friends/connect-referral`** — `POST /users/me`'s pending-invites loop is the single authoritative writer for "inviter notified when invitee signs up." The `connect-referral` endpoint is now idempotent and non-notifying.
+2. **Add a partial unique DB index on `friend_accepted`** — `(user_id, type, related_user_id) WHERE type = 'friend_accepted' AND related_user_id IS NOT NULL`. The existing 23505 error handler in `createNotification()` cleanly absorbs any race-condition collisions.
+
+### Files Changed
+
+- `functions/src/index.ts` — removed `createNotification` block from `POST /friends/connect-referral` (~line 1651)
+- `migrations/deduplicate_friend_accepted.sql` — new migration: cleanup DELETE + partial unique index
