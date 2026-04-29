@@ -82,3 +82,8 @@ firebase deploy
 | 05 | User Research Interview Guide |
 | 06 | AI Scheduling Architecture |
 | 07 | App Name Options |
+
+---
+
+📅 [Fund my next friend date](https://spaltrowitz.github.io/#support)
+
