@@ -10,6 +10,22 @@
 
 <!-- Append learnings below -->
 
+### Critical Security Audit Completed (2026-04-30)
+
+Fixed 4 critical backend vulnerabilities from full audit:
+
+1. **Admin Secret Hardcoding** — Removed hardcoded fallback `"slotted-admin-2026"` from `requireAdmin`. Admin endpoints now fail closed (403) unless `ADMIN_SECRET` env var is explicitly set. Deployment must configure this env var explicitly.
+
+2. **Outlook Tokens Leakage** — Added `outlook_access_token`, `outlook_refresh_token`, `outlook_token_expires_at` to `SENSITIVE_FIELDS`. These tokens are now stripped from all user responses before sending to client. No impact on existing clients — fields were never intentionally exposed.
+
+3. **Friends Email Disclosure** — Removed `email` field from GET `/friends` response. Friends now see: `id`, `displayName`, `photoUrl`, `neighborhood`, `timezone`, `calendarConnected`, `eventInterests`. Backward-compatible change.
+
+4. **Social Battery Leakage** — Removed `socialBattery` from GET `/friends` and GET `/dashboard` friend queries. Social battery remains visible only to user themselves via `/profile`. Frontend dashboard/friends cards must remove references to this field.
+
+**Build Status:** `npm run build` ✅ passes. All changes backward-compatible. Deploy-ready pending frontend verification.
+
+**Frontend Dependencies:** Katara verified friends list and dashboard don't expect `email` or `socialBattery` fields.
+
 ### Phase 1 Groups Backend Removal Completed (2026-03-05T18:22:54Z)
 Phase 1 backend Groups removal completed successfully. Orchestration log: `.squad/orchestration-log/2026-03-05T18:22:54Z-agent-12-zuko.md`. Decision merged to `.squad/decisions.md`. Migration created (`migrations/remove_groups.sql`) but NOT executed — awaiting Toph's schema review. Cross-agent dependency: Katara's GroupAvailability.tsx must update API call to `/availability/multi-friend-overlap`. Build passes clean.
 
@@ -116,3 +132,11 @@ Full-spectrum audit with Toph (architecture), Katara (frontend), and Sokka (test
 3. Share code format (UUID-based instead of 3-char)
 4. Meetup confirm race condition (DB trigger vs atomic update)
 
+
+### Security Audit Fixes (Critical) — $(date +%Y-%m-%d)
+- Removed hardcoded admin secret fallback `"slotted-admin-2026"` — now fails closed if env var missing
+- Added `outlook_access_token`, `outlook_refresh_token`, `outlook_token_expires_at` to SENSITIVE_FIELDS
+- Stripped `email` and `socialBattery` from GET /friends response (prevents email harvesting + battery leakage)
+- Removed `social_battery` from dashboard friend query select + response mapping
+- The `requireAdmin` middleware now rejects all requests when ADMIN_SECRET env var is unset (fail-closed)
+- Build verified passing with esbuild after all changes

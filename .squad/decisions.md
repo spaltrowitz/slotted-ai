@@ -2066,3 +2066,87 @@ The counter-propose endpoint checks that the user is a *participant* of the meet
 
 ---
 
+## Decision: Backend Security Fixes — Critical Audit (Zuko, 2026-04-30)
+
+| Field | Value |
+|---|---|
+| **Author** | Zuko (Backend Dev) |
+| **Date** | 2026-04-30 |
+| **Status** | Implemented |
+| **Priority** | Critical |
+
+### Summary
+
+Fixed 4 critical backend security vulnerabilities from full audit:
+
+### 1. Admin Secret — Fail Closed
+- Removed hardcoded fallback `"slotted-admin-2026"` from `requireAdmin`
+- If `ADMIN_SECRET` env var is unset/empty, ALL admin endpoints return 403
+- **Impact:** Admin endpoints unreachable unless env var explicitly configured in deployment
+
+### 2. SENSITIVE_FIELDS — Outlook Tokens Added
+- Added `outlook_access_token`, `outlook_refresh_token`, `outlook_token_expires_at`
+- These are now stripped from any user object before sending to client
+- **Impact:** None on existing clients — these fields were never intentionally exposed
+
+### 3. Friends Response — Email Removed
+- `email` field no longer returned in GET /friends response
+- Friends see: `id`, `displayName`, `photoUrl`, `neighborhood`, `timezone`, `calendarConnected`, `eventInterests`
+- **Impact:** Frontend friends list should not break (email was display-only if used at all)
+
+### 4. Social Battery — Hidden from Friends
+- Removed `socialBattery` from GET /friends and GET /dashboard friend data
+- Removed `social_battery` from Supabase select query in dashboard
+- Social battery remains visible only to user themselves (via /profile)
+- **Impact:** Frontend dashboard/friends cards that showed friend battery will show nothing
+
+### Verification
+- `npm run build` ✅
+- No schema changes required
+- All changes backward-compatible
+
+### Frontend Action Required
+Katara should verify:
+- Friends list doesn't expect `email` or `socialBattery` fields
+- Dashboard friend cards don't render social battery for friends
+
+---
+
+## Decision: Frontend Security Fixes — Critical Audit (Katara, 2026-04-30)
+
+| Field | Value |
+|---|---|
+| **Author** | Katara (Frontend Dev) |
+| **Date** | 2026-04-30 |
+| **Status** | Implemented |
+| **Priority** | Critical |
+
+### Summary
+
+Fixed 3 critical frontend security vulnerabilities from full audit:
+
+### 1. Removed Hardcoded Developer Email from AuthContext
+- Referral fallback logic stored `sharipaltrowitz@gmail.com` in localStorage for all users without a referral param
+- This was a dev-time shortcut that leaked PII
+- Removed entirely — referral attribution now only works when `?ref=` param is present
+
+### 2. Removed Credential Logging from Console
+- `AuthContext.tsx`: Removed logs of Apple Calendar username and API response data
+- `usePushNotifications.ts`: Removed log of raw FCM token
+- **Rationale:** Any browser extension or DevTools user could harvest these credentials. Production code must never log secrets.
+
+### 3. Firebase SW Config: Build-Time Injection
+- `public/firebase-messaging-sw.js` now uses `__FIREBASE_*__` placeholder tokens instead of dummy keys
+- New `firebaseSwEnvPlugin()` in `vite.config.ts` replaces these placeholders with `VITE_FIREBASE_*` environment variables at build time
+- Push notifications will now work in production once the correct Firebase env vars are set in the deployment environment
+
+### Deployment Note
+Ensure `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, and `VITE_FIREBASE_APP_ID` are set in the build environment for push notifications to function.
+
+### Verification
+- TypeScript build ✅ (no errors)
+- No breaking changes to existing APIs
+- Auth flow still functional
+
+---
+

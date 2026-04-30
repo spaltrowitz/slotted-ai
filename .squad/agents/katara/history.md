@@ -10,6 +10,24 @@
 
 <!-- Append learnings below -->
 
+### Critical Security Audit Completed (2026-04-30)
+
+Fixed 3 critical frontend vulnerabilities from full audit:
+
+1. **Hardcoded Developer Email Removed** — Removed `sharipaltrowitz@gmail.com` from AuthContext referral fallback logic. Referral attribution now only works when `?ref=` param is explicitly present. Eliminates PII leakage in production code.
+
+2. **Credential Logging Removed** — Stripped sensitive logs from:
+   - `AuthContext.tsx` (Apple Calendar username, API response data)
+   - `usePushNotifications.ts` (FCM token)
+   - `public/firebase-messaging-sw.js` (push payload data)
+   - Rationale: Browser extensions and DevTools can harvest logged credentials.
+
+3. **Firebase Service Worker Config Hardening** — Replaced dummy Firebase keys in `public/firebase-messaging-sw.js` with `__FIREBASE_*__` placeholders. New `firebaseSwEnvPlugin()` in `vite.config.ts` replaces at build time with `VITE_FIREBASE_*` environment variables. Push notifications now require explicit env var configuration at build time.
+
+**Build Status:** TypeScript build ✅ passes with no errors. Auth flow functional, no breaking changes. Push notifications require: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` set at build time.
+
+**Backend Dependencies:** Coordinated with Zuko on friends list refactor (email removed) and dashboard (social battery removed from friend data). Frontend components updated to handle missing fields gracefully.
+
 ### Security Audit (2026-04-30 — Full Team Audit)
 
 **Scope:** Full end-to-end security, vulnerability, and quality audit (Toph, Zuko, Katara, Sokka)
