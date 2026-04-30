@@ -71,3 +71,47 @@ Phase 1 backend Groups removal completed successfully. Orchestration log: `.squa
 
 **Cross-Agent Synergy:** Sokka's test infrastructure fixes (polling, client normalizations) pair perfectly with these backend normalizations. Both delivered in parallel; they unlock each other.
 
+---
+
+## Security Audit (2026-03-06)
+
+Full security review of `functions/src/index.ts` (~9,400 lines), `functions/src/supabase.ts`, and `database/schema.sql`.
+
+### Critical Issues Found
+
+| # | Severity | Issue | Location |
+|---|----------|-------|----------|
+| 1 | 🔴 CRITICAL | Admin secret hardcoded fallback (`"slotted-admin-2026"`) | index.ts:9337 |
+| 2 | 🔴 CRITICAL | OAuth tokens stored plaintext in DB | schema.sql:43-58, index.ts:6649,6757,7244,7450 |
+| 3 | 🟠 HIGH | OAuth callbacks use bare Firebase UID as `state` (CSRF) | index.ts:6744,7432 |
+| 4 | 🟠 HIGH | Apple CalDAV password stored plaintext (iCloud app-specific password) | index.ts:7244 |
+| 5 | 🟡 MEDIUM | In-memory rate limiter not distributed (per-instance counters) | index.ts:69-95 |
+| 6 | 🟡 MEDIUM | `/suggestions/:friendId` doesn't verify friendship | index.ts:4372 |
+| 7 | 🟡 MEDIUM | `getDbUser` fetches `select("*")` including token columns | index.ts:201 |
+
+### Architecture Positives
+
+- Firebase Auth applied consistently to all protected endpoints
+- Friendship checks (IDOR protection) on social endpoints
+- Parameterized queries via PostgREST (no SQL injection)
+- RLS enabled on all tables (blocks direct Supabase client access)
+- Webhook secret properly validated on Google Calendar webhooks
+- Sensitive fields stripped from GET /users/me responses
+
+### Learnings
+
+- The entire backend is a single ~9,400-line Express app (`index.ts`). No route splitting or module organization.
+- All DB queries use `service_role` key — RLS exists but is never enforced for the backend. Authorization is 100% application-level.
+- Admin panel uses a shared secret (`x-admin-secret` header), not per-user admin auth.
+- OAuth `state` parameter should be an HMAC-signed nonce, not a raw UID.
+- The `stripSensitive()` helper (line 982) strips token fields from responses — applied to GET but NOT to POST /users/me or onboarding responses.
+
+### Recommendations (Priority Order)
+
+1. Remove hardcoded admin secret fallback — fail if env var missing
+2. Encrypt OAuth tokens at rest (AES-256-GCM with a KMS-managed key)
+3. Sign the OAuth `state` parameter with HMAC to prevent CSRF
+4. Use Redis or Firestore for distributed rate limiting
+5. Validate `friendId` param is an accepted friend in suggestions endpoint
+6. Scope `getDbUser` to only select needed columns (not `*`)
+
