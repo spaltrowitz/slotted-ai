@@ -82,3 +82,34 @@
 - Both recommend removing Events page
 - Emoji reduction supports progressive disclosure (less visual chaos for new users)
 - Groups removal aligns with simplified Day 1 (focus on 1:1 and immediate multi-friend need)
+
+### Security & Privacy Audit (Apr 2026 — Full Team Audit)
+
+**Scope:** Full end-to-end security, vulnerability, and quality audit (Toph, Zuko, Katara, Sokka)
+
+**5 Critical findings:**
+1. Plaintext OAuth tokens (google, outlook, apple) in users table — must encrypt with AES-256-GCM
+2. Social Battery leaking to friends via `/dashboard` — violates privacy principle
+3. Hardcoded developer email in `AuthContext.tsx:65` — PII in production
+4. protobufjs RCE vulnerability — npm audit critical
+5. Zero RLS policies defined despite RLS enabled on all 18 tables — service-role bypass risk
+
+**7 High findings:**
+- Calendar sync before friendship authorization check
+- Share codes too short (3-char, brute-forceable)
+- Account enumeration via `/friends/invite` endpoint
+- Race condition on meetup auto-confirm ("all accepted" state)
+- 10 high-severity npm vulnerabilities (axios SSRF, vite path traversal, rollup file write)
+- Apple password in plaintext JSON (only HTTPS protection)
+- Axios interceptor missing error handler
+
+**Key architectural risks:**
+- Service-role-only Supabase pattern means ALL authorization is application-code-only. Frontend direct calls = total data exposure.
+- RLS defined but never enforced (backend always uses service role). One architectural change exposes everything.
+
+**Cross-agent findings:**
+- **Zuko found:** Admin secret hardcoded fallback `"slotted-admin-2026"`, OAuth CSRF (bare UID as state param), Apple CalDAV plaintext, in-memory rate limiter per-instance
+- **Katara found:** Hardcoded referrer email (duplicate), sensitive console logs (Apple username, FCM token, API responses), Firebase SW placeholder keys, open redirect in OAuth flows
+- **Sokka found:** Outlook tokens NOT in SENSITIVE_FIELDS (leaked to client), no account deletion endpoint (GDPR), friend list exposes all emails, no input validation, DST timezone bugs, 10 untested critical paths
+
+**Decisions written to:** `.squad/decisions.md` (all findings merged and deduplicated 2026-04-30)

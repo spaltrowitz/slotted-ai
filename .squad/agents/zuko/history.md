@@ -73,45 +73,46 @@ Phase 1 backend Groups removal completed successfully. Orchestration log: `.squa
 
 ---
 
-## Security Audit (2026-03-06)
+## Security Audit (2026-04-30 — Full Team Audit)
 
-Full security review of `functions/src/index.ts` (~9,400 lines), `functions/src/supabase.ts`, and `database/schema.sql`.
+Full-spectrum audit with Toph (architecture), Katara (frontend), and Sokka (testing). Findings merged to `.squad/decisions.md`.
 
-### Critical Issues Found
+### Critical Issues Found (Cross-Team)
 
-| # | Severity | Issue | Location |
-|---|----------|-------|----------|
-| 1 | 🔴 CRITICAL | Admin secret hardcoded fallback (`"slotted-admin-2026"`) | index.ts:9337 |
-| 2 | 🔴 CRITICAL | OAuth tokens stored plaintext in DB | schema.sql:43-58, index.ts:6649,6757,7244,7450 |
-| 3 | 🟠 HIGH | OAuth callbacks use bare Firebase UID as `state` (CSRF) | index.ts:6744,7432 |
-| 4 | 🟠 HIGH | Apple CalDAV password stored plaintext (iCloud app-specific password) | index.ts:7244 |
-| 5 | 🟡 MEDIUM | In-memory rate limiter not distributed (per-instance counters) | index.ts:69-95 |
-| 6 | 🟡 MEDIUM | `/suggestions/:friendId` doesn't verify friendship | index.ts:4372 |
-| 7 | 🟡 MEDIUM | `getDbUser` fetches `select("*")` including token columns | index.ts:201 |
+| # | Severity | Issue | Found By | Related |
+|---|----------|-------|----------|---------|
+| 1 | 🔴 CRITICAL | Admin secret hardcoded fallback (`"slotted-admin-2026"`) | Zuko, Sokka | Toph aware |
+| 2 | 🔴 CRITICAL | OAuth tokens stored plaintext in DB | Zuko, Toph | Sokka noted in memory |
+| 3 | 🔴 CRITICAL | Outlook tokens NOT in SENSITIVE_FIELDS → leaked | Sokka | Zuko + Toph didn't catch |
+| 4 | 🔴 CRITICAL | No account deletion endpoint (GDPR violation) | Sokka | New finding |
+| 5 | 🔴 CRITICAL | Friend list includes all email addresses | Sokka | Privacy leak |
+| 6 | 🟠 HIGH | OAuth callbacks use bare Firebase UID as `state` (CSRF) | Zuko | Needs signature/nonce |
+| 7 | 🟠 HIGH | Apple CalDAV password stored plaintext | Zuko | Same encryption as #2 |
+| 8 | 🟡 MEDIUM | In-memory rate limiter per-instance | Zuko, Sokka | Needs Redis/Firestore |
 
-### Architecture Positives
+### Critical Issues (Zuko-specific findings)
 
-- Firebase Auth applied consistently to all protected endpoints
-- Friendship checks (IDOR protection) on social endpoints
-- Parameterized queries via PostgREST (no SQL injection)
-- RLS enabled on all tables (blocks direct Supabase client access)
-- Webhook secret properly validated on Google Calendar webhooks
-- Sensitive fields stripped from GET /users/me responses
+- OAuth token encryption strategy needed (AES-256-GCM vs Vault vs KMS)
+- `stripSensitive()` (line 982) missing Outlook fields — frontend sees all tokens
+- `getDbUser()` uses `select("*")` including token columns — internal leak risk
 
-### Learnings
+### Frontend Cross-Link (Katara findings affecting backend)
 
-- The entire backend is a single ~9,400-line Express app (`index.ts`). No route splitting or module organization.
-- All DB queries use `service_role` key — RLS exists but is never enforced for the backend. Authorization is 100% application-level.
-- Admin panel uses a shared secret (`x-admin-secret` header), not per-user admin auth.
-- OAuth `state` parameter should be an HMAC-signed nonce, not a raw UID.
-- The `stripSensitive()` helper (line 982) strips token fields from responses — applied to GET but NOT to POST /users/me or onboarding responses.
+- **Hardcoded email:** Also appears in Zuko's concerns (PII exposure)
+- **OAuth open redirect:** `window.location.href = data.url` — relies on backend not being malicious
+- **Direct fetch() bypass:** Client bypasses token refresh logic via raw fetch
 
-### Recommendations (Priority Order)
+### Test Coverage (Sokka findings)
 
-1. Remove hardcoded admin secret fallback — fail if env var missing
-2. Encrypt OAuth tokens at rest (AES-256-GCM with a KMS-managed key)
-3. Sign the OAuth `state` parameter with HMAC to prevent CSRF
-4. Use Redis or Firestore for distributed rate limiting
-5. Validate `friendId` param is an accepted friend in suggestions endpoint
-6. Scope `getDbUser` to only select needed columns (not `*`)
+- **Untested critical path:** OAuth token refresh/expiry (500+ lines)
+- **Untested critical path:** Admin endpoints (zero coverage, hardcoded secret is the only barrier)
+- **Untested critical path:** Concurrent operations (race condition on meetup confirm noted)
+- **Recommendation:** Integration tests with mock Google API should be first priority
+
+### Architecture Decisions Pending
+
+1. Token encryption strategy (Supabase Vault vs app-layer vs KMS)
+2. RLS policy strategy (define defensively now vs service-role-only intentional)
+3. Share code format (UUID-based instead of 3-char)
+4. Meetup confirm race condition (DB trigger vs atomic update)
 

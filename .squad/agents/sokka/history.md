@@ -10,6 +10,94 @@
 
 <!-- Append learnings below -->
 
+### 2026-04-30: Full Security, Vulnerability & Quality Audit (All Agents)
+
+**Findings:** 14 Critical, 20 High, 16 Medium, 5 Low across entire codebase. Full report in `.squad/decisions.md`.
+
+**Sokka's 4 Critical findings:**
+1. Outlook tokens NOT in SENSITIVE_FIELDS → leaked to client via `GET /users/me`
+2. No account deletion endpoint (GDPR/App Store violation)
+3. Admin secret has hardcoded fallback `"slotted-admin-2026"` if env var unset
+4. Friend list response includes email addresses — enables email harvesting
+
+**Sokka's 7 High findings:**
+- No input length validation on any text field (10MB title possible, causes DB bloat/OOM)
+- `GET /friends` uses `select(*)` on joined users (tokens in memory)
+- Race condition in friend request upsert (declined status can be overwritten)
+- Availability overlap syncs friend's calendar without consent (privacy/quota concern)
+- `parseInt(travelBuffer)` with no range validation (can be 99999 or negative)
+- `zonedToUtc()` timezone helper has DST edge cases (off-by-hour during transitions)
+- No friendship verification on `POST /meetups/:meetupId/counter-propose`
+
+**Test Coverage Analysis:**
+- Existing: 10 scenarios, ~1,881 lines, 75/80 passing (94%)
+- **Critical untested paths (priority for next sprint):**
+  1. Calendar sync engine (200+ lines, ZERO coverage) — most complex function
+  2. OAuth token refresh/expiry — no expired/revoked token simulation
+  3. Multi-friend overlap computation
+  4. Google Calendar webhook handler (ZERO coverage)
+  5. Account data lifecycle (endpoint missing)
+  6. Concurrent operations & race conditions
+  7. Timezone DST transitions
+  8. FCM push notification delivery
+  9. Admin endpoints (ZERO coverage — hardcoded secret is only barrier)
+  10. Event discovery/matching (ZERO coverage)
+
+**Recommendations (Priority Order):**
+1. 🔴 Immediate: Add Outlook tokens to SENSITIVE_FIELDS (hotfix)
+2. 🔴 Immediate: Remove admin secret fallback (hotfix)
+3. 🟠 Sprint: Add account deletion endpoint (GDPR)
+4. 🟠 Sprint: Remove email from friend response or make opt-in
+5. 🟠 Sprint: Add input length validation middleware
+6. 🟡 Next Sprint: Integration tests for calendar sync (mock Google API)
+7. 🟡 Next Sprint: Friendship re-request cooldown logic
+8. ⚪ Backlog: External rate limiter (Redis/Firestore)
+
+**Cross-agent findings:**
+- **Toph (Architecture):** 5 critical, 7 high. Key: plaintext tokens, social battery leak, hardcoded email, protobufjs RCE, zero RLS policies
+- **Zuko (Backend):** 2 critical, 3 high, 3 medium. Key: hardcoded admin secret, OAuth CSRF, Apple CalDAV plaintext
+- **Katara (Frontend):** 3 critical, 3 high, 4 accessibility gaps. Key: hardcoded email, console logs, open redirect, perf issues
+- **Sokka (Testing):** 4 critical, 7 high, 9 medium, 5 low. Key: token leaks, missing deletion, no validation, DST bugs, untested paths
+
+**Decisions written to:** `.squad/decisions.md` (all 4 audit findings merged with deduplication 2026-04-30)
+
+### 2026-03-07: Comprehensive Bug & Edge Case Audit
+
+**Critical Issues Found:**
+1. Outlook OAuth tokens NOT in `SENSITIVE_FIELDS` → leaked to client via `GET /users/me`
+2. No account deletion endpoint (GDPR/App Store violation)
+3. Admin secret has hardcoded fallback `"slotted-admin-2026"` if env var unset
+4. Friend list response includes email addresses of all friends
+
+**Key Architectural Observations:**
+- `functions/src/index.ts` is a 9400+ line monolith — all routes in one file
+- Rate limiter is in-memory per-instance (resets on cold start, doesn't share across Firebase Functions instances)
+- `GET /friends` query uses `select(*)` on joined user rows (tokens in memory even if not returned)
+- `syncUserCalendar()` is called on a *friend's* behalf when computing overlap (privacy/rate-limit concern)
+- No input length validation anywhere — all text fields accept unbounded input
+- `zonedToUtc()` is a hand-rolled timezone helper with known DST edge cases
+
+**Test Coverage Gaps (most dangerous untested paths):**
+1. Calendar sync engine (200+ lines, zero tests)
+2. OAuth token expiry/revocation handling
+3. Multi-friend overlap computation
+4. Google Calendar webhook handler
+5. Admin endpoints (hardcoded secret)
+6. Concurrent operation safety
+7. FCM push notification delivery
+
+**Privacy Findings:**
+- Users CAN see friends' social battery status (opt-out doesn't exist)
+- Users CAN infer friends' schedule from overlap boundaries (subtract from 8am-9pm window)
+- Declined friendship can be bypassed by re-sending invite (upsert overwrites status)
+- Friend deletion doesn't clean up group memberships or shared meetups
+
+**Social Dynamics Review:**
+- Decline language is good: "can't make it" (not "rejected" or "declined")
+- Friend removal text is gentle: "You won't be able to see each other's availability anymore"
+- "Not now" used for pending friend requests (not "Reject")
+- Battery status exposure to friends could create guilt/pressure (LOW concern)
+
 ## Core Context (Summarized prior work)
 
 ### 2026-03-03 & Earlier: Two-Way Sync QA, CRIT Fixes, Test Planning

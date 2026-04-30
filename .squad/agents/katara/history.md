@@ -10,6 +10,47 @@
 
 <!-- Append learnings below -->
 
+### Security Audit (2026-04-30 — Full Team Audit)
+
+**Scope:** Full end-to-end security, vulnerability, and quality audit (Toph, Zuko, Katara, Sokka)
+
+**3 Critical findings affecting frontend:**
+1. **Hardcoded developer email in `AuthContext.tsx:65`** — `localStorage.setItem('slotted_referrer_email', 'sharipaltrowitz@gmail.com')` — personal PII in production code. Remove immediately.
+2. **Sensitive console logs leaking credentials** — Apple Calendar username (line 261), full API response (263), FCM tokens (usePushNotifications.ts:55), push payload (88), background message payload (firebase-messaging-sw.js:24)
+3. **Firebase SW placeholder API keys** — `public/firebase-messaging-sw.js` has TODO placeholders. Push notifications non-functional in production until real keys injected via build step.
+
+**3 High findings affecting frontend:**
+1. **Open redirect in OAuth flows** — `AuthContext.tsx:236, 305` uses `window.location.href = data.url` trusting server response. Decision needed: whitelist allowed redirect domains (google.com, microsoft.com)?
+2. **Direct fetch() bypasses token interceptor** — `AuthContext.tsx:122-140` uses raw fetch() instead of `api` client. Decision: standardize all API calls through `lib/api.ts`?
+3. **FriendsPage performance** — `renderFriendRow` creates new handler functions per render (line 193-260). Decision: extract to React.memo component?
+
+**Accessibility gaps (team awareness):**
+- StarRating: no ARIA roles, no keyboard navigation, color-only feedback
+- AddToCalendarModal: no `role="dialog"`, no focus trap
+- CalendarPicker: checkboxes lack `<label>` elements
+- FriendsPage: `role="button"` elements lack full keyboard support (only Enter, not Space)
+
+**TypeScript `any` debt:**
+- 12+ instances of `err: any` in catch blocks across AuthContext, CalendarPicker, GroupAvailability, FriendAvailability, CounterProposePanel
+- Should be typed as `AxiosError` or `Error`
+
+**Security verified safe (no action needed):**
+- Auth tokens: Fresh `getIdToken()` per request via axios interceptor ✅
+- No XSS: No `dangerouslySetInnerHTML` anywhere ✅
+- Route protection: ProtectedRoute properly guards authenticated pages ✅
+- CSRF: Bearer token auth inherently CSRF-resistant ✅
+- Environment vars: Firebase config uses `VITE_` prefix correctly ✅
+- PWA caching: NetworkOnly for auth endpoints ✅
+- Code splitting: All routes lazy-loaded with retry logic ✅
+- Soft social language verified across all user-facing copy ✅
+
+**Cross-team findings affecting frontend:**
+- **Zuko found OAuth CSRF:** Backend uses bare Firebase UID as `state` parameter. Frontend auth flows rely on server not being malicious.
+- **Sokka found email harvesting:** Friend list response includes emails (backend issue, but affects frontend users' privacy expectations)
+- **Toph found protobufjs RCE:** npm audit critical vulnerability (frontend dependency, needs update)
+
+**Decisions written to:** `.squad/decisions.md` (all findings merged 2026-04-30)
+
 ### Homepage Friend Avatar Row (2026-07)
 - Renamed `one-friend` stage to `first-hangout` in `userStage.ts` — the old name was misleading since it triggers for any user with friends but 0 completed hangouts.
 - Replaced `StageOneFriend` (single-friend CTA) with `StageFirstHangout` — a horizontally scrollable avatar row showing ALL accepted friends sorted alphabetically.
@@ -189,3 +230,12 @@ Toph designed webhook + incremental sync architecture. Frontend doesn't change f
 - **FeedbackButton already integrated:** FeedbackButton.tsx already exists and is imported/rendered in AppShell.tsx (line 238). No changes needed.
 - **Sign Out styled as destructive:** Changed Sign Out button in AppShell profile dropdown from `text-red-500 hover:bg-red-50` to `text-red-600 hover:bg-red-50` for stronger emphasis. Icon color changed from `text-red-400` to `text-red-500` to match.
 - All changes approved by design review (Ty Lee) and validated from beta tester feedback. Type check passes clean.
+
+### Frontend Security & Optimization Audit (2026-07)
+- Comprehensive audit completed covering security, performance, accessibility, bugs, and PWA.
+- **Critical findings:** Hardcoded email in AuthContext.tsx:65, console.log leaking credentials (AuthContext.tsx:261-263, usePushNotifications.ts:55,88), firebase-messaging-sw.js has placeholder API keys with TODO comments.
+- **Security:** Auth tokens handled correctly (Bearer via interceptor, not in localStorage). No dangerouslySetInnerHTML usage. Open redirect risk in calendar OAuth flows. Direct fetch() calls bypass axios interceptor in AuthContext.
+- **Performance:** FriendsPage `renderFriendRow` creates new functions on every render (needs React.memo extraction). SettingsPage has setTimeout without cleanup (lines 101, 161). DashboardPage inline callbacks in JSX cause unnecessary re-renders.
+- **Accessibility gaps:** StarRating lacks ARIA roles/labels and keyboard support. AddToCalendarModal missing role="dialog", focus trap. CalendarPicker checkboxes lack labels. FriendsPage role="button" lacks full keyboard support.
+- **TypeScript `any`:** 12+ instances across catch blocks (AuthContext, CalendarPicker, GroupAvailability, FriendAvailability, CounterProposePanel) and window.navigator casts.
+- **PWA:** Workbox config is solid. firebase-messaging-sw.js uses placeholder keys (non-functional until replaced). manifest.json properly configured.

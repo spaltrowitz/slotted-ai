@@ -1687,3 +1687,382 @@ The 2026-03-04 migration (`deduplicate_notifications.sql`) intentionally exclude
 
 - `functions/src/index.ts` — removed `createNotification` block from `POST /friends/connect-referral` (~line 1651)
 - `migrations/deduplicate_friend_accepted.sql` — new migration: cleanup DELETE + partial unique index
+
+---
+
+## Architecture & Privacy Audit Findings — Toph (2026-04-30)
+
+| Field | Value |
+|---|---|
+| **Author** | Toph (Lead) |
+| **Date** | 2026-04-30 |
+| **Status** | Findings — awaiting remediation sign-off |
+| **Scope** | Full-spectrum security, privacy, and vulnerability audit |
+| **Severity** | 5 Critical, 7 High |
+
+### Context
+
+Full end-to-end security audit of Slotted codebase. Toph conducted architecture-level review of authentication, data privacy, RLS policies, and infrastructure patterns.
+
+### Critical Issues (Block Deployment)
+
+1. **OAuth tokens stored in plaintext** — Google, Outlook, Apple credentials unencrypted in `users` table. Must encrypt with AES-256-GCM or move to vault.
+2. **Social Battery leaks to friends** — `/dashboard` endpoint includes `social_battery` in friend data. Violates core privacy principle.
+3. **Hardcoded developer email** in `AuthContext.tsx:65` — PII shipped to production.
+4. **protobufjs RCE vulnerability** — npm audit critical, arbitrary code execution.
+5. **Zero RLS policies defined** — All 18 tables have RLS enabled but no policies. Backend service-role bypasses this, but one architectural change exposes everything.
+
+### High Issues (Fix This Sprint)
+
+6. **Calendar overlap endpoint syncs before checking friendship** — Resource-intensive sync fires before authorization.
+7. **Meetup share codes too short** — 3-char minimum is brute-forceable in ~26 hours.
+8. **Account enumeration via /friends/invite** — Different responses reveal if email exists.
+9. **Race condition on meetup auto-confirm** — Concurrent accepts can miss "all accepted" state.
+10. **10 high-severity npm vulnerabilities** — axios SSRF, vite path traversal, rollup file write.
+11. **Apple password transmitted in plaintext JSON** — Only HTTPS protects it.
+12. **Axios interceptor has no error handler** — Failed token fetch → unauthenticated request proceeds.
+
+### Architecture Decisions Required
+
+- **Token encryption strategy**: Supabase Vault vs application-layer encryption vs external KMS?
+- **RLS policy strategy**: Define policies defensively now, or document service-role-only as intentional?
+- **Share code format**: Switch to UUID-based (12+ char) codes?
+- **Meetup confirmation logic**: Move to database trigger to eliminate race condition?
+
+### Delegation
+
+- **Zuko (Backend)**: Fix items 1, 2, 6, 7, 8, 9, 12 (backend security)
+- **Katara (Frontend)**: Fix items 3, 4, 10, 11, 12 (client security)
+- **Sokka (Tester)**: Validation and edge case testing
+
+### Priority Order
+
+| Priority | Items | Effort |
+|----------|-------|--------|
+| P0 (Today) | 2, 3, 4 | 1-2 hours |
+| P1 (This week) | 1, 5, 6, 8, 10, 12 | 8-12 hours |
+| P2 (Next sprint) | 7, 9, 11 | 4-6 hours |
+
+---
+
+## Backend Security & API Audit Findings — Zuko (2026-04-30)
+
+| Field | Value |
+|---|---|
+| **Author** | Zuko (Backend) |
+| **Date** | 2026-04-30 |
+| **Status** | Findings — awaiting remediation sign-off |
+| **Scope** | Backend authentication, API security, token handling |
+| **Severity** | 2 Critical, 3 High, 3 Medium |
+
+### Context
+
+Comprehensive backend security audit of `functions/src/index.ts`, database schema, and API architecture. Focus on authentication, OAuth token storage, and authorization patterns.
+
+### Critical Findings Requiring Team Action
+
+#### 1. CRITICAL: Admin Secret Hardcoded as Default (Line 9337)
+
+```javascript
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "slotted-admin-2026";
+```
+
+If `ADMIN_SECRET` env var is not set, any attacker can access all admin endpoints with the default string. This gives full read access to ALL user data, notifications, tokens, etc.
+
+**Decision Needed:** Remove the hardcoded fallback. Fail loudly if env var is missing (like other required vars).
+
+#### 2. CRITICAL: OAuth Tokens Stored in Plaintext (Lines 43–58, schema.sql)
+
+Google, Apple, and Outlook OAuth tokens (access + refresh) are stored as plaintext TEXT columns in the users table. A database breach exposes calendar access for every user.
+
+**Decision Needed:** Implement at-rest encryption for `google_refresh_token`, `google_access_token`, `apple_caldav_password`, `outlook_refresh_token`, `outlook_access_token`. This was previously flagged but never addressed.
+
+#### 3. HIGH: OAuth Callback Has No CSRF Protection (Lines 6744, 7432)
+
+`GET /calendar/callback` and `GET /calendar/outlook/callback` use `state` parameter as Firebase UID. An attacker could craft a callback URL with their own `state` pointing to a victim's UID, associating the attacker's Google/Outlook account tokens with the victim's Slotted profile.
+
+**Decision Needed:** Use a signed or random `state` token stored in a temporary table, not bare Firebase UIDs.
+
+#### 4. HIGH: Apple CalDAV Credentials Stored in Plaintext (Line 7244)
+
+`apple_caldav_password` (app-specific password) is stored directly in the DB without encryption. Combined with the service-role key bypass, this is a high-value target.
+
+**Decision Needed:** Encrypt at rest, same solution as #2.
+
+### Medium Findings
+
+5. **In-Memory Rate Limiter Resets on Cold Start** — On Firebase Functions with `maxInstances: 10`, each instance has its own counter. An attacker can bypass rate limits by distributing requests across instances.
+6. **Suggestion friendId Not Validated as Friend** — `GET /suggestions/:friendId` does not verify the friendId is an accepted friend.
+7. **`getDbUser` Returns `select("*")`** — The helper fetches ALL columns including tokens. While `stripSensitive` is used at response boundaries, internal code paths could leak the user object.
+
+### Architecture Positives (No Action Needed)
+
+- ✅ Firebase Auth (`requireAuth`) applied to all protected routes
+- ✅ Friendship checks before accessing other users' availability (IDOR protection)
+- ✅ `meetup_participants` checked before meetup mutations
+- ✅ Notification writes scoped to `user_id` = current user
+- ✅ Supabase parameterized queries — no SQL injection risk
+- ✅ RLS enabled on all tables
+- ✅ Sensitive fields stripped from user profile responses
+- ✅ CORS restricted to known origins
+- ✅ Webhook secret validated on Google Calendar webhooks
+- ✅ Public routes properly rate-limited and return minimal data
+
+---
+
+## Frontend Security & Optimization Audit Findings — Katara (2026-04-30)
+
+| Field | Value |
+|---|---|
+| **Author** | Katara (Frontend) |
+| **Date** | 2026-04-30 |
+| **Status** | Findings — awaiting remediation sign-off |
+| **Scope** | Frontend security, performance optimization, accessibility |
+| **Severity** | 3 Critical, 3 High, 4 Medium (Accessibility), 0 Low |
+
+### Context
+
+Full audit of `client/src/` covering authentication flows, OAuth handling, credential storage, performance patterns, and accessibility standards.
+
+### Critical Actions Required
+
+#### 1. Remove Hardcoded Email (AuthContext.tsx:65)
+
+`localStorage.setItem('slotted_referrer_email', 'sharipaltrowitz@gmail.com')` — personal email in production code. Remove immediately.
+
+#### 2. Remove Sensitive Console Logs
+
+- `AuthContext.tsx:261` — logs Apple Calendar username
+- `AuthContext.tsx:263` — logs full Apple Calendar response
+- `usePushNotifications.ts:55` — logs FCM token
+- `usePushNotifications.ts:88` — logs full push payload
+- `firebase-messaging-sw.js:24` — logs background message payload
+
+#### 3. Firebase SW Placeholder Keys
+
+`public/firebase-messaging-sw.js` has TODO placeholder API keys. Push notifications won't work in production until real keys are injected (ideally via build step, not hardcoded).
+
+### High-Priority Decisions Needed
+
+#### 4. Open Redirect in OAuth Flows
+
+`AuthContext.tsx:236, 305` — `window.location.href = data.url` trusts server response without domain validation. **Decision:** Should we whitelist allowed redirect domains (google.com, microsoft.com)?
+
+#### 5. Direct fetch() vs Axios Interceptor
+
+`AuthContext.tsx:122-140` uses raw `fetch()` instead of the `api` client, bypassing the token interceptor. **Decision:** Standardize all API calls through `lib/api.ts`?
+
+#### 6. FriendsPage Performance
+
+`renderFriendRow` (line 193-260) creates new handler functions per row per render. Needs extraction to `React.memo` component. **Decision:** Prioritize this refactor?
+
+### Accessibility Gaps (Team Awareness)
+
+- **StarRating:** No ARIA roles, no keyboard navigation, color-only feedback
+- **AddToCalendarModal:** No `role="dialog"`, no focus trap, no focus return
+- **CalendarPicker:** Checkboxes lack `<label>` elements, no keyboard selection
+- **FriendsPage:** `role="button"` elements lack full keyboard support (only Enter, not Space)
+
+### TypeScript `any` Debt
+
+12+ instances of `err: any` in catch blocks across: AuthContext, CalendarPicker, GroupAvailability, FriendAvailability, CounterProposePanel. Should be typed as `AxiosError` or `Error`.
+
+### Security Verified Safe (No Action Needed)
+
+- ✅ Auth tokens: Fresh `getIdToken()` per request via axios interceptor
+- ✅ No XSS: No `dangerouslySetInnerHTML` anywhere
+- ✅ Route protection: ProtectedRoute properly guards authenticated pages
+- ✅ CSRF: Bearer token auth is inherently CSRF-resistant
+- ✅ Environment vars: Firebase config uses `VITE_` prefix correctly
+- ✅ PWA caching: NetworkOnly for auth endpoints
+- ✅ Code splitting: All routes lazy-loaded with retry logic
+- ✅ Soft social language: Verified across all user-facing copy
+
+---
+
+## Bug Testing & Edge Case Audit Findings — Sokka (2026-04-30)
+
+| Field | Value |
+|---|---|
+| **Author** | Sokka (Tester) |
+| **Date** | 2026-04-30 |
+| **Status** | Findings — awaiting remediation sign-off |
+| **Scope** | Bug testing, edge case audit, test coverage analysis |
+| **Severity** | 4 Critical, 7 High, 9 Medium, 5 Low |
+
+### Context
+
+Comprehensive code audit of backend, database schema, and frontend with focus on edge cases, race conditions, input validation, and test coverage gaps. Audit of `functions/src/index.ts`, `database/schema.sql`, `client/src/`, and `tests/agents/src/scenarios/`.
+
+### Critical Issues (Ship-Blocking)
+
+#### CRIT-1: Outlook tokens NOT in SENSITIVE_FIELDS → leak to client
+
+**Location:** `functions/src/index.ts:982-990`
+
+`SENSITIVE_FIELDS` strips Google tokens and Apple credentials but **omits**:
+- `outlook_access_token`
+- `outlook_refresh_token`
+- `outlook_token_expires_at`
+
+The `GET /users/me` endpoint returns `stripSensitive(user)` — but `select("*")` fetches the full row (line 203). Any user who has connected Outlook will have their OAuth tokens returned to the browser.
+
+**Impact:** Token theft allows full read/write access to a user's Outlook Calendar.
+
+**Fix:** Add all three Outlook fields to `SENSITIVE_FIELDS`.
+
+#### CRIT-2: No account deletion endpoint — GDPR/privacy risk
+
+**Location:** Full codebase search — no `DELETE /users/me` or equivalent exists.
+
+There is no way for a user to delete their account. The database has `ON DELETE CASCADE` on all FK references, so a simple user row delete would cascade correctly, but the endpoint doesn't exist. Apple App Store and GDPR both require this.
+
+**Fix:** Add `DELETE /users/me` that: (1) deletes the Supabase user row (cascade handles rest), (2) deletes the Firebase Auth user, (3) revokes Google/Outlook OAuth tokens.
+
+#### CRIT-3: Admin secret has hardcoded fallback in source code
+
+**Location:** `functions/src/index.ts:9337`
+
+```typescript
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "slotted-admin-2026";
+```
+
+If `ADMIN_SECRET` env var is unset (e.g., in a new deployment), anyone can call `/admin/migrate`, `/admin/users`, etc. with the public hardcoded value.
+
+**Fix:** Remove the fallback. If env var is missing, `requireAdmin` should always reject.
+
+#### CRIT-4: Friend list leaks email addresses of all friends
+
+**Location:** `functions/src/index.ts:1382`
+
+The `GET /friends` response includes `friend.email` for every friendship. This exposes personal email addresses to anyone who is a friend. Combined with the invite system, a malicious user could harvest emails.
+
+**Fix:** Remove `email` from the friend response object, or only include it if the friend has opted in to sharing.
+
+### High Issues
+
+#### HIGH-1: No input length validation on any text field
+
+**Location:** All POST/PUT/PATCH endpoints
+
+No endpoint validates the length of `displayName`, `title`, `description`, `location`, `message`, `neighborhood`, etc. A user could submit a 10MB title string, causing DB storage bloat, slow rendering, and potential OOM on notification formatting.
+
+**Fix:** Add length guards (e.g., `title.slice(0, 200)`, `description.slice(0, 2000)`).
+
+#### HIGH-2: `GET /friends` returns `select("*")` on joined users — leaks all user columns
+
+**Location:** `functions/src/index.ts:1314`
+
+The query uses `users!friendships_user_a_id_fkey(*)` — fetching ALL columns from the joined user rows. While the response is manually mapped, the raw DB response in memory contains tokens, passwords, etc.
+
+**Fix:** Explicitly select only needed columns in the join.
+
+#### HIGH-3: Race condition in friend request upsert → overwrites declined status
+
+**Location:** `functions/src/index.ts:1543-1547`
+
+`POST /friends/invite` uses `upsert` with `onConflict: "user_a_id,user_b_id"`. If User B previously **declined** User A's request, User A can simply re-send the invite and the status is overwritten to `pending`.
+
+**Expected:** A declined friendship should require the *declined* party to re-initiate, or at minimum a cooldown period.
+
+#### HIGH-4: Availability overlap syncs FRIEND's calendar without their consent
+
+**Location:** `functions/src/index.ts:3059-3062`
+
+When User A requests overlap with Friend B, the server calls `syncUserCalendar(friendUser.firebase_uid)` — triggering a full Google Calendar API call using Friend B's stored refresh token. This happens every time A checks overlap, potentially without B being aware.
+
+**Issues:**
+- Privacy: B's calendar is being read on A's request cadence
+- Rate limits: If A hammers the overlap endpoint, B's Google API quota is consumed
+- Token refresh: B's tokens are silently refreshed on A's actions
+
+**Fix:** Only sync if friend's last sync was > 15 min ago.
+
+#### HIGH-5: `parseInt(travelBuffer, 10)` with no range validation
+
+**Location:** `functions/src/index.ts:1128, 1188`
+
+User can submit `travelBuffer: "99999"` — resulting in `travel_buffer_min = 99999`. This would shrink ALL free slots to zero, effectively making the user appear permanently busy with no error message.
+
+Negative values also pass through (`parseInt("-60")` = -60), which would *expand* slots beyond actual availability.
+
+**Fix:** Clamp to `Math.max(0, Math.min(parseInt(travelBuffer, 10) || 30, 120))`.
+
+#### HIGH-6: `zonedToUtc` timezone helper is approximate — DST edge cases
+
+**Location:** `functions/src/index.ts:2190-2216`
+
+The timezone conversion uses `Intl.DateTimeFormat` to estimate offset. On DST transition days, the 8:00 AM boundary may be off by an hour in either direction.
+
+**Impact:** Missing free slots during the "lost" hour, or double-counting during the "gained" hour.
+
+#### HIGH-7: No friendship verification on `POST /meetups/:meetupId/counter-propose`
+
+**Location:** `functions/src/index.ts:3673+`
+
+The counter-propose endpoint checks that the user is a *participant* of the meetup, but doesn't verify they're still an accepted friend of the creator. If a friendship is deleted between meetup creation and counter-proposal, the user retains meetup interaction rights.
+
+### Medium Issues (9 items)
+
+1. **`GET /friends` exposes `socialBattery`** — Friends can see each other's battery status; reveals mental state
+2. **No test coverage for calendar sync engine** — 200+ lines, zero coverage
+3. **Rate limiter is in-memory** — Resets on cold start
+4. **Webhook endpoint returns 503 when secret unconfigured** — Should always return 200
+5. **No pagination on `GET /notifications`** — Only limit(50), older notifications inaccessible
+6. **Race condition in RSVP acceptance check** — Uses stale participant data
+7. **No test for OAuth token expiry mid-sync** — Missing 401 error handling
+8. **Friend deletion doesn't clean up meetup_participants or groups** — Leftover data
+9. **`GET /availability/overlap/:friendId` reveals exact schedule boundaries** — Can infer full schedule by subtraction
+
+### Low Issues (5 items)
+
+1. Notification body plaintext reveals who declined
+2. `extractCity()` naive comma-split for neighborhood comparison
+3. Social battery visible to friends — minor social pressure
+4. Welcome notification pre-read — invisible in unread count
+5. No character validation on notification title/body before FCM
+
+### Test Coverage Analysis
+
+**Existing Tests:** 10 scenarios, ~1,881 lines
+
+| Scenario | Lines | Quality |
+|---|---|---|
+| friends | 190 | Good |
+| meetups | 252 | Good |
+| notification-dedup | 307 | Excellent |
+| groups | 172 | Good |
+| errors | 192 | Good |
+| availability | 152 | Basic |
+| busy-blocks | 147 | Blocked (migration pending) |
+| calendar-events | 208 | Good |
+| dashboard | 101 | Basic |
+| notifications | 160 | Good |
+
+**Critical Untested Paths:**
+1. Calendar sync engine — most complex function, zero coverage
+2. OAuth token refresh and expiry — no expired/revoked token simulation
+3. Multi-friend overlap — only 1-on-1 tested
+4. Webhook handler — zero test coverage
+5. Account data lifecycle — no deletion tests (endpoint missing)
+6. Concurrent operations — no race condition tests
+7. Timezone edge cases — no DST transition tests
+8. FCM push notification delivery — untested
+9. Admin endpoints — zero coverage
+10. Event discovery/matching — completely untested
+
+### Recommendations (Priority Order)
+
+| Priority | Item | Category |
+|----------|------|----------|
+| 🔴 Immediate | Add Outlook tokens to SENSITIVE_FIELDS | Hotfix |
+| 🔴 Immediate | Remove admin secret fallback | Hotfix |
+| 🟠 Sprint | Add account deletion endpoint | Feature |
+| 🟠 Sprint | Remove email from friend response or opt-in | Feature |
+| 🟠 Sprint | Add input length validation middleware | Hardening |
+| 🟡 Next Sprint | Integration tests for calendar sync | Testing |
+| 🟡 Next Sprint | Friendship re-request cooldown logic | Logic |
+| ⚪ Backlog | External rate limiter (Redis/Firestore) | Infrastructure |
+
+---
+
