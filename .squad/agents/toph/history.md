@@ -121,3 +121,39 @@
 - **Meetup Race Condition:** Chose AFTER UPDATE trigger with `FOR UPDATE` lock on meetups row. Serializes concurrent acceptance checks atomically. Application code keeps notification logic but delegates state transition to the trigger.
 - **Implementation order:** Trigger (0.5d) → RLS policies (1-2d) → Token migration (2-3d). Quick wins first.
 - **Decisions written to:** `.squad/decisions/inbox/toph-arch-decisions.md`
+
+### Session Delivery: Remaining Audit Fixes (2026-05-01)
+
+**Architecture Decisions Finalized:**
+
+Three strategic security and correctness decisions ready for implementation:
+
+1. **Decision 3 (Quick Win) — Meetup Race Condition** (0.5 day)
+   - AFTER UPDATE trigger with FOR UPDATE lock on meetups row
+   - Serializes concurrent acceptance checks atomically within transaction
+   - Application code keeps notification logic; trigger handles state transition only
+   - File: `database/migrations/add_meetup_auto_confirm_trigger.sql`
+
+2. **Decision 1 (Defense-in-Depth) — RLS Policies** (1-2 days)
+   - Defensive policies on all 18 tables
+   - Zero runtime cost (service role bypasses)
+   - Activate only if non-service-role scenario occurs (safety net)
+   - Helper function `current_user_internal_id()` to DRY subqueries
+   - File: `database/migrations/add_rls_policies.sql`
+
+3. **Decision 2 (Critical) — OAuth Token Encryption** (2-3 days)
+   - Supabase Vault (pgsodium) with separate `oauth_tokens` table
+   - 3 phases: Table creation + vault setup → data migration → backend code updates
+   - Vault handles key rotation natively
+   - Protects DB dump/backup exposure; complements RLS for service-role compromise
+   - Files: `create_oauth_tokens.sql`, `migrate_tokens_to_vault.sql` + functions updates
+
+**Implementation Roadmap:**
+- Zuko begins with Decision 3 (trigger), then 1, then 2
+- Full implementation specs in `.squad/decisions.md` (merged from inbox)
+- Timeline: ~4-5 days total for all three
+
+**Cross-Agent Status:**
+- Zuko: 3 critical code fixes done ✅, npm audit analyzed (11 unfixable)
+- Katara: npm audit 16→0 ✅ via serialize-javascript override
+- Session logs: `.squad/orchestration-log/2026-05-01T16:26:49Z-*.md`, `.squad/log/2026-05-01T16:26:49Z-session.md`

@@ -140,3 +140,31 @@ Full-spectrum audit with Toph (architecture), Katara (frontend), and Sokka (test
 - Removed `social_battery` from dashboard friend query select + response mapping
 - The `requireAdmin` middleware now rejects all requests when ADMIN_SECRET env var is unset (fail-closed)
 - Build verified passing with esbuild after all changes
+
+### Remaining Audit Fixes Delivered (2026-05-01)
+
+Completed 3 of 4 remaining security audit fixes + architecture decisions received:
+
+**Backend Code Fixes:**
+1. **Account Deletion** — Implemented DELETE CASCADE from `users` table to all referencing tables. Migration: `database/migrations/add_user_delete_cascade.sql`
+2. **OAuth HMAC** — Implemented HMAC validation on OAuth callback handlers for Google, Outlook, Apple. Prevents token interception via callback signature verification against provider secrets. Updated in `functions/src/index.ts`
+3. **Friendship Cooldown** — Implemented 30-day cooldown between friendship deletion and re-friendship. Added `unfriended_at` timestamp; queries validate `NOW() - unfriended_at > 30 days` before allowing new friendship. Migration: `database/migrations/add_friendship_cooldown.sql`
+
+**npm Audit Status:**
+- Completed full audit sweep; 11 moderate/low vulnerabilities remain in uuid transitive dependencies
+- These are unfixable without breaking changes — upstream uuid and dependencies have no available patches
+- Documented in coordination notes; no further action possible without major version bumps
+
+**Architecture Decisions from Toph (Ready for Implementation):**
+- **Decision 3 (Quick Win):** Meetup race condition → AFTER UPDATE trigger with FOR UPDATE lock (0.5 day)
+- **Decision 1 (Defense):** RLS policies on all 18 tables (1-2 days)
+- **Decision 2 (Critical):** OAuth tokens → Supabase Vault with `oauth_tokens` table (2-3 days)
+- Implementation order: 3 → 1 → 2
+- Full specs in `.squad/decisions.md`
+
+**Build Status:** ✅ All changes passing. Ready for migration deployment.
+
+**Cross-Agent Coordination:**
+- Katara completed npm audit fix (16 → 0 vulnerabilities) via serialize-javascript override
+- Toph finalized 3 architecture decisions with full implementation specs
+- Orchestration logs: `.squad/orchestration-log/2026-05-01T16:26:49Z-*.md`
