@@ -168,3 +168,17 @@ Completed 3 of 4 remaining security audit fixes + architecture decisions receive
 - Katara completed npm audit fix (16 → 0 vulnerabilities) via serialize-javascript override
 - Toph finalized 3 architecture decisions with full implementation specs
 - Orchestration logs: `.squad/orchestration-log/2026-05-01T16:26:49Z-*.md`
+
+### Functional Bug Fixes (Sokka Audit) — 2026-05-XX
+
+Fixed 7 functional bugs identified during Sokka's flow testing audit:
+
+1. **Route alias** — Added `POST /availability/group-overlap` forwarding to `/availability/multi-friend-overlap`. Both routes now work.
+2. **Cross friend-request deadlock** — Before creating a pending friendship, checks if the other user already has a pending invite TO current user. If so, auto-accepts both and notifies both parties.
+3. **Past-time validation** — Meetup creation rejects start times less than 5 minutes from now (400).
+4. **endTime < startTime** — Both meetup creation and counter-propose endpoints validate endTime > startTime (400).
+5. **Counter-propose orphan** — Original meetup status set to `"counter_proposed"` when a counter-proposal is created.
+6. **Calendar sync upsert** — Replaced destructive delete-then-insert with upsert pattern + stale record cleanup. No zero-availability window.
+7. **Notification dedup types** — Counter-propose notifications now use `"meetup_counter_proposed"`, declines use `"meetup_declined"`. Filter logic updated to include new types.
+
+**Build Status:** ✅ `npm run build` passes clean.

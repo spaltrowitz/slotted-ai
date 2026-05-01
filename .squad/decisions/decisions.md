@@ -145,3 +145,49 @@
 **Context:** Stage called `one-friend` but logic triggers for any user with friends + no hangouts. Users can add 10 friends at once, so single-friend CTA is jarring. Solution: horizontal scrollable row of all friend avatars with "Who do you want to hang out with?" heading. Each avatar links to scheduling flow.  
 **Approved:** Option A (avatar row) — reuses existing component, acknowledges full network, zero new complexity.  
 **Implementation:** Replace `StageOneFriend` component in DashboardPage.tsx with avatar row. Rename stage `one-friend` → `first-hangout` in userStage.ts. No social pressure signals.
+
+### 2026-05-01 — Functional Bug Fixes: Backend (Zuko)
+
+**Date:** 2026-05-01  
+**Author:** Zuko (Backend Dev)  
+**Status:** Implemented  
+**Document:** `.squad/decisions/inbox/zuko-functional-fixes.md`  
+
+**Summary:** 7 surgical fixes to `functions/src/index.ts` addressing bugs found during Sokka's flow testing audit. No refactoring, no schema changes.
+
+**Bugs Fixed:**
+1. **Route Alias Pattern (group-overlap)** — Express `app.handle()` forwarding for dual endpoint support
+2. **Cross Friend-Request Auto-Accept** — Auto-accept when both parties have pending requests; both receive `friend_accepted` notifications
+3. **Time Validation Buffer** — 5-minute buffer on meetup creation & counter-propose to handle network latency & clock skew
+4. **Counter-Propose Status** — Original meetup gets status `"counter_proposed"` (preserves history)
+5. **Calendar Sync Upsert** — Uses `onConflict: "user_id,start_time,end_time"` for dedup
+6. **Notification Type Strings** — `"meetup_counter_proposed"` & `"meetup_declined"` replace overloaded `"meetup_request"`
+7. **Build Verification** — Zero errors
+
+**DB Migration Required:**
+- Unique constraint on `availability(user_id, start_time, end_time)` for upsert pattern
+- `meetups.status` CHECK constraint may need updating to include `"counter_proposed"`
+- `notifications.type` CHECK constraint needs `"meetup_counter_proposed"` and `"meetup_declined"`
+
+**Build Status:** ✅ Passing
+
+### 2026-05-01 — Functional Bug Fixes: Frontend (Katara)
+
+**Date:** 2026-05-01  
+**Author:** Katara (Frontend Dev)  
+**Status:** Implemented  
+**Document:** `.squad/decisions/inbox/katara-functional-fixes.md`  
+
+**Summary:** 4 surgical fixes across React components addressing bugs found during Sokka's flow testing audit.
+
+**Bugs Fixed:**
+1. **API Endpoint Alignment** — Frontend calls `POST /availability/multi-friend-overlap` (canonical path); `client/src/components/GroupAvailability.tsx`
+2. **Notification Timestamp Normalization** — All `timeAgo()` implementations append 'Z' to ISO strings without timezone suffix; ensures UTC interpretation; `NotificationsPage.tsx`, `NotificationDropdown.tsx`
+3. **Client-Side Past-Time Validation** — Meetup booking/counter-propose flows validate `startTime > now` & `endTime > startTime` before API calls; `FriendAvailability.tsx`, `GroupAvailability.tsx`, `CounterProposePanel.tsx`
+4. **DST-Safe Timezone Display** — No custom timezone math detected (inherently safe via `Intl.DateTimeFormat`)
+
+**Frontend Impact:**
+- New meetup status `"counter_proposed"` should be treated like `"cancelled"` in meetup list filters
+- New notification types `"meetup_counter_proposed"` and `"meetup_declined"` may need distinct UI treatment
+
+**Build Status:** ✅ TypeScript clean (0 errors)

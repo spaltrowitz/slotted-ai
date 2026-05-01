@@ -10,6 +10,20 @@
 
 <!-- Append learnings below -->
 
+### Functional Bug Fixes (2025-07-25)
+
+Fixed 4 frontend bugs from Sokka's flow testing audit:
+
+1. **FIX 1 — Group scheduling endpoint** (CRITICAL): Changed `POST /availability/group-overlap` to `POST /availability/multi-friend-overlap` in `GroupAvailability.tsx`. Backend alias being added by Zuko but frontend is the canonical fix.
+
+2. **FIX 2 — Notification timestamps timezone**: Updated `timeAgo()` in both `NotificationsPage.tsx` and `NotificationDropdown.tsx` to normalize server timestamps that may lack timezone suffixes (append 'Z' for UTC interpretation). Prevents off-by-hours when server returns timestamps without timezone info.
+
+3. **FIX 3 — Meetup past-time validation**: Added client-side validation in `FriendAvailability.tsx`, `GroupAvailability.tsx`, and `CounterProposePanel.tsx` preventing booking of past times (`"Pick a time that hasn't happened yet 😊"`) and ensuring endTime > startTime.
+
+4. **FIX 4 — DST-safe timezone display**: Verified no manual UTC offset math exists in frontend. App already uses `toLocaleString()`/`toLocaleTimeString()`/`Intl.DateTimeFormat` which handle DST correctly. No changes needed.
+
+**Build Status:** TypeScript ✅ compiles with no errors.
+
 ### Critical Security Audit Completed (2026-04-30)
 
 Fixed 3 critical frontend vulnerabilities from full audit:
