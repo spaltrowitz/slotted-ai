@@ -2551,3 +2551,44 @@ See `.squad/decisions/inbox/sokka-functional-testing.md` for complete details:
 - Edge cases and social dynamics review
 
 ---
+
+---
+
+## Decision: Backlog Implementation — Zuko Backend Tasks
+
+| Field | Value |
+|---|---|
+| **Author** | Zuko (Backend Dev) |
+| **Date** | 2026-05-01 |
+| **Status** | Implemented — pending review & DB deployment |
+| **Scope** | Meetup race condition trigger + Defensive RLS policies |
+
+### 1. Meetup Acceptance Trigger (`migrations/meetup_acceptance_trigger.sql`)
+
+Implemented to resolve race condition in meetup confirmation flow:
+- **Trigger:** AFTER UPDATE on `meetup_participants.rsvp`
+- **Locking:** FOR UPDATE lock on parent meetup row prevents concurrent state conflicts
+- **Guard:** Fires only when RSVP changes TO 'accepted'; skips if meetup already past 'proposed' state
+- **Action:** Atomically transitions meetup status to 'confirmed' when all participants have accepted
+- **Integration:** Application-level check in `index.ts` retained as read-only assertion (belt and suspenders). Notification-sending remains in app code.
+
+### 2. Defensive RLS Policies (`migrations/add_rls_policies.sql`)
+
+Implemented per security architecture decision:
+- **Helper:** `get_current_user_id()` function (SECURITY DEFINER) maps `auth.uid()` to internal UUID
+- **Coverage:** 17 tables with role-based access control
+  - **Owner-only:** users, fcm_tokens, availability, suggestion_events, feedback, meetup_logs, user_preferences, user_calendars, notifications, pending_invites, activity_dismissals, manual_busy_blocks
+  - **Participant-based:** meetups, meetup_participants (users in same meetup can view)
+  - **Relationship-based:** friendships (either side), friend_groups (creator), friend_group_members (group creator)
+- **Scope:** Policies do NOT affect current behavior — `service_role` key bypasses RLS. They activate only if anon/authenticated keys are used directly.
+- **Status:** NOT deployed to live DB — awaiting review
+
+### Verification
+
+- ✅ `npm run build` passes clean
+- ✅ SQL syntax validated (standard PL/pgSQL)
+- ⏳ Migrations staged in repo; require DB apply + testing before production
+
+### Not Implemented (Out of Scope)
+
+**Decision 2 (OAuth tokens → Vault encryption)** deferred — 2-3 day effort, separate backlog item.

@@ -182,3 +182,15 @@ Fixed 7 functional bugs identified during Sokka's flow testing audit:
 7. **Notification dedup types** — Counter-propose notifications now use `"meetup_counter_proposed"`, declines use `"meetup_declined"`. Filter logic updated to include new types.
 
 **Build Status:** ✅ `npm run build` passes clean.
+
+### Backlog Items Implemented (2026-05-01)
+
+**Meetup acceptance trigger** — Created `migrations/meetup_acceptance_trigger.sql` with an AFTER UPDATE trigger on `meetup_participants.rsvp`. When the last participant accepts, the trigger atomically locks the meetups row (FOR UPDATE) and transitions status to 'confirmed'. Guards against double-firing (skips if already non-proposed). This replaces the race-prone application-level check.
+
+**Defensive RLS policies** — Created `migrations/add_rls_policies.sql` covering all 17 RLS-enabled tables. Uses a `get_current_user_id()` helper function (SECURITY DEFINER) to map `auth.uid()` → internal UUID. Policies enforce owner-only or participant-only access patterns. These only apply via anon/authenticated keys — service_role bypasses them.
+
+**Key patterns:**
+- `auth.uid() = firebase_uid` for tables with direct firebase_uid column (users, feedback)
+- `user_id = get_current_user_id()` for tables with user_id FK
+- Subquery EXISTS for join-table access (meetups via meetup_participants, friend_group_members via friend_groups)
+- Separate SELECT/INSERT/UPDATE/DELETE policies per table for granular control
