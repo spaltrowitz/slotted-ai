@@ -10,6 +10,30 @@
 
 <!-- Append learnings below -->
 
+### 2026-05-01: Deep Functional Testing Audit — 6 Core User Journeys
+
+**Scope:** Full trace through frontend (AuthContext, pages, components) → backend (index.ts 9797 lines) → database (schema.sql) for signup, friends, meetups, calendar sync, notifications, and groups.
+
+**Critical Finding:**
+- `GroupAvailability.tsx` calls `POST /availability/group-overlap` — this endpoint DOES NOT EXIST. Backend only has `POST /availability/multi-friend-overlap`. Group scheduling is completely broken for users.
+
+**High Findings (6):**
+- Simultaneous cross-friend-requests create permanent pending state (upsert overwrites)
+- No future-time validation on meetup creation (past times accepted)
+- No endTime > startTime validation on meetups
+- `zonedToUtc` DST edge-case (off-by-hour during transitions)
+- `friend_groups` + `friend_group_members` tables have zero API endpoints (schema exists, no CRUD)
+- Counter-propose doesn't auto-cancel original 1:1 meetup
+
+**Medium Findings (11):** syncUserToDb silent failure, onboarding race, accept-on-already-accepted, friendship_type overwrite on re-request, group decline limbo, notification TZ formatting, calendar sync delete-before-insert race, webhook double-sync, meetup_request type overload, no push suppression when app is foreground.
+
+**Key Architecture Insight:**
+- Notifications rely on `meetup_request` type for 4+ different semantic events (initial invite, decline, counter-propose, maybe RSVP) — this causes false dedup suppression
+- Calendar sync is destructive: DELETE all → INSERT new. Brief window with zero availability data.
+- Apple/Outlook have NO automatic sync (only triggered by explicit user action or overlap view)
+
+**Deliverable:** Full report in `.squad/decisions/inbox/sokka-functional-testing.md`
+
 ### 2026-04-30: Full Security, Vulnerability & Quality Audit (All Agents)
 
 **Findings:** 14 Critical, 20 High, 16 Medium, 5 Low across entire codebase. Full report in `.squad/decisions.md`.

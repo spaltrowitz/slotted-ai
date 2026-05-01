@@ -2443,3 +2443,111 @@ Added `"overrides": { "serialize-javascript": ">=7.0.5" }` to client/package.jso
 - ✅ No breaking changes
 
 ---
+
+---
+
+## Audit Finding: Functional Flow Testing — Core User Journeys (Sokka, 2026-05-01)
+
+| Field | Value |
+|---|---|
+| **Author** | Sokka (Tester) |
+| **Date** | 2026-05-01 |
+| **Status** | Audit Complete — Issues Prioritized |
+| **Scope** | 6 core flows: signup, friends, meetups, calendar sync, notifications, groups |
+
+### Summary
+
+Deep end-to-end functional testing of all 6 core user flows with line-by-line code inspection through frontend (React 19, AuthContext, pages, components) → backend (index.ts 9797 lines) → database (schema.sql).
+
+**Issue Breakdown:**
+- **1 Critical** (blocks core functionality)
+- **6 High** (incorrect behavior)
+- **11 Medium** (degrades experience)
+- **5 Low** (minor/cosmetic)
+
+### Critical Issue: Groups Feature Broken in Production
+
+**Frontend `GroupAvailability.tsx:52` calls `POST /availability/group-overlap` — this endpoint DOES NOT EXIST.**
+- Backend only has `POST /availability/multi-friend-overlap`
+- Users selecting multiple friends to find common time get immediate 404 error
+- Complete group CRUD missing: schema exists (friend_groups, friend_group_members tables), but zero API endpoints for create/list/update/delete
+
+### High-Priority Issues
+
+| # | Flow | Issue | Impact |
+|---|------|-------|--------|
+| 1 | Friends | Simultaneous cross-friend-requests create permanent pending state | User A sends to B, B simultaneously sends to A → upsert overwrites invited_by → one user can't accept, other's request vanishes |
+| 2 | Meetups | No validation that proposed time is in the future | Past meetups accepted and pollute the list; never trigger reminders |
+| 3 | Meetups | No validation that endTime > startTime | Backward meetups created silently (end before start) |
+| 4 | Calendar | `zonedToUtc` DST edge-case off-by-hour bug | Intl.DateTimeFormat reference date bug during transitions (e.g., 2am spring forward) produces off-by-hour error |
+| 5 | Groups | No CRUD endpoints for `friend_groups` table | Schema exists, zero API implementation — production blocker |
+| 6 | Meetups | Counter-propose doesn't auto-cancel original 1:1 meetup | Proposer's RSVP set to "declined" on original, but unlike normal decline, trigger logic missing → original stays "proposed" with one declined participant |
+
+### Medium-Priority Issues
+
+| # | Flow | Issue | Workaround |
+|---|------|-------|-----------|
+| 7 | Signup | `syncUserToDb` uses raw `fetch` instead of `api` wrapper | Bypasses error interceptors; silent failure → user stuck in 404 loop | Use api wrapper; proper error recovery |
+| 8 | Signup | Onboarding race: completeOnboarding called even if mutation fails | Fix: only call in mutation's `onSuccess` |
+| 9 | Friends | Accept on already-accepted friendship re-triggers `friend_accepted` notification | Add check: `data.status === 'pending'` before sending accept notification |
+| 10 | Friends | Upsert on re-request resets other user's friendship_type | Payload includes `user_a_friendship_type: defaultFriendshipType` — overwrites OTHER user's setting |
+| 11 | Meetups | Group decline leaves meetup in limbo forever | 3+ person meetup, one declines → stays "proposed" with no status recalculation or "still want to meet?" logic |
+| 12 | Meetups | Notification times formatted in server locale, not recipient TZ | `toLocaleDateString/toLocaleTimeString` uses Firebase Functions server locale |
+| 13 | Calendar | Calendar sync deletes ALL availability before re-inserting | DELETE all → INSERT: brief window with zero availability data; insert failure leaves user with zero data until next sync |
+| 14 | Calendar | Webhook double-syncs | Full `syncUserCalendar()` called first, then IMMEDIATELY `calendarApi.events.list` with syncToken — redundant work |
+| 15 | Notifications | `meetup_request` type is overloaded | Used for: initial invite, "X can't make it", "X suggested different time", "maybe" RSVP → 1hr relatedUserId dedup suppresses legitimate different notifications |
+| 16 | Notifications | No push suppression when app is open | App-open user gets both in-app + FCM push notification simultaneously |
+| 17 | Calendar | Apple CalDAV credentials stored as plaintext | No encryption/decryption visible; schema comment says "encrypted" but code stores raw password |
+
+### Low-Priority Issues
+
+| # | Flow | Issue |
+|---|------|-------|
+| 18 | Signup | No `socialFrequency` or `travelBuffer` validation | Schema has no CHECK constraints; `parseInt(travelBuffer)` allows 99999 or negative values |
+| 19 | Friends | `connect-referral` can overwrite friendship metadata | Upsert is safe (won't duplicate) but can downgrade accepted friendship back to "accepted" with different `invited_by`, or change `friendship_type` |
+| 20 | Notifications | No old notification cleanup/TTL | `GET /notifications` capped at 50 results, but old unread notifications accumulate indefinitely — no TTL or scheduled cleanup |
+| 21 | Meetups | No "edit meetup" capability after creation | Once created, time/location/title cannot be modified (only counter-proposed or cancelled) |
+| 22 | Friends | Friend deletion doesn't clean up fully | Orphaned `friend_group_members` rows (deleted friend still in groups), active/pending meetups persist as "proposed" forever, old `suggestion_events` remain |
+
+### Architectural Insights
+
+1. **Notification type overload:** `meetup_request` used for 4+ semantic events (initial invite, decline, counter-propose, maybe RSVP) causes false dedup suppression
+2. **Calendar sync destructive:** DELETE all → INSERT new creates brief zero-availability window; if insert fails, user has zero data until next sync
+3. **Group schema orphaned:** `friend_groups` + `friend_group_members` tables exist in schema but have zero API layer (complete CRUD missing — this is a production blocker)
+4. **Time validation missing:** No temporal checks on meetup creation (past times accepted, backward times accepted)
+5. **Timezone fragility:** Calendar sync notification text uses Firebase Functions server locale, not per-recipient timezone
+
+### Recommendations (Priority Order)
+
+**Hotfixes (this sprint):**
+1. Wire missing `POST /availability/group-overlap` endpoint (call existing `multi-friend-overlap`)
+2. Add future-time and endTime > startTime validation to meetup creation
+
+**Sprint 1:**
+- Implement full group CRUD (POST /groups, GET /groups, PATCH /groups/:id, DELETE /groups/:id, member management)
+- Fix simultaneous cross-request race (prevent upsert from overwriting invited_by)
+- Add counter-propose auto-cancel for 1:1 meetups
+- Fix `zonedToUtc` DST edge case
+
+**Sprint 2:**
+- Fix `syncUserToDb` error handling (use api wrapper, proper error recovery)
+- Implement notification type differentiation (separate types for counter-propose vs initial invite)
+- Add per-recipient timezone localization for notification text
+- Eliminate calendar sync delete-before-insert window (use upsert or transaction)
+- Add push suppression when app is in foreground
+
+**Backlog:**
+- Implement notification preferences/muting
+- Add old notification cleanup/TTL job
+- Implement "edit meetup" capability
+- Add input length validation middleware
+
+### Full Report
+
+See `.squad/decisions/inbox/sokka-functional-testing.md` for complete details:
+- Per-flow breakdown: Works Correctly ✅, Bugs Found 🐛, Missing Functionality 🚫, Edge Cases ⚠️
+- Line-by-line code references (AuthContext.tsx, index.ts, schema.sql, component files)
+- Test coverage gaps and privacy considerations
+- Edge cases and social dynamics review
+
+---
