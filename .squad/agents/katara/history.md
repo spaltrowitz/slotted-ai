@@ -74,3 +74,11 @@ Fixed 3 critical frontend vulnerabilities from full audit:
 - **FIX 2:** Removed 3 credential-logging console.log statements: Apple Calendar username/response in AuthContext, FCM token in usePushNotifications. Browser console should never show secrets.
 - **FIX 3:** Replaced dummy Firebase config placeholders in `firebase-messaging-sw.js` with build-time substitution pattern (`__FIREBASE_*__` tokens). Added `firebaseSwEnvPlugin()` Vite plugin in `vite.config.ts` that injects `VITE_FIREBASE_*` env vars into the SW during production builds.
 - TypeScript compiles clean after all changes.
+
+### NPM Vulnerability Audit Fixed (2025-07-25)
+
+Resolved all 16 npm vulnerabilities (5 moderate, 10 high, 1 critical → 0):
+
+- **`npm audit fix`** resolved 12 issues: axios SSRF, protobufjs RCE (critical), vite path traversal, rollup file write, flatted DoS, lodash code injection, minimatch/picomatch ReDoS, postcss XSS, follow-redirects header leak, ajv ReDoS, brace-expansion hang.
+- **npm override** for `serialize-javascript>=7.0.5` resolved remaining 4 high-severity issues in the `vite-plugin-pwa → workbox-build → @rollup/plugin-terser → serialize-javascript` chain. The upstream hasn't released a fix yet, so override is necessary.
+- TypeScript compilation verified clean after all changes.

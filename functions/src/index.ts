@@ -9,6 +9,7 @@ import type { calendar_v3 } from "googleapis";
 import { createDAVClient, DAVCalendar, DAVObject } from "tsdav";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 import { Client as GraphClient } from "@microsoft/microsoft-graph-client";
+import { createHmac } from "crypto";
 import { getSupabase } from "./supabase";
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,33 @@ if (missingVars.length) {
 }
 
 const GOOGLE_WEBHOOK_SECRET = process.env.GOOGLE_WEBHOOK_SECRET || "";
+const OAUTH_STATE_SECRET = process.env.OAUTH_STATE_SECRET || "";
+
+// HMAC-signed OAuth state helpers (prevents CSRF on OAuth callbacks)
+const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+
+function signOAuthState(uid: string): string {
+  if (!OAUTH_STATE_SECRET) throw new Error("OAUTH_STATE_SECRET not configured");
+  const timestamp = Date.now().toString();
+  const hmac = createHmac("sha256", OAUTH_STATE_SECRET)
+    .update(`${uid}:${timestamp}`)
+    .digest("hex");
+  return `${uid}:${timestamp}:${hmac}`;
+}
+
+function verifyOAuthState(state: string): { uid: string; valid: boolean } {
+  if (!OAUTH_STATE_SECRET) return { uid: "", valid: false };
+  const parts = state.split(":");
+  if (parts.length !== 3) return { uid: "", valid: false };
+  const [uid, timestamp, receivedHmac] = parts;
+  const expectedHmac = createHmac("sha256", OAUTH_STATE_SECRET)
+    .update(`${uid}:${timestamp}`)
+    .digest("hex");
+  if (expectedHmac !== receivedHmac) return { uid: "", valid: false };
+  const age = Date.now() - parseInt(timestamp, 10);
+  if (age > OAUTH_STATE_MAX_AGE_MS || age < 0) return { uid: "", valid: false };
+  return { uid, valid: true };
+}
 
 const app = express();
 
@@ -987,6 +1015,9 @@ const SENSITIVE_FIELDS = [
   "apple_caldav_username",
   "calendar_watch_channel",
   "calendar_watch_expiry",
+  "outlook_access_token",
+  "outlook_refresh_token",
+  "outlook_token_expires_at",
 ];
 
 function stripSensitive(user: Record<string, any>) {
@@ -1295,8 +1326,57 @@ app.delete("/users/me/fcm-token", requireAuth, async (req: AuthRequest, res: Res
 });
 
 // ---------------------------------------------------------------------------
-// Friends routes
+// Account Deletion (GDPR / App Store compliance)
 // ---------------------------------------------------------------------------
+
+/** DELETE /account — permanently delete user account and all associated data */
+app.delete("/account", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) {
+      // Idempotent — user already deleted from DB, clean up Firebase auth
+      try {
+        await admin.auth().deleteUser(req.uid!);
+      } catch {}
+      res.json({ success: true, message: "Account deleted" });
+      return;
+    }
+
+    const userId = me.id;
+    const supabase = getSupabase();
+
+    // Delete in dependency order (child records first)
+    await supabase.from("fcm_tokens").delete().eq("user_id", userId);
+    await supabase.from("notifications").delete().eq("user_id", userId);
+    await supabase.from("user_calendars").delete().eq("user_id", userId);
+    await supabase.from("manual_busy_blocks").delete().eq("user_id", userId);
+    await supabase.from("availability_slots").delete().eq("user_id", userId);
+    await supabase.from("saved_events").delete().eq("user_id", userId);
+    await supabase.from("event_invites").delete().or(`sender_id.eq.${userId},recipient_id.eq.${userId}`);
+    await supabase.from("meetup_participants").delete().eq("user_id", userId);
+    await supabase.from("meetup_logs").delete().eq("user_id", userId);
+    await supabase.from("friendships").delete().or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`);
+    await supabase.from("pending_invites").delete().eq("inviter_id", userId);
+    await supabase.from("feedback").delete().eq("user_id", userId);
+    await supabase.from("users").delete().eq("id", userId);
+
+    // Delete Firebase Auth account
+    try {
+      await admin.auth().deleteUser(req.uid!);
+    } catch (authErr: any) {
+      // Auth user may already be gone — not fatal
+      console.warn("Firebase auth deletion note:", authErr.code);
+    }
+
+    // Audit log (no PII — just the event)
+    console.log(`ACCOUNT_DELETED: db_user_id=${userId} at ${new Date().toISOString()}`);
+
+    res.json({ success: true, message: "Account deleted" });
+  } catch (err: any) {
+    console.error("Account deletion error:", err);
+    res.status(500).json({ error: "Failed to delete account. Please try again or contact support." });
+  }
+});
 
 /** GET /friends — list current user's friendships with friend details */
 app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
@@ -1379,9 +1459,7 @@ app.get("/friends", requireAuth, async (req: AuthRequest, res: Response) => {
         friend: {
           id: friend.id,
           displayName: friend.display_name,
-          email: friend.email,
           photoUrl: friend.photo_url,
-          socialBattery: friend.social_battery,
           neighborhood: friend.neighborhood,
           timezone: friend.timezone,
           calendarConnected: strictCalendarConnected,
@@ -1505,6 +1583,25 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
     if (invitee.id === me.id) {
       res.status(400).json({ error: "Cannot friend yourself" });
       return;
+    }
+
+    // Check for declined friendship with cooldown (7 days)
+    const iAmACheck = me.id < invitee.id;
+    const [checkA, checkB] = iAmACheck ? [me.id, invitee.id] : [invitee.id, me.id];
+    const { data: existingFriendship } = await getSupabase()
+      .from("friendships")
+      .select("status, updated_at")
+      .eq("user_a_id", checkA)
+      .eq("user_b_id", checkB)
+      .single();
+
+    if (existingFriendship?.status === "declined") {
+      const declinedAt = new Date(existingFriendship.updated_at).getTime();
+      const cooldownMs = 7 * 24 * 60 * 60 * 1000;
+      if (Date.now() - declinedAt < cooldownMs) {
+        res.status(429).json({ error: "You can send another invite soon" });
+        return;
+      }
     }
 
     // Auto-detect friendship type based on neighborhoods
@@ -4446,7 +4543,7 @@ app.get("/dashboard", requireAuth, async (req: AuthRequest, res: Response) => {
     // 1. Get accepted friends
     const { data: friendships } = await getSupabase()
       .from("friendships")
-      .select("*, user_a:users!friendships_user_a_id_fkey(id,display_name,photo_url,social_battery,neighborhood,timezone), user_b:users!friendships_user_b_id_fkey(id,display_name,photo_url,social_battery,neighborhood,timezone)")
+      .select("*, user_a:users!friendships_user_a_id_fkey(id,display_name,photo_url,neighborhood,timezone), user_b:users!friendships_user_b_id_fkey(id,display_name,photo_url,neighborhood,timezone)")
       .or(`user_a_id.eq.${me.id},user_b_id.eq.${me.id}`)
       .eq("status", "accepted");
 
@@ -4458,7 +4555,6 @@ app.get("/dashboard", requireAuth, async (req: AuthRequest, res: Response) => {
         id: friend.id,
         displayName: friend.display_name,
         photoUrl: friend.photo_url,
-        socialBattery: friend.social_battery,
         neighborhood: friend.neighborhood,
         timezone: friend.timezone,
         friendshipType,
@@ -6732,7 +6828,7 @@ app.get("/calendar/auth-url", requireAuth, async (req: AuthRequest, res: Respons
         "https://www.googleapis.com/auth/calendar.events.readonly",
         "https://www.googleapis.com/auth/calendar.events",
       ],
-      state: req.uid, // pass Firebase UID so the callback can associate the tokens
+      state: signOAuthState(req.uid!),
     });
     res.json({ url });
   } catch (err: any) {
@@ -6743,9 +6839,14 @@ app.get("/calendar/auth-url", requireAuth, async (req: AuthRequest, res: Respons
 /** GET /calendar/callback — exchange the OAuth code for tokens */
 app.get("/calendar/callback", async (req: Request, res: Response) => {
   const code = req.query.code as string;
-  const state = req.query.state as string; // Firebase UID
+  const state = req.query.state as string;
   if (!code || !state) {
     res.status(400).json({ error: "Missing code or state" });
+    return;
+  }
+  const { uid: firebaseUid, valid } = verifyOAuthState(state);
+  if (!valid) {
+    res.status(403).json({ error: "Invalid or expired OAuth state" });
     return;
   }
   try {
@@ -6766,7 +6867,7 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
     await getSupabase()
       .from("users")
       .update(updates)
-      .eq("firebase_uid", state);
+      .eq("firebase_uid", firebaseUid);
 
     // After storing tokens, auto-fetch the user's calendar list and store defaults
     oauth2.setCredentials(tokens);
@@ -6774,7 +6875,7 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
     const calListRes = await calendar.calendarList.list();
     const calendars = calListRes.data.items || [];
 
-    const dbUser = await getDbUser(state);
+    const dbUser = await getDbUser(firebaseUid);
     if (dbUser) {
       for (const cal of calendars) {
         const { data: existing } = await getSupabase()
@@ -7419,7 +7520,7 @@ app.get("/calendar/outlook/auth-url", requireAuth, async (req: AuthRequest, res:
     const authUrl = await msalClient.getAuthCodeUrl({
       scopes: MICROSOFT_SCOPES,
       redirectUri: process.env.MICROSOFT_REDIRECT_URI || "https://slotted-ai.web.app/api/calendar/outlook/callback",
-      state: req.uid!,
+      state: signOAuthState(req.uid!),
       prompt: "consent",
     });
     res.json({ url: authUrl });
@@ -7434,6 +7535,11 @@ app.get("/calendar/outlook/callback", async (req: Request, res: Response) => {
   const state = req.query.state as string;
   if (!code || !state) {
     res.status(400).json({ error: "Missing code or state" });
+    return;
+  }
+  const { uid: firebaseUid, valid } = verifyOAuthState(state);
+  if (!valid) {
+    res.status(403).json({ error: "Invalid or expired OAuth state" });
     return;
   }
   try {
@@ -7452,7 +7558,7 @@ app.get("/calendar/outlook/callback", async (req: Request, res: Response) => {
         outlook_token_expires_at: tokenResponse.expiresOn?.toISOString() || null,
         outlook_calendar_connected: true,
       })
-      .eq("firebase_uid", state);
+      .eq("firebase_uid", firebaseUid);
 
     // Fetch and store user's Outlook calendars
     const graphClient = GraphClient.init({
@@ -7462,7 +7568,7 @@ app.get("/calendar/outlook/callback", async (req: Request, res: Response) => {
     const calendarsRes = await graphClient.api("/me/calendars").get();
     const calendars = calendarsRes.value || [];
 
-    const dbUser = await getDbUser(state);
+    const dbUser = await getDbUser(firebaseUid);
     if (dbUser) {
       for (const cal of calendars) {
         const { data: existing } = await getSupabase()
@@ -9334,9 +9440,13 @@ export const findCalendarMatches = onSchedule("every day 09:00", async (event) =
 // body.secret field.
 // ---------------------------------------------------------------------------
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET || "slotted-admin-2026";
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
 
 function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (!ADMIN_SECRET) {
+    res.status(403).json({ error: "Forbidden — admin access disabled" });
+    return;
+  }
   const secret =
     (req.headers["x-admin-secret"] as string) ||
     req.body?.secret;

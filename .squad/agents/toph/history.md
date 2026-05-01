@@ -113,3 +113,11 @@
 - **Sokka found:** Outlook tokens NOT in SENSITIVE_FIELDS (leaked to client), no account deletion endpoint (GDPR), friend list exposes all emails, no input validation, DST timezone bugs, 10 untested critical paths
 
 **Decisions written to:** `.squad/decisions.md` (all findings merged and deduplicated 2026-04-30)
+
+### Security Audit Architecture Decisions (May 2026)
+
+- **RLS Strategy:** Chose defensive policies (Option A). Service-role bypass means zero runtime cost, but policies activate if anon/authenticated role ever hits the DB. Pure defense-in-depth. Key nuance: `auth.uid()` maps to Supabase Auth not Firebase Auth — policies are a safety net for non-service-role scenarios only.
+- **Token Encryption:** Chose Supabase Vault (pgsodium) with separate `oauth_tokens` table. Vault handles key rotation natively, no Firebase Functions secrets management needed. Protects against DB dump/backup exposure, not service-role compromise (that's what RLS is for).
+- **Meetup Race Condition:** Chose AFTER UPDATE trigger with `FOR UPDATE` lock on meetups row. Serializes concurrent acceptance checks atomically. Application code keeps notification logic but delegates state transition to the trigger.
+- **Implementation order:** Trigger (0.5d) → RLS policies (1-2d) → Token migration (2-3d). Quick wins first.
+- **Decisions written to:** `.squad/decisions/inbox/toph-arch-decisions.md`
