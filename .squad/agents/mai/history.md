@@ -98,3 +98,18 @@ The stage system was designed assuming linear progression (0 → 1 → 2 friends
 - `docs/10-ux-audit-checklist.md` — UX quality standards
 
 **Decision document:** `docs/plans/mai-homepage-recommendation.md` (full analysis + 3 options with tradeoffs)
+
+## Cross-Project PM/Strategist Knowledge (injected 2026-05-02)
+
+### From EatDiscounted (Kobayashi)
+- **Single-use retention is the biggest risk:** Users search once and leave. Solved with permalink pages (SEO), saved restaurants + alerts (converts lookup tool to monitoring tool), and deals-near-me (10x product potential). Apply to Slotted: what makes users come back after booking first hangout?
+- **Monetization: affiliate links first.** Passive, validates signal before building complex models.
+- **Partnership outreach for closed platforms:** B2B pitch offering free user acquisition in exchange for data access. Win-win positioning as distribution channel, not competitor.
+- **Audience sizing: ~30-50K power users** in a niche is enough to validate. Growth via community (Twitter/Reddit), not paid ads.
+
+### From Scrunch (Kenickie)
+- **Fastest aha moment = primary CTA.** Ingredient Checker (15 sec, zero friction) beat Product Discovery because it's instant and unique. For Slotted, the aha is "see overlapping free times" — make that reachable in <30 seconds.
+- **Visitor flow: Test → Trust → Explore → Personalize.** First interaction builds trust. Don't front-load personalization or settings.
+- **Invisible onboarding: no gates before value.** Behavioral signals > explicit profiling. Learn preferred times from behavior, don't ask.
+- **Homepage CTA priority framework:** Rank by (1) time-to-aha, (2) friction level, (3) uniqueness to product. Only one primary CTA.
+- **Beta sprint prioritization:** Lean ship mentality — 280 products + existing auth + invisible onboarding. Don't add complexity before launch. Applied to Slotted: ship core scheduling loop first, defer Events/Groups/Activity Feed.

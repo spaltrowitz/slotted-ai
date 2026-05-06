@@ -1,113 +1,61 @@
 # Katara — History
 
-## Project Context
-- **Project:** Slotted — AI-powered friendship maintenance app syncing with Google Calendar
-- **Owner:** Shari Paltrowitz
-- **Stack:** React 19 + TS + Tailwind v4 + Vite (client/), Firebase Functions + Express (functions/), Supabase PostgreSQL
-- **Frontend structure:** components in client/src/components/, pages in client/src/pages/, API calls in client/src/lib/api.ts, contexts in client/src/contexts/
+## Key Patterns & Corrections
+
+### Security Fixes (Critical)
+1. **Hardcoded developer email removed** from AuthContext referral fallback. Referral attribution now only works with explicit `?ref=` param.
+2. **Credential logging removed** from AuthContext (Apple Calendar username, API response), usePushNotifications (FCM token), firebase-messaging-sw.js (push payload). Browser extensions can harvest logged credentials.
+3. **Firebase SW config hardening:** Replaced dummy keys with `__FIREBASE_*__` placeholders. New `firebaseSwEnvPlugin()` in vite.config.ts replaces at build time. Push notifications require: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`.
+
+### Functional Bug Fixes (Sokka Audit)
+1. **Group scheduling endpoint:** Changed `POST /availability/group-overlap` → `/multi-friend-overlap` in GroupAvailability.tsx.
+2. **Notification timestamps:** `timeAgo()` normalizes server timestamps lacking timezone suffix (append 'Z' for UTC).
+3. **Meetup past-time validation:** Client-side validation in FriendAvailability, GroupAvailability, CounterProposePanel preventing past times and ensuring endTime > startTime.
+4. **DST-safe timezone display:** Verified — app uses `toLocaleString()`/`Intl.DateTimeFormat` which handle DST correctly.
+
+### NPM Vulnerability Audit
+- Resolved all 16 vulnerabilities (5 moderate, 10 high, 1 critical → 0).
+- `npm audit fix` resolved 12 (axios SSRF, protobufjs RCE, vite path traversal, rollup, flatted, lodash, etc.)
+- `npm override` for `serialize-javascript>=7.0.5` resolved remaining 4 in `vite-plugin-pwa → workbox-build` chain.
+- **Action item:** Monitor vite-plugin-pwa releases; remove override when upstream fixes.
+
+### Security Audit Findings
+- **High:** Open redirect in OAuth flows (`window.location.href = data.url` trusts server). Direct fetch() bypasses token interceptor.
+- **Accessibility gaps:** StarRating (no ARIA/keyboard), AddToCalendarModal (no dialog role/focus trap), CalendarPicker (checkboxes lack labels), FriendsPage (role="button" missing Space key).
+- **TypeScript debt:** 12+ `err: any` in catch blocks → should be `AxiosError` or `Error`.
+- **Verified safe:** Fresh `getIdToken()` per request ✅, no `dangerouslySetInnerHTML` ✅, ProtectedRoute guards ✅, Bearer auth CSRF-resistant ✅, lazy-loaded routes ✅, soft social language ✅.
+
+## Cross-Project Frontend Knowledge (injected 2026-05-02)
+
+### From EatDiscounted (Hockney)
+- **SSE streaming:** AbortController on ReadableStream. Abort-on-new-search, 30s timeout, cleanup on unmount.
+- **Accessibility:** `aria-label` on inputs, `aria-live="polite"` + `role="status"` + `aria-busy`, `aria-current="page"`, `sr-only` (built into Tailwind v4).
+- **Error vs empty state:** Distinct states. 429 → rate-limit message.
+- **Premium design:** 2px borders, hover shadows + scale transforms, not-found at 60% opacity.
+- **React 19 lint:** `Promise.resolve().then()` microtask for transitive setState.
+
+### From MyDailyWin (Mipha, Urbosa, Alumni)
+- **XSS:** `escapeHtml()` for text, `data-*` + `addEventListener()` for onclick. innerHTML loop: array.push() + join('').
+- **Modal accessibility:** `<button>` with `aria-label`, `role="dialog"` + `aria-modal="true"`.
+- **Storage key pattern:** Dual-write, canonical suffix. Divergent codebases → consolidation.
+- **ARIA tabs:** tablist/tab/tabpanel with aria-selected. Scrollable tab strip, `overflow-x: auto` tables.
+- **localStorage:** All JSON.parse in try/catch. Dark mode via CSS variables + `data-theme`. Responsive: 375/768/1024px, 44px targets.
+
+### From Scrunch (Frenchy)
+- **Component decomposition:** Extract, `React.memo`, stable props. "Show More" pagination.
+- **Toast system:** `ToastProvider` + `useToast()`. Wire all mutations.
+- **setState-in-effect → render-time sync.** `useMemo` for dependency stability.
+- **React Query placeholderData** for instant navigation. Auth loading: never return null.
+- **Mobile:** 44px targets, grid-based rating buttons. Legal TikTok: text-only with links.
+
+### From HealthStitch (Kaylee)
+- **CSS design system:** Custom properties, skeleton loaders, sync freshness indicator.
+- **VITE_API_URL:** Single client module for all API calls. `fetchStatus` wrapper swallows errors → null.
+
+## Session Archive Summary
+
+Katara completed 5 sessions: critical security fixes (hardcoded email, credential logging, Firebase SW build-time substitution), 4 functional bug fixes from Sokka's audit (endpoint, timezone, past-time validation, DST verification), npm vulnerability audit (16→0 via audit fix + override), full security audit participation (3 critical + 3 high findings), and cross-agent coordination on friends/dashboard response changes. All changes TypeScript-verified.
 
 ## Learnings
 
-<!-- Append learnings below -->
-
-### Functional Bug Fixes (2025-07-25)
-
-Fixed 4 frontend bugs from Sokka's flow testing audit:
-
-1. **FIX 1 — Group scheduling endpoint** (CRITICAL): Changed `POST /availability/group-overlap` to `POST /availability/multi-friend-overlap` in `GroupAvailability.tsx`. Backend alias being added by Zuko but frontend is the canonical fix.
-
-2. **FIX 2 — Notification timestamps timezone**: Updated `timeAgo()` in both `NotificationsPage.tsx` and `NotificationDropdown.tsx` to normalize server timestamps that may lack timezone suffixes (append 'Z' for UTC interpretation). Prevents off-by-hours when server returns timestamps without timezone info.
-
-3. **FIX 3 — Meetup past-time validation**: Added client-side validation in `FriendAvailability.tsx`, `GroupAvailability.tsx`, and `CounterProposePanel.tsx` preventing booking of past times (`"Pick a time that hasn't happened yet 😊"`) and ensuring endTime > startTime.
-
-4. **FIX 4 — DST-safe timezone display**: Verified no manual UTC offset math exists in frontend. App already uses `toLocaleString()`/`toLocaleTimeString()`/`Intl.DateTimeFormat` which handle DST correctly. No changes needed.
-
-**Build Status:** TypeScript ✅ compiles with no errors.
-
-### Critical Security Audit Completed (2026-04-30)
-
-Fixed 3 critical frontend vulnerabilities from full audit:
-
-1. **Hardcoded Developer Email Removed** — Removed `sharipaltrowitz@gmail.com` from AuthContext referral fallback logic. Referral attribution now only works when `?ref=` param is explicitly present. Eliminates PII leakage in production code.
-
-2. **Credential Logging Removed** — Stripped sensitive logs from:
-   - `AuthContext.tsx` (Apple Calendar username, API response data)
-   - `usePushNotifications.ts` (FCM token)
-   - `public/firebase-messaging-sw.js` (push payload data)
-   - Rationale: Browser extensions and DevTools can harvest logged credentials.
-
-3. **Firebase Service Worker Config Hardening** — Replaced dummy Firebase keys in `public/firebase-messaging-sw.js` with `__FIREBASE_*__` placeholders. New `firebaseSwEnvPlugin()` in `vite.config.ts` replaces at build time with `VITE_FIREBASE_*` environment variables. Push notifications now require explicit env var configuration at build time.
-
-**Build Status:** TypeScript build ✅ passes with no errors. Auth flow functional, no breaking changes. Push notifications require: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` set at build time.
-
-**Backend Dependencies:** Coordinated with Zuko on friends list refactor (email removed) and dashboard (social battery removed from friend data). Frontend components updated to handle missing fields gracefully.
-
-### Security Audit (2026-04-30 — Full Team Audit)
-
-**Scope:** Full end-to-end security, vulnerability, and quality audit (Toph, Zuko, Katara, Sokka)
-
-**3 Critical findings affecting frontend:**
-1. **Hardcoded developer email in `AuthContext.tsx:65`** — `localStorage.setItem('slotted_referrer_email', 'sharipaltrowitz@gmail.com')` — personal PII in production code. Remove immediately.
-2. **Sensitive console logs leaking credentials** — Apple Calendar username (line 261), full API response (263), FCM tokens (usePushNotifications.ts:55), push payload (88), background message payload (firebase-messaging-sw.js:24)
-3. **Firebase SW placeholder API keys** — `public/firebase-messaging-sw.js` has TODO placeholders. Push notifications non-functional in production until real keys injected via build step.
-
-**3 High findings affecting frontend:**
-1. **Open redirect in OAuth flows** — `AuthContext.tsx:236, 305` uses `window.location.href = data.url` trusting server response. Decision needed: whitelist allowed redirect domains (google.com, microsoft.com)?
-2. **Direct fetch() bypasses token interceptor** — `AuthContext.tsx:122-140` uses raw fetch() instead of `api` client. Decision: standardize all API calls through `lib/api.ts`?
-3. **FriendsPage performance** — `renderFriendRow` creates new handler functions per render (line 193-260). Decision: extract to React.memo component?
-
-**Accessibility gaps (team awareness):**
-- StarRating: no ARIA roles, no keyboard navigation, color-only feedback
-- AddToCalendarModal: no `role="dialog"`, no focus trap
-- CalendarPicker: checkboxes lack `<label>` elements
-- FriendsPage: `role="button"` elements lack full keyboard support (only Enter, not Space)
-
-**TypeScript `any` debt:**
-- 12+ instances of `err: any` in catch blocks across AuthContext, CalendarPicker, GroupAvailability, FriendAvailability, CounterProposePanel
-- Should be typed as `AxiosError` or `Error`
-
-**Security verified safe (no action needed):**
-- Auth tokens: Fresh `getIdToken()` per request via axios interceptor ✅
-- No XSS: No `dangerouslySetInnerHTML` anywhere ✅
-- Route protection: ProtectedRoute properly guards authenticated pages ✅
-- CSRF: Bearer token auth inherently CSRF-resistant ✅
-- Environment vars: Firebase config uses `VITE_` prefix correctly ✅
-- PWA caching: NetworkOnly for auth endpoints ✅
-- Code splitting: All routes lazy-loaded with retry logic ✅
-- Soft social language verified across all user-facing copy ✅
-
-**Cross-team findings affecting frontend:**
-- **Zuko found OAuth CSRF:** Backend uses bare Firebase UID as `state` parameter. Frontend auth flows rely on server not being malicious.
-- **Sokka found email harvesting:** Friend list response includes emails (backend issue, but affects frontend users' privacy expectations)
-- **Toph found protobufjs RCE:** npm audit critical vulnerability (frontend dependency, needs update)
-
-**Decisions written to:** `.squad/decisions.md` (all findings merged 2026-04-30)
-
-### 2025-04-30 — Security Hotfix (Critical)
-- **FIX 1:** Removed hardcoded developer email (`sharipaltrowitz@gmail.com`) from AuthContext referral logic. The else-branch was a dev shortcut and leaked PII.
-- **FIX 2:** Removed 3 credential-logging console.log statements: Apple Calendar username/response in AuthContext, FCM token in usePushNotifications. Browser console should never show secrets.
-- **FIX 3:** Replaced dummy Firebase config placeholders in `firebase-messaging-sw.js` with build-time substitution pattern (`__FIREBASE_*__` tokens). Added `firebaseSwEnvPlugin()` Vite plugin in `vite.config.ts` that injects `VITE_FIREBASE_*` env vars into the SW during production builds.
-- TypeScript compiles clean after all changes.
-
-### NPM Vulnerability Audit Fixed (2025-07-25)
-
-Resolved all 16 npm vulnerabilities (5 moderate, 10 high, 1 critical → 0):
-
-- **`npm audit fix`** resolved 12 issues: axios SSRF, protobufjs RCE (critical), vite path traversal, rollup file write, flatted DoS, lodash code injection, minimatch/picomatch ReDoS, postcss XSS, follow-redirects header leak, ajv ReDoS, brace-expansion hang.
-- **npm override** for `serialize-javascript>=7.0.5` resolved remaining 4 high-severity issues in the `vite-plugin-pwa → workbox-build → @rollup/plugin-terser → serialize-javascript` chain. The upstream hasn't released a fix yet, so override is necessary.
-- TypeScript compilation verified clean after all changes.
-
-### Session Completion: Remaining Audit Fixes (2026-05-01)
-
-**npm Audit Override Documented:**
-- Added `"overrides": { "serialize-javascript": ">=7.0.5" }` to client/package.json
-- Result: 16 vulnerabilities → 0 vulnerabilities
-- Trade-off: Override may require removal once vite-plugin-pwa upstream releases fix
-- Risk level: Low — serialize-javascript 7.x backward-compatible for build-time serialization
-- **Action item:** Monitor vite-plugin-pwa releases; remove override when fixed
-
-**Coordination:**
-- Backend (Zuko) completed 3 critical security fixes + npm audit analysis (11 unfixable in uuid deps)
-- Toph delivered 3 architecture decisions with full implementation specs
-- Orchestration logs: `.squad/orchestration-log/2026-05-01T16:26:49Z-*.md`
-- Session log: `.squad/log/2026-05-01T16:26:49Z-session.md`
+- **FriendsPage dual-state bug:** `selectedFriendId` (single-friend view) and `groupFriendIds` (group view) are independent state. When transitioning between views, BOTH must be managed — clear the other when activating one. Render guards alone aren't sufficient; state cleanup on transitions prevents stale views from reappearing if the guard condition changes later.

@@ -1,0 +1,4 @@
+log/*.md
+!log/.gitkeep
+decisions/inbox/*.md
+!decisions/inbox/.gitkeep

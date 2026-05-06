@@ -1,196 +1,85 @@
 # Zuko — History
 
-## Project Context
-- **Project:** Slotted — AI-powered friendship maintenance app syncing with Google Calendar
-- **Owner:** Shari Paltrowitz
-- **Stack:** Firebase Functions + Express + TS (functions/), Supabase PostgreSQL (database/schema.sql), Firebase Auth
-- **Backend structure:** routes in functions/src/index.ts, Supabase client in functions/src/supabase.ts, migrations in migrations/
+## Key Patterns & Corrections
+
+### Security Fixes (Critical)
+- **Admin secret:** Removed hardcoded fallback `"slotted-admin-2026"`. `requireAdmin` now fails closed (403) if env var unset.
+- **Outlook tokens:** Added `outlook_access_token`, `outlook_refresh_token`, `outlook_token_expires_at` to `SENSITIVE_FIELDS`.
+- **Friends privacy:** Removed `email` and `socialBattery` from GET `/friends` and `/dashboard` responses.
+- **OAuth HMAC:** Implemented HMAC validation on OAuth callbacks (Google, Outlook, Apple) for token interception prevention.
+- **Account deletion:** CASCADE from `users` + cancel meetups + notify participants + clear OAuth tokens from Vault + delete blocked_users + delete notifications.
+- **Friendship cooldown:** 30-day cooldown via `unfriended_at` timestamp before re-friendship.
+- **Block/mute:** `blocked_users` table with RLS, 3 endpoints (POST/DELETE /users/block/:userId, GET /users/blocked). Check on friend invite + meetup creation. Blocking removes existing friendship.
+
+### OAuth Token Vault Encryption
+- Created `oauth_tokens` table storing vault secret UUIDs per user+provider.
+- JSON blob of sensitive fields (access_token, refresh_token, caldav_password) stored as Vault secrets.
+- Non-sensitive metadata (token_expires_at, caldav_username) stored in plaintext.
+- SQL helper functions (`upsert_oauth_tokens`, `get_oauth_tokens`, `clear_oauth_tokens`) are SECURITY DEFINER.
+- `getDbUser()`/`getDbUserById()` overlay decrypted tokens — existing code works unchanged.
+- Old columns renamed `_deprecated` (not dropped) for rollback safety.
+- Vault secrets named `oauth:{user_id}:{provider}`.
+
+### RLS & Race Condition Fixes
+- **RLS policies:** Defensive policies on all 17 tables. `get_current_user_id()` SECURITY DEFINER maps `auth.uid()` → internal UUID. Separate policies per operation per table. Service_role bypasses.
+- **Meetup acceptance trigger:** AFTER UPDATE trigger with FOR UPDATE lock on meetups. Atomically transitions to 'confirmed' when last participant accepts.
+
+### Groups Removal
+- Removed 5 group endpoints, group auto-join on signup, `group_id` from pending_invites select.
+- Renamed `/availability/group-overlap` → `/availability/multi-friend-overlap`.
+- Kept `scoreGroupOverlaps()` helper (still used) and multi-friend scheduling endpoint.
+- Migration: `migrations/remove_groups.sql` (drops tables, restores constraints).
+
+### Functional Bug Fixes (Sokka Audit)
+- Route alias: `POST /availability/group-overlap` forwards to `/multi-friend-overlap`.
+- Cross friend-request deadlock: Auto-accepts both if mutual pending invites exist.
+- Past-time validation: Rejects start times <5 min from now (400).
+- endTime > startTime validation on meetup creation and counter-propose.
+- Counter-propose: Sets original meetup to `"counter_proposed"` status.
+- Calendar sync: Replaced delete-then-insert with upsert + stale record cleanup.
+- Notification dedup: Counter-propose uses `"meetup_counter_proposed"`, decline uses `"meetup_declined"`.
+- Multi-person decline: Auto-cancels if all non-creator participants decline.
+- Meetup expiry: `cleanupExpiredMeetups` scheduled function (daily 6am).
+- Calendar nudge: Rate-limited notification (max 1/week per pair) when overlap returns 0 and friend lacks calendar.
+
+### E2E Compatibility
+- Backend accepts both camelCase and snake_case for all endpoints.
+- Created `migrations/add_manual_busy_blocks.sql`.
+- Duplicate meetup detection: Returns 409 with existing meetup ID.
+- Deleted friend error: 410 "no longer on Slotted" vs 403 "must be accepted friends".
+
+## Cross-Project Backend Knowledge (injected 2026-05-02)
+
+### From EatDiscounted (Fenster)
+- **Rate limiting:** Per-IP sliding window. 429 + `Retry-After`. Verify wired in.
+- **In-memory caching:** TTL-based. Key: `entity::source`. Lost on deploy — needs Redis for serverless.
+- **Security:** `.env.local` in `.gitignore`. Check git history. Rotate exposed keys.
+
+### From MyDailyWin (Daruk, alumni)
+- **Firebase Auth + Firestore ownership:** `ownerEmail` + admins subcollection. Never trust localStorage for authorization.
+- **Firestore rules:** `request.auth != null` alone too permissive — need ownership scoping + field validation.
+- **XSS via innerHTML:** 45+ instances. Always sanitize user-provided and OAuth-returned content.
+
+### From Scrunch (Danny)
+- **Supabase count-only:** `select('id', { count: 'exact', head: true })` for stats endpoints.
+- **Loading gate anti-pattern:** Use `placeholderData` + `staleTime`. Render defaults immediately.
+- **Search relevance:** Domain-aware extraction > generic NLP. Multi-query with dedup.
+
+### From HealthStitch (Wash)
+- **Sync architecture:** WHOOP = backend-pull, Apple Watch = iOS-push. Different strategies per source.
+- **Metric normalization:** Never compare cross-source metrics directly. Separate baselines.
+- **PostgreSQL migration:** `datetime('now')` → `NOW()`, `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`.
 
 ## Learnings
 
-<!-- Append learnings below -->
+### Calendar Event Removal on Cancel/Decline
+- Created `removeCalendarEvent(user, eventId)` helper — tries Google, Outlook, Apple in order; fails silently on 404/410/disconnected.
+- Created `removeCalendarEventsForMeetup(meetupId, excludeUserId?)` — bulk removes for all participants with a `google_event_id`.
+- Created `removeCalendarEventForParticipant(meetupId, userId)` — single-user removal for individual declines.
+- Integrated into 5 code paths: 2-person decline (auto-cancel), 3+ person all-declined, 3+ person individual decline, manual cancel ("didn't happen"), account deletion (other participants only), and expired meetup cleanup.
+- The `google_event_id` column on `meetup_participants` stores event IDs for ALL providers (Google, Outlook, Apple) — naming is legacy but functional.
+- `getAuthedCalendarClient` requires `firebase_uid`, not the internal user `id`. Always pass via user record.
 
-### Critical Security Audit Completed (2026-04-30)
+## Session Archive Summary
 
-Fixed 4 critical backend vulnerabilities from full audit:
-
-1. **Admin Secret Hardcoding** — Removed hardcoded fallback `"slotted-admin-2026"` from `requireAdmin`. Admin endpoints now fail closed (403) unless `ADMIN_SECRET` env var is explicitly set. Deployment must configure this env var explicitly.
-
-2. **Outlook Tokens Leakage** — Added `outlook_access_token`, `outlook_refresh_token`, `outlook_token_expires_at` to `SENSITIVE_FIELDS`. These tokens are now stripped from all user responses before sending to client. No impact on existing clients — fields were never intentionally exposed.
-
-3. **Friends Email Disclosure** — Removed `email` field from GET `/friends` response. Friends now see: `id`, `displayName`, `photoUrl`, `neighborhood`, `timezone`, `calendarConnected`, `eventInterests`. Backward-compatible change.
-
-4. **Social Battery Leakage** — Removed `socialBattery` from GET `/friends` and GET `/dashboard` friend queries. Social battery remains visible only to user themselves via `/profile`. Frontend dashboard/friends cards must remove references to this field.
-
-**Build Status:** `npm run build` ✅ passes. All changes backward-compatible. Deploy-ready pending frontend verification.
-
-**Frontend Dependencies:** Katara verified friends list and dashboard don't expect `email` or `socialBattery` fields.
-
-### Phase 1 Groups Backend Removal Completed (2026-03-05T18:22:54Z)
-Phase 1 backend Groups removal completed successfully. Orchestration log: `.squad/orchestration-log/2026-03-05T18:22:54Z-agent-12-zuko.md`. Decision merged to `.squad/decisions.md`. Migration created (`migrations/remove_groups.sql`) but NOT executed — awaiting Toph's schema review. Cross-agent dependency: Katara's GroupAvailability.tsx must update API call to `/availability/multi-friend-overlap`. Build passes clean.
-
-### Phase 1: Groups Backend Removal (2026-XX-XX)
-
-**Removed (~434 lines net):**
-- 5 group endpoints: GET /groups, POST /groups, PUT /groups/:id, POST /groups/:id/members, DELETE /groups/:id (lines 3344–3776 original)
-- Group auto-join on signup: removed `friend_group_members` upsert from pending invite processing (~18 lines, around line 933)
-- Removed `group_id` from `pending_invites` select in signup flow (line 888)
-- Removed 4 group notification creation calls (added to group, removed from group, left group, joined group)
-- Renamed route `/availability/group-overlap` → `/availability/multi-friend-overlap` (route + EXPENSIVE_PATHS constant)
-
-**Kept:**
-- `scoreGroupOverlaps()` helper function — still used by both 1-on-1 `scoreOverlaps()` and the multi-friend overlap endpoint. Name is internal-only.
-- POST `/availability/multi-friend-overlap` endpoint — core multi-friend scheduling logic, just renamed.
-
-**Dependencies found:**
-- `group_id` column on `pending_invites` — referenced in signup auto-connect. Removed from backend code; migration file created but not executed.
-- Line 5701 comment mentions `self_groups` — this refers to Meetup.com API, NOT Slotted groups. No change needed.
-- No orphaned imports found (groups code only used standard helpers like `getDbUser`, `getSupabase`, `createNotification`, `getAcceptedFriendIdSet`).
-
-**Migration created:** `migrations/remove_groups.sql` — drops `friend_group_members`, `friend_groups`, removes `group_id` from `pending_invites`, restores original unique constraint. NOT executed — awaiting Toph's review.
-
-**Build status:** `npm run build` passes clean.
-
-## Core Context (Summarized prior work)
-
-### 2026-03-03 & Earlier: Critical Production Fixes
-
-**Firebase deployment:** Functions live at https://api-xwsmuazwmq-uc.a.run.app. Fixed 3 critical bugs (feedback loop prevention via `rsvp_source` guards, disconnect cleanup orphaned channels, webhook must always return 200). Added CORS origin validation. Fixed HIGH-severity group meetup reschedule protection and 410 stale sync token retry logic. Added `DEFAULT_HANGOUT_WINDOWS` filter to restrict suggestions to Fri 5–11 PM, Sat 9 AM–11 PM, Sun 9 AM–5 PM.
-
-**Notification deduplication:** Fixed unique index too broad (was blocking group membership notifications). Narrowed to `friend_request` only. Verified all `createNotification("friend_accepted")` call sites covered by cascading dedup (1hr relatedUserId → 5min relatedId → 10min title).
-
-**Key patterns:** 
-- Any Google webhook must return 200 for all requests (even errors) or Google deactivates the endpoint
-- For stale sync tokens (410), clear and retry immediately in the same webhook call
-- `friend_accepted` is overloaded (real acceptances + group add/remove) — future work should use `group_update` type
-- Use Supabase `{ count: "exact", head: true }` for efficient count-only queries
-
----
-
-### E2E Compatibility Sprint — Manual Busy Blocks + Backend API Normalization (2026-03-05)
-
-**Summary:** Created manual busy blocks migration and normalized backend API to accept both camelCase and snake_case naming conventions across all endpoints. Build passes. 5 backend compatibility issues resolved.
-
-**Deliverables:**
-
-1. **Migration:** `migrations/add_manual_busy_blocks.sql` (UUID PK, user_id FK, start_time/end_time, reason, created_at, RLS policies)
-2. **Backend Normalizations:**
-   - POST /groups: Accept both `memberIds` and `member_ids`
-   - GET /friends: Return `id` + `friendshipId` + raw DB fields (`user_a_id`, `user_b_id`, `invited_by`)
-   - PATCH /friends/:id: Accept `{ status: "accepted" }` as alias for `{ action: "accept" }`
-   - POST /meetups: Accept both camelCase (`friendIds`, `startTime`, `endTime`) and snake_case variants
-   - POST /events/save: UUID field correctly saved and returned
-
-**Build Status:** `npm run build` passes, no type errors.
-
-**Impact:** Enables 12–16 of 16 remaining E2E test scenarios to pass once migration is applied in Supabase.
-
-**Cross-Agent Synergy:** Sokka's test infrastructure fixes (polling, client normalizations) pair perfectly with these backend normalizations. Both delivered in parallel; they unlock each other.
-
----
-
-## Security Audit (2026-04-30 — Full Team Audit)
-
-Full-spectrum audit with Toph (architecture), Katara (frontend), and Sokka (testing). Findings merged to `.squad/decisions.md`.
-
-### Critical Issues Found (Cross-Team)
-
-| # | Severity | Issue | Found By | Related |
-|---|----------|-------|----------|---------|
-| 1 | 🔴 CRITICAL | Admin secret hardcoded fallback (`"slotted-admin-2026"`) | Zuko, Sokka | Toph aware |
-| 2 | 🔴 CRITICAL | OAuth tokens stored plaintext in DB | Zuko, Toph | Sokka noted in memory |
-| 3 | 🔴 CRITICAL | Outlook tokens NOT in SENSITIVE_FIELDS → leaked | Sokka | Zuko + Toph didn't catch |
-| 4 | 🔴 CRITICAL | No account deletion endpoint (GDPR violation) | Sokka | New finding |
-| 5 | 🔴 CRITICAL | Friend list includes all email addresses | Sokka | Privacy leak |
-| 6 | 🟠 HIGH | OAuth callbacks use bare Firebase UID as `state` (CSRF) | Zuko | Needs signature/nonce |
-| 7 | 🟠 HIGH | Apple CalDAV password stored plaintext | Zuko | Same encryption as #2 |
-| 8 | 🟡 MEDIUM | In-memory rate limiter per-instance | Zuko, Sokka | Needs Redis/Firestore |
-
-### Critical Issues (Zuko-specific findings)
-
-- OAuth token encryption strategy needed (AES-256-GCM vs Vault vs KMS)
-- `stripSensitive()` (line 982) missing Outlook fields — frontend sees all tokens
-- `getDbUser()` uses `select("*")` including token columns — internal leak risk
-
-### Frontend Cross-Link (Katara findings affecting backend)
-
-- **Hardcoded email:** Also appears in Zuko's concerns (PII exposure)
-- **OAuth open redirect:** `window.location.href = data.url` — relies on backend not being malicious
-- **Direct fetch() bypass:** Client bypasses token refresh logic via raw fetch
-
-### Test Coverage (Sokka findings)
-
-- **Untested critical path:** OAuth token refresh/expiry (500+ lines)
-- **Untested critical path:** Admin endpoints (zero coverage, hardcoded secret is the only barrier)
-- **Untested critical path:** Concurrent operations (race condition on meetup confirm noted)
-- **Recommendation:** Integration tests with mock Google API should be first priority
-
-### Architecture Decisions Pending
-
-1. Token encryption strategy (Supabase Vault vs app-layer vs KMS)
-2. RLS policy strategy (define defensively now vs service-role-only intentional)
-3. Share code format (UUID-based instead of 3-char)
-4. Meetup confirm race condition (DB trigger vs atomic update)
-
-
-### Security Audit Fixes (Critical) — $(date +%Y-%m-%d)
-- Removed hardcoded admin secret fallback `"slotted-admin-2026"` — now fails closed if env var missing
-- Added `outlook_access_token`, `outlook_refresh_token`, `outlook_token_expires_at` to SENSITIVE_FIELDS
-- Stripped `email` and `socialBattery` from GET /friends response (prevents email harvesting + battery leakage)
-- Removed `social_battery` from dashboard friend query select + response mapping
-- The `requireAdmin` middleware now rejects all requests when ADMIN_SECRET env var is unset (fail-closed)
-- Build verified passing with esbuild after all changes
-
-### Remaining Audit Fixes Delivered (2026-05-01)
-
-Completed 3 of 4 remaining security audit fixes + architecture decisions received:
-
-**Backend Code Fixes:**
-1. **Account Deletion** — Implemented DELETE CASCADE from `users` table to all referencing tables. Migration: `database/migrations/add_user_delete_cascade.sql`
-2. **OAuth HMAC** — Implemented HMAC validation on OAuth callback handlers for Google, Outlook, Apple. Prevents token interception via callback signature verification against provider secrets. Updated in `functions/src/index.ts`
-3. **Friendship Cooldown** — Implemented 30-day cooldown between friendship deletion and re-friendship. Added `unfriended_at` timestamp; queries validate `NOW() - unfriended_at > 30 days` before allowing new friendship. Migration: `database/migrations/add_friendship_cooldown.sql`
-
-**npm Audit Status:**
-- Completed full audit sweep; 11 moderate/low vulnerabilities remain in uuid transitive dependencies
-- These are unfixable without breaking changes — upstream uuid and dependencies have no available patches
-- Documented in coordination notes; no further action possible without major version bumps
-
-**Architecture Decisions from Toph (Ready for Implementation):**
-- **Decision 3 (Quick Win):** Meetup race condition → AFTER UPDATE trigger with FOR UPDATE lock (0.5 day)
-- **Decision 1 (Defense):** RLS policies on all 18 tables (1-2 days)
-- **Decision 2 (Critical):** OAuth tokens → Supabase Vault with `oauth_tokens` table (2-3 days)
-- Implementation order: 3 → 1 → 2
-- Full specs in `.squad/decisions.md`
-
-**Build Status:** ✅ All changes passing. Ready for migration deployment.
-
-**Cross-Agent Coordination:**
-- Katara completed npm audit fix (16 → 0 vulnerabilities) via serialize-javascript override
-- Toph finalized 3 architecture decisions with full implementation specs
-- Orchestration logs: `.squad/orchestration-log/2026-05-01T16:26:49Z-*.md`
-
-### Functional Bug Fixes (Sokka Audit) — 2026-05-XX
-
-Fixed 7 functional bugs identified during Sokka's flow testing audit:
-
-1. **Route alias** — Added `POST /availability/group-overlap` forwarding to `/availability/multi-friend-overlap`. Both routes now work.
-2. **Cross friend-request deadlock** — Before creating a pending friendship, checks if the other user already has a pending invite TO current user. If so, auto-accepts both and notifies both parties.
-3. **Past-time validation** — Meetup creation rejects start times less than 5 minutes from now (400).
-4. **endTime < startTime** — Both meetup creation and counter-propose endpoints validate endTime > startTime (400).
-5. **Counter-propose orphan** — Original meetup status set to `"counter_proposed"` when a counter-proposal is created.
-6. **Calendar sync upsert** — Replaced destructive delete-then-insert with upsert pattern + stale record cleanup. No zero-availability window.
-7. **Notification dedup types** — Counter-propose notifications now use `"meetup_counter_proposed"`, declines use `"meetup_declined"`. Filter logic updated to include new types.
-
-**Build Status:** ✅ `npm run build` passes clean.
-
-### Backlog Items Implemented (2026-05-01)
-
-**Meetup acceptance trigger** — Created `migrations/meetup_acceptance_trigger.sql` with an AFTER UPDATE trigger on `meetup_participants.rsvp`. When the last participant accepts, the trigger atomically locks the meetups row (FOR UPDATE) and transitions status to 'confirmed'. Guards against double-firing (skips if already non-proposed). This replaces the race-prone application-level check.
-
-**Defensive RLS policies** — Created `migrations/add_rls_policies.sql` covering all 17 RLS-enabled tables. Uses a `get_current_user_id()` helper function (SECURITY DEFINER) to map `auth.uid()` → internal UUID. Policies enforce owner-only or participant-only access patterns. These only apply via anon/authenticated keys — service_role bypasses them.
-
-**Key patterns:**
-- `auth.uid() = firebase_uid` for tables with direct firebase_uid column (users, feedback)
-- `user_id = get_current_user_id()` for tables with user_id FK
-- Subquery EXISTS for join-table access (meetups via meetup_participants, friend_group_members via friend_groups)
-- Separate SELECT/INSERT/UPDATE/DELETE policies per table for granular control
+Zuko completed 10+ sessions: critical security audit fixes (admin secret, token leakage, email/socialBattery stripping), Groups backend removal (~434 lines), E2E compatibility sprint (API normalization, manual busy blocks migration), OAuth HMAC validation, account deletion with full CASCADE, friendship cooldown, block/mute feature, 7 functional bug fixes from Sokka's audit, 8 multi-user interaction bug fixes, meetup acceptance trigger (FOR UPDATE lock), defensive RLS policies (17 tables), and OAuth token Vault encryption (full migration with rollback safety). All changes build-verified.
