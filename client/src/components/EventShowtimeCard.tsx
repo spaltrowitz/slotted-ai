@@ -124,18 +124,7 @@ export default function EventShowtimeCard({
             ))}
           </div>
 
-          {/* Ticket link */}
-          {showtime.ticketUrl && (
-            <a
-              href={showtime.ticketUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="mt-2 inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 min-h-[44px] text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 hover:border-gray-300"
-            >
-              🎟️ Tickets
-            </a>
-          )}
+
         </div>
       </div>
     </button>

@@ -145,3 +145,15 @@ Zuko completed 10+ sessions: critical security audit fixes (admin secret, token 
 - **Key change:** No longer calls `syncUserCalendar()` from this endpoint (was unnecessary overhead — the freeBusy API gives real-time answers). Retained OAuth token presence check for connectivity.
 - **Response reasons:** `"calendar_not_connected"` (no tokens), `"calendar_check_failed"` (API error or auth failure), `"busy"` (confirmed conflict from freeBusy).
 - Build verified ✅, deployed to `https://api-xwsmuazwmq-uc.a.run.app`.
+
+### Event Schedule Multi-Calendar Fix (Apple + Outlook)
+- **Problem:** `POST /events/schedule` only checked Google Calendar freeBusy API. Users with Apple Calendar (CalDAV) connected had their Apple events ignored — showing them as "free" when they actually had conflicts.
+- **Root cause:** The freeBusy loop called only `google.calendar.freebusy.query()`. If a user had Apple Calendar as their only or additional source, those events were invisible.
+- **Fix:** After the Google freeBusy check, added Apple Calendar (CalDAV) and Outlook Calendar checks:
+  - Apple: Queries `user_calendars` for selected Apple calendars, calls existing `fetchAppleBusyBlocks()` helper with the showtime window.
+  - Outlook: Queries `user_calendars` for selected Outlook calendars, calls Microsoft Graph `calendarView` API.
+  - A user is "busy" if ANY connected source has a conflict (short-circuit: stops checking once busy is confirmed).
+  - Removed the hard gate that required a Google Calendar client — users with only Apple/Outlook calendars now work correctly.
+- **Reused:** `fetchAppleBusyBlocks()` (existing CalDAV helper), `getOutlookGraphClient()` (existing MSAL helper), `user_calendars` table with `source` + `is_selected` filtering.
+- Build verified ✅, deployed to `https://api-xwsmuazwmq-uc.a.run.app`.
+

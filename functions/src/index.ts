@@ -6612,42 +6612,119 @@ app.post("/events/schedule", requireAuth, async (req: AuthRequest, res: Response
           continue;
         }
 
-        const client = calendarClients[i];
-        if (!client) {
-          conflicts.push({ name, reason: "calendar_check_failed" });
-          continue;
-        }
+        const client = calendarClients[i]; // may be null if no Google calendar
 
         // Direct freeBusy check for this specific time window
-        try {
-          const calendarApi = google.calendar({ version: "v3", auth: client });
-          const freeBusyRes = await calendarApi.freebusy.query({
-            requestBody: {
-              timeMin: windowStart.toISOString(),
-              timeMax: windowEnd.toISOString(),
-              items: [{ id: "primary" }],
-            },
-          });
+        // Check ALL connected calendar sources (Google, Apple, Outlook)
+        let isBusy = false;
+        let checkFailed = false;
 
-          const busySlots = freeBusyRes.data.calendars?.primary?.busy || [];
-          const errors = freeBusyRes.data.calendars?.primary?.errors;
+        // --- Google Calendar freeBusy ---
+        if (client && profile?.google_refresh_token) {
+          try {
+            const calendarApi = google.calendar({ version: "v3", auth: client });
+            const freeBusyRes = await calendarApi.freebusy.query({
+              requestBody: {
+                timeMin: windowStart.toISOString(),
+                timeMax: windowEnd.toISOString(),
+                items: [{ id: "primary" }],
+              },
+            });
 
-          if (errors && errors.length > 0) {
-            console.warn(`freeBusy errors for user ${profile?.id}:`, errors);
-            conflicts.push({ name, reason: "calendar_check_failed" });
-            continue;
+            const busySlots = freeBusyRes.data.calendars?.primary?.busy || [];
+            const errors = freeBusyRes.data.calendars?.primary?.errors;
+
+            if (errors && errors.length > 0) {
+              console.warn(`freeBusy errors for user ${profile?.id}:`, errors);
+              checkFailed = true;
+            } else if (busySlots.length > 0) {
+              isBusy = true;
+            }
+          } catch (err: any) {
+            console.error(`Google freeBusy API failed for user ${profile?.id}:`, err?.message || err);
+            checkFailed = true;
           }
+        }
 
-          // If no busy slots overlap the window, user is free
-          if (busySlots.length === 0) {
-            allFree.push(name);
-          } else {
-            conflicts.push({ name, reason: "busy" });
+        // --- Apple Calendar (CalDAV) ---
+        if (!isBusy && profile?.apple_calendar_connected && profile?.apple_caldav_username && profile?.apple_caldav_password) {
+          try {
+            const sb = getSupabase();
+            const { data: selectedAppleCals } = await sb
+              .from("user_calendars")
+              .select("calendar_id")
+              .eq("user_id", profile.id)
+              .eq("is_selected", true)
+              .eq("source", "apple");
+
+            const appleCalUrls = selectedAppleCals?.map((c: any) => c.calendar_id) || [];
+            if (appleCalUrls.length > 0) {
+              const appleBlocks = await fetchAppleBusyBlocks(
+                profile.apple_caldav_username,
+                profile.apple_caldav_password,
+                appleCalUrls,
+                windowStart,
+                windowEnd,
+              );
+              if (appleBlocks.length > 0) {
+                isBusy = true;
+              }
+            }
+            // If we got here without error, clear any previous checkFailed from Google
+            if (!profile.google_refresh_token) checkFailed = false;
+          } catch (err: any) {
+            console.error(`Apple CalDAV check failed for user ${profile?.id}:`, err?.message || err);
+            if (!profile.google_refresh_token) checkFailed = true;
           }
-        } catch (err: any) {
-          console.error(`freeBusy API failed for user ${profile?.id}:`, err?.message || err);
-          // Can't confirm busy — show as unknown, not busy
+        }
+
+        // --- Outlook Calendar ---
+        if (!isBusy && profile?.outlook_calendar_connected && profile?.outlook_refresh_token) {
+          try {
+            const fbUid = isMe ? req.uid! : profile.firebase_uid;
+            const graphClient = fbUid ? await getOutlookGraphClient(fbUid) : null;
+            if (graphClient) {
+              const sb = getSupabase();
+              const { data: selectedOutlookCals } = await sb
+                .from("user_calendars")
+                .select("calendar_id")
+                .eq("user_id", profile.id)
+                .eq("is_selected", true)
+                .eq("source", "outlook");
+
+              for (const cal of selectedOutlookCals || []) {
+                try {
+                  const eventsRes = await graphClient
+                    .api(`/me/calendars/${cal.calendar_id}/calendarView`)
+                    .query({
+                      startDateTime: windowStart.toISOString(),
+                      endDateTime: windowEnd.toISOString(),
+                    })
+                    .select("start,end,showAs")
+                    .top(50)
+                    .get();
+                  const outlookEvents = eventsRes?.value || [];
+                  const hasBusyEvent = outlookEvents.some((e: any) => e.showAs !== "free");
+                  if (hasBusyEvent) {
+                    isBusy = true;
+                    break;
+                  }
+                } catch (calErr) {
+                  console.error(`Outlook calendar ${cal.calendar_id} check failed:`, calErr);
+                }
+              }
+            }
+          } catch (err: any) {
+            console.error(`Outlook check failed for user ${profile?.id}:`, err?.message || err);
+          }
+        }
+
+        if (isBusy) {
+          conflicts.push({ name, reason: "busy" });
+        } else if (checkFailed) {
           conflicts.push({ name, reason: "calendar_check_failed" });
+        } else {
+          allFree.push(name);
         }
       }
 

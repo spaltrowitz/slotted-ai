@@ -97,7 +97,20 @@ export default function EventShowtimesPoll({
         </div>
       ) : (
         <p className="text-xs text-gray-500">
-          Check all the dates that work for you — calendar hints are suggestions, you decide 🗓️
+          Check all the dates that work for you
+          {sorted[0]?.ticketUrl && (
+            <>
+              {' · '}
+              <a
+                href={sorted[0].ticketUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 font-medium text-violet-600 hover:text-violet-800"
+              >
+                🎟️ Tickets
+              </a>
+            </>
+          )}
         </p>
       )}
 
