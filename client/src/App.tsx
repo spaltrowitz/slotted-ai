@@ -37,6 +37,7 @@ const PrivacyPolicyPage = lazyWithRetry(() => import('./pages/PrivacyPolicyPage'
 const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePage'), 'terms');
 const InvitePage = lazyWithRetry(() => import('./pages/InvitePage'), 'invite');
 const EventSharePage = lazyWithRetry(() => import('./pages/EventSharePage'), 'event-share');
+const EventInviteLandingPage = lazyWithRetry(() => import('./pages/EventInviteLandingPage'), 'event-invite');
 const HelpPage = lazyWithRetry(() => import('./pages/HelpPage'), 'help');
 
 // Prefetch the dashboard chunk after initial page load
@@ -129,6 +130,7 @@ export default function App() {
               <Route path="/terms" element={<TermsOfServicePage />} />
               <Route path="/invite/:code" element={<InvitePage />} />
               <Route path="/e/:code" element={<EventSharePage />} />
+              <Route path="/event-invite/:token" element={<EventInviteLandingPage />} />
 
               {/* Protected routes */}
               <Route element={<ProtectedRoute />}>

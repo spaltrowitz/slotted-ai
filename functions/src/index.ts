@@ -9,7 +9,7 @@ import type { calendar_v3 } from "googleapis";
 import { createDAVClient, DAVCalendar, DAVObject } from "tsdav";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 import { Client as GraphClient } from "@microsoft/microsoft-graph-client";
-import { createHmac } from "crypto";
+import { createHmac, randomBytes } from "crypto";
 import { getSupabase } from "./supabase";
 
 // ---------------------------------------------------------------------------
@@ -5643,6 +5643,18 @@ function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
   });
 }
 
+/**
+ * Waterfall search: Ticketmaster first, SeatGeek only if TM returns 0 results.
+ * Eliminates cross-platform duplication by only ever querying one ticketing platform per search.
+ */
+async function searchTicketedEvents(params: {
+  q: string; city?: string; type?: string; dateFrom?: string; dateTo?: string; perPage?: number;
+}): Promise<ExternalEvent[]> {
+  const tmResults = await searchTicketmaster(params);
+  if (tmResults.length > 0) return tmResults;
+  return searchSeatGeek(params);
+}
+
 /** Search SeatGeek for events */
 async function searchSeatGeek(params: {
   q: string;
@@ -6193,23 +6205,13 @@ app.get("/events/suggest", requireAuth, async (req: AuthRequest, res: Response) 
       return;
     }
 
-    const [sgItems, tmItems] = await Promise.all([
-      suggestSeatGeek(q, city),
-      suggestTicketmaster(q, city),
-    ]);
-
-    // Merge and deduplicate by title similarity
-    const seen = new Set<string>();
-    const merged: SuggestionItem[] = [];
-    for (const item of [...sgItems, ...tmItems]) {
-      const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 30);
-      if (!seen.has(key)) {
-        seen.add(key);
-        merged.push(item);
-      }
+    // Waterfall: Ticketmaster first, SeatGeek only if TM returns nothing
+    let items = await suggestTicketmaster(q, city);
+    if (items.length === 0) {
+      items = await suggestSeatGeek(q, city);
     }
 
-    res.json({ suggestions: merged.slice(0, 10) });
+    res.json({ suggestions: items.slice(0, 10) });
   } catch (err: any) {
     console.error("Event suggest error:", err);
     res.json({ suggestions: [] });
@@ -6267,21 +6269,20 @@ app.get("/events/discover", requireAuth, async (req: AuthRequest, res: Response)
           dateTo,
           perPage: Math.ceil(perPage / Math.max(searchQueries.length, 1)),
         };
-        const [sgEvents, tmEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
-          searchSeatGeek(searchParams),
-          searchTicketmaster(searchParams),
+        const [ticketedEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
+          searchTicketedEvents(searchParams),
           searchEventbrite(searchParams),
           searchMeetup(searchParams),
           searchNYCOpenData(searchParams),
         ]);
-        return [...sgEvents, ...tmEvents, ...ebEvents, ...muEvents, ...nycEvents];
+        return [...ticketedEvents, ...ebEvents, ...muEvents, ...nycEvents];
       }),
     );
 
     const allEvents = allResultSets.flat();
     allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
-    // Deduplicate across sources (e.g. Hamilton on both SeatGeek & Ticketmaster)
+    // Deduplicate across interest-based queries that may return the same event
     const unique = deduplicateEvents(allEvents);
 
     // Paginate
@@ -6313,25 +6314,21 @@ app.get("/events/search", requireAuth, async (req: AuthRequest, res: Response) =
       return;
     }
 
-    // Search all APIs in parallel
-    const [sgEvents, tmEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
-      searchSeatGeek({ q, city, type, dateFrom, dateTo }),
-      searchTicketmaster({ q, city, type, dateFrom, dateTo }),
+    // Waterfall: Ticketmaster first, SeatGeek fallback. Other sources in parallel.
+    const [ticketedEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
+      searchTicketedEvents({ q, city, type, dateFrom, dateTo }),
       searchEventbrite({ q, city, type, dateFrom, dateTo }),
       searchMeetup({ q, city, type, dateFrom, dateTo }),
       searchNYCOpenData({ q, city, type, dateFrom, dateTo }),
     ]);
 
-    // Merge and deduplicate across sources
-    const allEvents = [...sgEvents, ...tmEvents, ...ebEvents, ...muEvents, ...nycEvents];
+    const allEvents = [...ticketedEvents, ...ebEvents, ...muEvents, ...nycEvents];
     allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
-    const dedupedEvents = deduplicateEvents(allEvents);
 
     res.json({
-      events: dedupedEvents,
+      events: allEvents,
       sources: {
-        seatgeek: sgEvents.length,
-        ticketmaster: tmEvents.length,
+        ticketed: ticketedEvents.length,
         eventbrite: ebEvents.length,
         meetup: muEvents.length,
         nyc_open_data: nycEvents.length,
@@ -6359,17 +6356,15 @@ app.post("/events/match", requireAuth, async (req: AuthRequest, res: Response) =
     const me = await getDbUser(req.uid!);
     if (!me) { res.status(404).json({ error: "User not found" }); return; }
 
-    // 1. Search events from all sources
-    const [sgEvents, tmEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
-      searchSeatGeek({ q, city, type, dateFrom, dateTo }),
-      searchTicketmaster({ q, city, type, dateFrom, dateTo }),
+    // 1. Search events — waterfall for ticketed, other sources in parallel
+    const [ticketedEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
+      searchTicketedEvents({ q, city, type, dateFrom, dateTo }),
       searchEventbrite({ q, city, type, dateFrom, dateTo }),
       searchMeetup({ q, city, type, dateFrom, dateTo }),
       searchNYCOpenData({ q, city, type, dateFrom, dateTo }),
     ]);
-    const allEvents = [...sgEvents, ...tmEvents, ...ebEvents, ...muEvents, ...nycEvents];
+    const allEvents = [...ticketedEvents, ...ebEvents, ...muEvents, ...nycEvents];
     allEvents.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
-    const dedupedEvents = deduplicateEvents(allEvents);
 
     // 2. Sync calendars for all participants
     const friendUsers = await Promise.all(friendIds.map((fid: string) => getDbUserById(fid)));
@@ -6403,7 +6398,7 @@ app.post("/events/match", requireAuth, async (req: AuthRequest, res: Response) =
     // 4. For each event, check if its time falls within everyone's free slots
     const matches: (ExternalEvent & { availabilityScore: number; note: string })[] = [];
 
-    for (const ev of dedupedEvents) {
+    for (const ev of allEvents) {
       if (!ev.datetime) continue;
       const eventStart = new Date(ev.datetime);
       const eventEnd = new Date(eventStart.getTime() + 3 * 3600000); // Assume ~3hr event
@@ -6456,12 +6451,11 @@ app.post("/events/match", requireAuth, async (req: AuthRequest, res: Response) =
       : "No showtimes match everyone's availability. Try expanding the date range.";
 
     res.json({
-      events: dedupedEvents,
+      events: allEvents,
       matches,
       message,
       sources: {
-        seatgeek: sgEvents.length,
-        ticketmaster: tmEvents.length,
+        ticketed: ticketedEvents.length,
       },
     });
   } catch (err: any) {
@@ -6475,6 +6469,222 @@ function freeCount(matches: { availabilityScore: number }[]) {
   const best = matches[0]?.availabilityScore || 0;
   return best >= 100 ? "everyone" : "some";
 }
+
+/** POST /events/schedule — event-anchored group scheduling with detailed availability */
+app.post("/events/schedule", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { query: q, friendIds, location, dateRange } = req.body;
+    if (!q?.trim()) {
+      res.status(400).json({ error: "Query is required" });
+      return;
+    }
+    if (!Array.isArray(friendIds) || friendIds.length === 0) {
+      res.status(400).json({ error: "friendIds must be a non-empty array" });
+      return;
+    }
+
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    // Validate all friendIds are accepted friends
+    const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
+    const requestedFriendIds = [...new Set(
+      friendIds.filter((fid: unknown): fid is string => typeof fid === "string" && !!fid && fid !== me.id),
+    )];
+    const unauthorizedFriendIds = requestedFriendIds.filter((fid) => !acceptedFriendIds.has(fid));
+    if (unauthorizedFriendIds.length > 0) {
+      res.status(403).json({ error: "All friendIds must be accepted friends" });
+      return;
+    }
+
+    // 1. Search events (Ticketmaster-first waterfall)
+    const searchParams = {
+      q,
+      city: location,
+      dateFrom: dateRange?.start,
+      dateTo: dateRange?.end,
+    };
+    const events = await searchTicketedEvents(searchParams);
+
+    if (events.length === 0) {
+      res.json({ event: null, showtimes: [], message: "No events found for that query." });
+      return;
+    }
+
+    // Group events by normalized title to identify the primary event
+    const primaryTitle = normalizeTitle(events[0].title);
+    const matchingEvents = events.filter((e) => titlesMatch(normalizeTitle(e.title), primaryTitle));
+    const eventInfo = {
+      title: matchingEvents[0].title,
+      venue: matchingEvents[0].venue,
+      city: matchingEvents[0].city,
+      type: matchingEvents[0].type,
+      imageUrl: matchingEvents[0].imageUrl,
+    };
+
+    // 2. Fetch friend DB records + check calendar connectivity via OAuth tokens
+    const friendUsers = await Promise.all(requestedFriendIds.map((fid: string) => getDbUserById(fid)));
+
+    // Determine calendar connectivity by checking actual OAuth tokens (not strictCalendarCheck
+    // which requires recent busy blocks and fails for users with empty calendars)
+    const hasCalendarConnected = (user: any): boolean => {
+      if (!user) return false;
+      return !!(
+        user.google_refresh_token ||
+        (user.outlook_calendar_connected && user.outlook_refresh_token) ||
+        (user.apple_calendar_connected && user.apple_caldav_username && user.apple_caldav_password)
+      );
+    };
+
+    const meCalendarConnected = hasCalendarConnected(me);
+    const friendCalendarConnected = friendUsers.map((fu) => hasCalendarConnected(fu));
+
+    // 3. Get authenticated calendar clients for direct freeBusy checks
+    const allProfiles = [me, ...friendUsers];
+    const allFirebaseUids = [
+      req.uid!,
+      ...friendUsers.map((u) => u?.firebase_uid).filter(Boolean) as string[],
+    ];
+
+    // Build per-user Google Calendar clients (null if unavailable)
+    const calendarClients = await Promise.all(
+      allProfiles.map(async (profile, idx) => {
+        if (!profile) return null;
+        const isMe = idx === 0;
+        const calConnected = isMe ? meCalendarConnected : friendCalendarConnected[idx - 1];
+        if (!calConnected) return null;
+        const fbUid = isMe ? req.uid! : profile.firebase_uid;
+        if (!fbUid) return null;
+        try {
+          return await getAuthedCalendarClient(fbUid);
+        } catch (err) {
+          console.error(`Failed to get calendar client for user ${profile.id}:`, err);
+          return null;
+        }
+      }),
+    );
+
+    // 4. For each showtime, check per-person availability via direct freeBusy API
+    const DEFAULT_SHOW_DURATION_MS = 2.5 * 3600000; // 2.5 hours for theater
+    const PRE_BUFFER_MS = 1 * 3600000; // 1 hour before
+    const POST_BUFFER_MS = 30 * 60000; // 30 min after
+
+    const allUserIds = [me.id, ...requestedFriendIds];
+    const participantNames = [
+      me.display_name?.split(" ")[0] || "You",
+      ...friendUsers.map((u) => u?.display_name?.split(" ")[0] || "Friend"),
+    ];
+
+    const showtimes: any[] = [];
+
+    for (const ev of matchingEvents) {
+      if (!ev.datetime && !ev.datetimeLocal) {
+        showtimes.push({
+          datetime: ev.datetimeLocal || ev.datetime || null,
+          dateOnly: true,
+          available: null,
+          allFree: [],
+          conflicts: [],
+          ticketUrl: ev.url,
+          price: { min: ev.priceMin || null, max: ev.priceMax || null },
+        });
+        continue;
+      }
+
+      const eventStart = new Date(ev.datetimeLocal || ev.datetime);
+      if (isNaN(eventStart.getTime())) continue;
+
+      const showDurationMs = DEFAULT_SHOW_DURATION_MS;
+      const windowStart = new Date(eventStart.getTime() - PRE_BUFFER_MS);
+      const windowEnd = new Date(eventStart.getTime() + showDurationMs + POST_BUFFER_MS);
+
+      const allFree: string[] = [];
+      const conflicts: { name: string; reason: string }[] = [];
+
+      for (let i = 0; i < allProfiles.length; i++) {
+        const name = participantNames[i];
+        const profile = allProfiles[i];
+        const isMe = i === 0;
+        const calConnected = isMe ? meCalendarConnected : friendCalendarConnected[i - 1];
+
+        if (!calConnected) {
+          conflicts.push({ name, reason: "calendar_not_connected" });
+          continue;
+        }
+
+        const client = calendarClients[i];
+        if (!client) {
+          conflicts.push({ name, reason: "calendar_check_failed" });
+          continue;
+        }
+
+        // Direct freeBusy check for this specific time window
+        try {
+          const calendarApi = google.calendar({ version: "v3", auth: client });
+          const freeBusyRes = await calendarApi.freebusy.query({
+            requestBody: {
+              timeMin: windowStart.toISOString(),
+              timeMax: windowEnd.toISOString(),
+              items: [{ id: "primary" }],
+            },
+          });
+
+          const busySlots = freeBusyRes.data.calendars?.primary?.busy || [];
+          const errors = freeBusyRes.data.calendars?.primary?.errors;
+
+          if (errors && errors.length > 0) {
+            console.warn(`freeBusy errors for user ${profile?.id}:`, errors);
+            conflicts.push({ name, reason: "calendar_check_failed" });
+            continue;
+          }
+
+          // If no busy slots overlap the window, user is free
+          if (busySlots.length === 0) {
+            allFree.push(name);
+          } else {
+            conflicts.push({ name, reason: "busy" });
+          }
+        } catch (err: any) {
+          console.error(`freeBusy API failed for user ${profile?.id}:`, err?.message || err);
+          // Can't confirm busy — show as unknown, not busy
+          conflicts.push({ name, reason: "calendar_check_failed" });
+        }
+      }
+
+      showtimes.push({
+        datetime: (ev.datetimeLocal || ev.datetime),
+        available: conflicts.length === 0,
+        allFree,
+        conflicts,
+        ticketUrl: ev.url,
+        price: { min: ev.priceMin || null, max: ev.priceMax || null },
+      });
+    }
+
+    // Sort: available first, then by date
+    showtimes.sort((a: any, b: any) => {
+      if (a.available === b.available) {
+        const aTime = a.datetime ? new Date(a.datetime).getTime() : 0;
+        const bTime = b.datetime ? new Date(b.datetime).getTime() : 0;
+        return aTime - bTime;
+      }
+      if (a.available === true) return -1;
+      if (b.available === true) return 1;
+      if (a.available === null) return 1; // date-only at end
+      return 0;
+    });
+
+    res.json({
+      event: eventInfo,
+      showtimes,
+      totalShowtimes: matchingEvents.length,
+      participants: participantNames,
+    });
+  } catch (err: any) {
+    console.error("Event schedule error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Saved Events — bookmark events for later
@@ -6801,14 +7011,10 @@ app.get("/events/suggestions", requireAuth, async (req: AuthRequest, res: Respon
     const allEventSets = await Promise.all(
       interestsToSearch.slice(0, 3).map(async (interest) => {
         const searchParams = { q: interest, city: myCity, type: interest, dateFrom, dateTo, perPage: 10 };
-        const [sg, tm] = await Promise.all([
-          searchSeatGeek(searchParams),
-          searchTicketmaster(searchParams),
-        ]);
-        return [...sg, ...tm];
+        return searchTicketedEvents(searchParams);
       }),
     );
-    const allEvents = deduplicateEvents(allEventSets.flat());
+    const allEvents = allEventSets.flat();
     if (allEvents.length === 0) {
       res.json({ suggestions: [], message: `No upcoming events matching your interests in ${myCity}.` });
       return;
@@ -7033,6 +7239,206 @@ app.post("/events/share", requireAuth, async (req: AuthRequest, res: Response) =
       sent: sentTo.length,
       total: requestedFriendIds.length,
       errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Event-Anchored Friend Invite Links — invite non-users to join a scheduling poll
+// POST /events/friend-invite — create a shareable invite link
+// GET /events/friend-invite/:token — validate invite (unauthenticated)
+// POST /events/friend-invite/:token/accept — accept invite (authenticated)
+// ---------------------------------------------------------------------------
+
+app.post("/events/friend-invite", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { eventScheduleId, eventTitle, friendEmail, friendPhone, friendIds } = req.body;
+    if (!eventTitle?.trim()) {
+      res.status(400).json({ error: "eventTitle is required" });
+      return;
+    }
+
+    // Generate URL-safe token
+    const token = randomBytes(32).toString("base64url");
+
+    // Determine expiry: default 30 days from now (frontend can pass explicit expiresAt)
+    const expiresAt = req.body.expiresAt
+      ? new Date(req.body.expiresAt).toISOString()
+      : new Date(Date.now() + 30 * 24 * 3600000).toISOString();
+
+    const { data: invite, error } = await getSupabase()
+      .from("friend_invites")
+      .insert({
+        token,
+        inviter_id: me.id,
+        event_schedule_id: eventScheduleId || null,
+        event_title: eventTitle.trim(),
+        friend_ids: Array.isArray(friendIds) ? friendIds.filter((id: string) => id !== me.id) : [],
+        invited_email: friendEmail?.toLowerCase() || null,
+        invited_phone: friendPhone || null,
+        expires_at: expiresAt,
+      })
+      .select()
+      .single();
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+
+    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    res.json({
+      inviteId: invite.id,
+      inviteUrl: `${frontendUrl}/invite/${token}`,
+      token,
+      expiresAt: invite.expires_at,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/events/friend-invite/:token", async (req: Request, res: Response) => {
+  try {
+    const { token } = req.params;
+    if (!token) { res.status(400).json({ error: "Token is required" }); return; }
+
+    const { data: invite, error } = await getSupabase()
+      .from("friend_invites")
+      .select("*")
+      .eq("token", token)
+      .is("accepted_by", null)
+      .single();
+
+    if (error || !invite) {
+      res.status(404).json({ valid: false, error: "Invite not found or already used" });
+      return;
+    }
+
+    // Check expiry
+    if (new Date(invite.expires_at) < new Date()) {
+      res.json({ valid: false, error: "This invite has expired" });
+      return;
+    }
+
+    // Fetch inviter name
+    const { data: inviter } = await getSupabase()
+      .from("users")
+      .select("display_name")
+      .eq("id", invite.inviter_id)
+      .single();
+
+    // Fetch group member first names
+    const groupMembers: string[] = [];
+    if (invite.friend_ids && invite.friend_ids.length > 0) {
+      const { data: friends } = await getSupabase()
+        .from("users")
+        .select("display_name")
+        .in("id", invite.friend_ids);
+      if (friends) {
+        for (const f of friends) {
+          groupMembers.push(f.display_name?.split(" ")[0] || "Friend");
+        }
+      }
+    }
+
+    res.json({
+      valid: true,
+      eventTitle: invite.event_title,
+      inviterName: inviter?.display_name?.split(" ")[0] || "A friend",
+      groupMembers,
+      eventScheduleId: invite.event_schedule_id || null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/events/friend-invite/:token/accept", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { token } = req.params;
+    if (!token) { res.status(400).json({ error: "Token is required" }); return; }
+
+    const { data: invite, error: fetchErr } = await getSupabase()
+      .from("friend_invites")
+      .select("*")
+      .eq("token", token)
+      .single();
+
+    if (fetchErr || !invite) {
+      res.status(404).json({ error: "Invite not found" });
+      return;
+    }
+
+    if (invite.accepted_by) {
+      res.status(409).json({ error: "Invite already accepted" });
+      return;
+    }
+
+    if (new Date(invite.expires_at) < new Date()) {
+      res.status(410).json({ error: "Invite has expired" });
+      return;
+    }
+
+    if (invite.inviter_id === me.id) {
+      res.status(400).json({ error: "Cannot accept your own invite" });
+      return;
+    }
+
+    // Mark invite as accepted
+    const { error: updateErr } = await getSupabase()
+      .from("friend_invites")
+      .update({ accepted_by: me.id, accepted_at: new Date().toISOString() })
+      .eq("id", invite.id);
+
+    if (updateErr) { res.status(500).json({ error: updateErr.message }); return; }
+
+    // Auto-create friendships: invitee ↔ inviter + invitee ↔ all group members
+    const allFriendTargets = [invite.inviter_id, ...(invite.friend_ids || [])].filter(
+      (id: string) => id !== me.id,
+    );
+    const uniqueTargets = [...new Set(allFriendTargets)];
+
+    for (const targetId of uniqueTargets) {
+      const [userA, userB] = me.id < targetId ? [me.id, targetId] : [targetId, me.id];
+      await getSupabase()
+        .from("friendships")
+        .upsert(
+          {
+            user_a_id: userA,
+            user_b_id: userB,
+            invited_by: invite.inviter_id,
+            status: "accepted",
+            user_a_friendship_type: "local",
+            user_b_friendship_type: "local",
+          },
+          { onConflict: "user_a_id,user_b_id" },
+        );
+    }
+
+    // Notify inviter
+    await createNotification({
+      userId: invite.inviter_id,
+      type: "friend_accepted",
+      title: "Your invite was accepted!",
+      body: `${me.display_name?.split(" ")[0] || "Someone"} joined your ${invite.event_title} group via your invite link.`,
+      relatedUserId: me.id,
+      relatedId: invite.id,
+    });
+
+    // Trigger calendar sync for the new member
+    try { await syncUserCalendar(req.uid!); } catch { /* silent */ }
+
+    res.json({
+      success: true,
+      eventTitle: invite.event_title,
+      eventScheduleId: invite.event_schedule_id || null,
+      friendsCreated: uniqueTargets.length,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

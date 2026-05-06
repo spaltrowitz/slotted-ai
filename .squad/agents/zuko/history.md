@@ -95,3 +95,53 @@ Zuko completed 10+ sessions: critical security audit fixes (admin secret, token 
 - **Title normalization enhanced:** Now strips city suffixes like " - New York" that SeatGeek appends
 - **Matinee/evening safety:** 2hr tolerance ensures same-day matinee (2pm) and evening (7pm) remain separate
 - Deployed successfully. All functions updated.
+
+### Event Search Waterfall Strategy
+- **Problem:** Querying both Ticketmaster and SeatGeek in parallel caused cross-platform duplicates (same show appearing twice from different sources). The dedup logic was complex and imperfect (venue name mismatches, timezone handling).
+- **Fix:** Replaced parallel query + dedup with a waterfall: Ticketmaster first → if 0 results → SeatGeek fallback. Only one ticketing platform is ever queried per search.
+- **New helper:** `searchTicketedEvents()` — encapsulates the waterfall logic, used by all 5 event endpoints.
+- **Endpoints updated:** `/events/search`, `/events/match`, `/events/discover`, `/events/suggest`, smart suggestions engine.
+- **Dedup utility retained:** `deduplicateEvents()` kept in codebase for future use (still used in `/events/discover` to dedup across multiple interest-based queries that may return the same event from the same platform).
+- Deployed successfully. All functions updated.
+
+### Event-Anchored Group Scheduling Endpoint
+- **New endpoint:** `POST /events/schedule` — searches for an event and annotates each showtime with per-person availability from Google Calendar.
+- **Request:** `{ query, friendIds, location?, dateRange?: { start, end } }`
+- **Response:** `{ event: { title, venue, city, type, imageUrl }, showtimes: [...], totalShowtimes, participants }`
+- **Each showtime includes:** `{ datetime, available, allFree, conflicts: [{ name, reason }], ticketUrl, price: { min, max } }`
+- **Buffer logic:** 1hr pre-show + 2.5hr default show duration + 30min post-show. A person must be free for the entire 4-hour window.
+- **Privacy:** Only exposes free/busy status and conflict reason ("busy" or "calendar not connected"). Never leaks calendar event details.
+- **Reuses:** `searchTicketedEvents()` (Ticketmaster-first waterfall), `getAcceptedFriendIdSet()`, `syncUserCalendar()`, `strictCalendarCheck()`, `getDbUserById()`, `applyTravelBuffer()`.
+- **Edge cases handled:** friend without calendar → "calendar not connected" (not "busy"); date-only events → `dateOnly: true`, availability skipped; invalid datetime → skipped silently.
+- **Sorting:** Available showtimes first, then by date. Date-only events last.
+- Build verified ✅, deployed successfully to `https://api-xwsmuazwmq-uc.a.run.app`.
+
+### Event-Anchored Friend Invite Links
+- **New table:** `friend_invites` — stores shareable invite tokens linking a non-user to a specific event scheduling poll.
+- **New endpoints:**
+  - `POST /events/friend-invite` (auth required) — generates a URL-safe token (base64url, 32 bytes) with configurable expiry (default 30 days). Returns `inviteUrl` for sharing.
+  - `GET /events/friend-invite/:token` (NO auth) — validates the invite and returns event title, inviter first name, group member first names. Powers the landing page before signup.
+  - `POST /events/friend-invite/:token/accept` (auth required) — marks invite accepted, auto-creates "accepted" friendships (invitee ↔ inviter + all group members using the referral pattern: upsert with `status: "accepted"`), notifies inviter, triggers calendar sync for new member.
+- **Key patterns reused:** `randomBytes` for token gen, `getAcceptedFriendIdSet` not needed (we create friendships directly), `syncUserCalendar` for post-accept calendar sync, `createNotification` for inviter notification, canonical UUID ordering for friendships.
+- **RLS:** SELECT open for token validation (unauthenticated landing page), INSERT restricted to inviter, UPDATE restricted to inviter/accepter. Service role bypasses.
+- **Migration:** `migrations/add_friend_invites.sql` — must be run manually in Supabase SQL Editor before the endpoints work.
+- Build verified ✅, deployed to `https://api-xwsmuazwmq-uc.a.run.app`.
+
+### Event Schedule Availability Fix (⏳ bug)
+- **Problem:** All users showed ⏳ (checking) in the scheduling UI because calendar connectivity was detected via `strictCalendarCheck()` — which requires recent busy blocks in the DB. Users with connected but empty calendars appeared as "not connected". The requesting user's own calendar was never checked for connectivity at all.
+- **Root cause 1:** `strictCalendarCheck` checks for recent `availability` rows with `status: "busy"`, not OAuth token presence. Empty calendar = false negative.
+- **Root cause 2:** Requesting user (index 0) skipped the connectivity check entirely — if sync failed, they just appeared "busy" with no explanation.
+- **Root cause 3:** `Promise.allSettled` swallowed sync failures silently. No "calendar_error" status was ever returned.
+- **Fix:** Replaced `strictCalendarCheck` with direct OAuth token presence check (`google_refresh_token`, `outlook_refresh_token`, `apple_caldav_*`). Added connectivity check for requesting user. Track sync results per-user and return `"calendar_error"` when sync fails and no cached data exists.
+- **Response now contains:** `"calendar_not_connected"` (no OAuth tokens), `"calendar_error"` (sync failed, no cached data), `"busy"` (confirmed conflict), or user appears in `allFree`.
+- Build verified ✅, deployed successfully.
+
+### Event Schedule "Everyone Busy" Fix (freeBusy rewrite)
+- **Problem:** ALL users showed as "has plans" for EVERY showtime of Becky Shaw (46 showtimes over 6 weeks). Nobody was actually busy for all of them.
+- **Root cause 1:** Availability was checked by querying pre-computed "free" slots from the `availability` table. Free slots are generated with a 9pm cap (user timezone). Evening shows (7pm+) need the 4-hour window to extend past 9pm (to 10pm+), so the containment check `slotEnd >= windowEnd` always failed.
+- **Root cause 2:** `SYNC_WINDOW_DAYS = 14` — shows beyond 2 weeks had zero availability rows, so everyone appeared busy for weeks 3–6.
+- **Root cause 3:** When no free slot was found (due to above), the code defaulted to "busy" instead of "unknown."
+- **Fix:** Replaced the pre-computed availability table lookup with **direct Google Calendar freeBusy API calls** per user per showtime window. The freeBusy API returns actual busy blocks for any time range (no 14-day or 9pm limitation). If the API call fails or returns errors, the user gets `"calendar_check_failed"` (not "busy").
+- **Key change:** No longer calls `syncUserCalendar()` from this endpoint (was unnecessary overhead — the freeBusy API gives real-time answers). Retained OAuth token presence check for connectivity.
+- **Response reasons:** `"calendar_not_connected"` (no tokens), `"calendar_check_failed"` (API error or auth failure), `"busy"` (confirmed conflict from freeBusy).
+- Build verified ✅, deployed to `https://api-xwsmuazwmq-uc.a.run.app`.

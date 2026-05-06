@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, startTransition } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { trackFriendInvited, trackInviteLinkCopied, trackFriendAdded } from '../lib/analytics';
 import FriendAvailability from '../components/FriendAvailability';
 import GroupAvailability from '../components/GroupAvailability';
+import EventScheduleButton from '../components/EventScheduleButton';
 import api from '../lib/api';
 import { getSmartDisplayName } from '../lib/utils';
 import {
@@ -97,7 +98,9 @@ export default function FriendsPage() {
   const handleCloseFindTimes = () => {
     setSelectedFriendId(null);
     setSelectedFriendName('');
-    setSearchParams({});
+    startTransition(() => {
+      setSearchParams({}, { replace: true });
+    });
   };
 
   const handleFriendAction = async (friendshipId: string, action: 'accept' | 'decline') => {
@@ -442,20 +445,29 @@ export default function FriendsPage() {
       )}
 
       {/* Multi-select bottom bar */}
-      {selectMode && selectedIds.size >= 2 && (
-        <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center px-4">
-          <button
-            onClick={() => {
-              setGroupFriendIds(Array.from(selectedIds));
-              setSelectedFriendId(null);
-              setSelectedFriendName('');
-              setSearchParams({});
-              exitSelectMode();
-            }}
-            className="rounded-xl gradient-btn px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl"
-          >
-            Find time for {selectedIds.size} friends →
-          </button>
+      {selectMode && selectedIds.size >= 1 && (
+        <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center gap-2 px-4">
+          {selectedIds.size >= 2 && (
+            <button
+              onClick={() => {
+                setGroupFriendIds(Array.from(selectedIds));
+                setSelectedFriendId(null);
+                setSelectedFriendName('');
+                startTransition(() => {
+                  setSearchParams({}, { replace: true });
+                });
+                exitSelectMode();
+              }}
+              className="rounded-xl gradient-btn px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl"
+            >
+              Find time for {selectedIds.size} friends →
+            </button>
+          )}
+          <EventScheduleButton
+            friends={friends}
+            preselectedFriendIds={Array.from(selectedIds)}
+            variant="compact"
+          />
         </div>
       )}
 

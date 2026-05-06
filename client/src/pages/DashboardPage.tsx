@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
+import EventScheduleButton from '../components/EventScheduleButton';
 import StarRating from '../components/StarRating';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
@@ -295,6 +296,7 @@ function StageHasHangouts({
         >
           Find times with a friend
         </Link>
+        <EventScheduleButton variant="primary" />
         <ShareInviteButton inviteUrl={inviteUrl} variant="secondary" />
       </div>
 
@@ -428,6 +430,7 @@ function StageActiveUser({
       )}
 
       {/* Invite CTA */}
+      <EventScheduleButton variant="compact" />
       <ShareInviteButton inviteUrl={inviteUrl} variant="subtle" />
 
       {calendarModal && (
