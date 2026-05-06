@@ -59,3 +59,5 @@ Katara completed 5 sessions: critical security fixes (hardcoded email, credentia
 ## Learnings
 
 - **FriendsPage dual-state bug:** `selectedFriendId` (single-friend view) and `groupFriendIds` (group view) are independent state. When transitioning between views, BOTH must be managed — clear the other when activating one. Render guards alone aren't sufficient; state cleanup on transitions prevents stale views from reappearing if the guard condition changes later.
+
+- **Feedback Widget Redesign (Scrunch-style):** Replaced simple textarea modal with full category-based feedback flow: 🐛 Bug / 💡 Idea / 💜 Love it selector, category-specific placeholders and helper text, summary + details inputs, accessible modal with focus trap + escape-to-close + aria-modal, mobile-friendly (full-width on small screens). Backend enhanced to create GitHub issues with proper labels (feedback + category) via GitHub REST API when GITHUB_TOKEN env var is set. Deployed successfully.

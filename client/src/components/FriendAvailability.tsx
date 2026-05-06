@@ -63,6 +63,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
   const [hangoutMode, setHangoutMode] = useState<HangoutMode>('in_person');
   const [videoPlatform, setVideoPlatform] = useState<VideoPlatform>('');
   const [showOtherTimes, setShowOtherTimes] = useState(false);
+  const [bookError, setBookError] = useState<string | null>(null);
   const [calendarModal, setCalendarModal] = useState<{
     meetupId: string;
     title: string;
@@ -90,6 +91,17 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
   }, [fetchOverlaps]);
 
   const handleBook = async (slot: ScoredSlot) => {
+    // Validate: don't allow booking past times
+    if (new Date(slot.start) <= new Date()) {
+      setBookError("Pick a time that hasn't happened yet 😊");
+      setTimeout(() => setBookError(null), 4000);
+      return;
+    }
+    if (new Date(slot.end) <= new Date(slot.start)) {
+      setBookError("End time must be after start time");
+      setTimeout(() => setBookError(null), 4000);
+      return;
+    }
     setBookingSlot(slot.start);
     const bookingTitle = hangoutMode === 'in_person'
       ? `${myFirstName} & ${friendFirst} hangout`
@@ -392,7 +404,11 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
 
       {/* Refresh button */}
       <div className="border-t border-gray-100 px-5 py-3 flex justify-between items-center">
-        <p className="text-[11px] text-gray-400">Based on the next 2 weeks of both calendars</p>
+        {bookError ? (
+          <p className="text-[11px] text-red-500 font-medium">{bookError}</p>
+        ) : (
+          <p className="text-[11px] text-gray-400">Based on the next 2 weeks of both calendars</p>
+        )}
         <button
           onClick={fetchOverlaps}
           disabled={loading}

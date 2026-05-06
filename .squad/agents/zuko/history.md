@@ -83,3 +83,15 @@
 ## Session Archive Summary
 
 Zuko completed 10+ sessions: critical security audit fixes (admin secret, token leakage, email/socialBattery stripping), Groups backend removal (~434 lines), E2E compatibility sprint (API normalization, manual busy blocks migration), OAuth HMAC validation, account deletion with full CASCADE, friendship cooldown, block/mute feature, 7 functional bug fixes from Sokka's audit, 8 multi-user interaction bug fixes, meetup acceptance trigger (FOR UPDATE lock), defensive RLS policies (17 tables), and OAuth token Vault encryption (full migration with rollback safety). All changes build-verified.
+
+### Event Dedup Redesign (Cross-Platform)
+- **Problem:** Previous `deduplicateEvents()` merged ALL recurring shows at the same venue into one entry, losing individual showtimes needed for the `/events/match` availability-cross-reference feature. Also failed on venue names like "The Hayes Theater" vs "Helen Hayes Theatre".
+- **Fix:** Redesigned dedup to match by title + datetime (±2hr tolerance). Each showtime stays separate. Only merges the SAME performance appearing on multiple platforms.
+- **Key findings from "Becky Shaw" test:**
+  - SeatGeek: "Becky Shaw - New York" at "The Hayes Theater", datetime_utc without trailing Z
+  - Ticketmaster: "Becky Shaw" at "Helen Hayes Theatre", dateTime with trailing Z
+  - Both have 46 identical showtimes, 100% overlap after normalizing Z suffix
+- **New utilities:** `normalizeVenue()` (handles Theatre/Theater, "The" prefix), `venuesMatch()`, `parseEventTime()` (handles missing Z)
+- **Title normalization enhanced:** Now strips city suffixes like " - New York" that SeatGeek appends
+- **Matinee/evening safety:** 2hr tolerance ensures same-day matinee (2pm) and evening (7pm) remain separate
+- Deployed successfully. All functions updated.

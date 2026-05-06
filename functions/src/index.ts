@@ -32,8 +32,8 @@ const REQUIRED_ENV_VARS = [
 
 const missingVars = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
 if (missingVars.length) {
-  console.error(
-    `[FATAL] Missing required environment variables: ${missingVars.join(", ")}. ` +
+  console.warn(
+    `[WARN] Missing environment variables: ${missingVars.join(", ")}. ` +
     "Add them to functions/.env before deploying.",
   );
 }
@@ -130,6 +130,7 @@ const EXPENSIVE_PATHS = new Set([
   "/events/discover",
   "/events/match",
   "/availability/multi-friend-overlap",
+  "/availability/group-overlap",
 ]);
 
 function isExpensivePath(path: string): boolean {
@@ -224,6 +225,63 @@ async function requireAuth(
   }
 }
 
+/** Overlay decrypted OAuth tokens from Vault onto a user row */
+async function overlayOAuthTokens(user: Record<string, any>): Promise<void> {
+  if (!user?.id) return;
+  const { data: tokens } = await getSupabase().rpc("get_all_user_oauth_tokens", {
+    p_user_id: user.id,
+  });
+  if (!tokens) return;
+  for (const t of tokens as any[]) {
+    if (t.provider === "google") {
+      user.google_access_token = t.access_token || null;
+      user.google_refresh_token = t.refresh_token || null;
+      user.google_token_expires_at = t.token_expires_at || null;
+    } else if (t.provider === "outlook") {
+      user.outlook_access_token = t.access_token || null;
+      user.outlook_refresh_token = t.refresh_token || null;
+      user.outlook_token_expires_at = t.token_expires_at || null;
+    } else if (t.provider === "apple") {
+      user.apple_caldav_username = t.caldav_username || null;
+      user.apple_caldav_password = t.caldav_password || null;
+    }
+  }
+}
+
+/** Store or update OAuth tokens in Vault for a user+provider */
+async function saveOAuthTokens(
+  userId: string,
+  provider: "google" | "outlook" | "apple",
+  tokens: {
+    access_token?: string | null;
+    refresh_token?: string | null;
+    token_expires_at?: string | null;
+    caldav_username?: string | null;
+    caldav_password?: string | null;
+  },
+): Promise<void> {
+  await getSupabase().rpc("upsert_oauth_tokens", {
+    p_user_id: userId,
+    p_provider: provider,
+    p_access_token: tokens.access_token || null,
+    p_refresh_token: tokens.refresh_token || null,
+    p_token_expires_at: tokens.token_expires_at || null,
+    p_caldav_username: tokens.caldav_username || null,
+    p_caldav_password: tokens.caldav_password || null,
+  });
+}
+
+/** Remove all OAuth tokens for a user+provider from Vault */
+async function deleteOAuthTokens(
+  userId: string,
+  provider: "google" | "outlook" | "apple",
+): Promise<void> {
+  await getSupabase().rpc("clear_oauth_tokens", {
+    p_user_id: userId,
+    p_provider: provider,
+  });
+}
+
 /** Helper: get the Supabase user row for a Firebase UID */
 async function getDbUser(firebaseUid: string) {
   const { data } = await getSupabase()
@@ -231,6 +289,7 @@ async function getDbUser(firebaseUid: string) {
     .select("*")
     .eq("firebase_uid", firebaseUid)
     .single();
+  if (data) await overlayOAuthTokens(data);
   return data;
 }
 
@@ -241,6 +300,7 @@ async function getDbUserById(userId: string) {
     .select("*")
     .eq("id", userId)
     .single();
+  if (data) await overlayOAuthTokens(data);
   return data;
 }
 
@@ -486,6 +546,136 @@ async function autoAddToCalendar(firebaseUid: string, meetup: {
   } catch (err) {
     console.error(`Failed to auto-add meetup to calendar for ${firebaseUid}:`, err);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Remove a calendar event for a user (Google, Outlook, Apple — best effort)
+// ---------------------------------------------------------------------------
+async function removeCalendarEvent(user: any, googleEventId: string): Promise<void> {
+  if (!user || !googleEventId) return;
+
+  let removed = false;
+
+  // ─── Try Google Calendar ───
+  if (user.google_refresh_token && user.firebase_uid) {
+    try {
+      const oauth2 = await getAuthedCalendarClient(user.firebase_uid);
+      if (oauth2) {
+        const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+        await calendarApi.events.delete({ calendarId: "primary", eventId: googleEventId });
+        removed = true;
+        console.log(`🗑️ Removed Google Calendar event ${googleEventId} for ${user.email}`);
+      }
+    } catch (err: any) {
+      if (err?.code === 404 || err?.code === 410) {
+        removed = true; // already gone
+      } else {
+        console.warn(`Google calendar delete failed for ${user.email}:`, err?.message || err);
+      }
+    }
+  }
+
+  // ─── Try Outlook Calendar ───
+  if (!removed && user.outlook_calendar_connected && user.outlook_refresh_token && user.firebase_uid) {
+    try {
+      const graphClient = await getOutlookGraphClient(user.firebase_uid);
+      if (graphClient) {
+        await graphClient.api(`/me/events/${googleEventId}`).delete();
+        removed = true;
+        console.log(`🗑️ Removed Outlook Calendar event ${googleEventId} for ${user.email}`);
+      }
+    } catch (err: any) {
+      if (err?.statusCode === 404) {
+        removed = true;
+      } else {
+        console.warn(`Outlook calendar delete failed for ${user.email}:`, err?.message || err);
+      }
+    }
+  }
+
+  // ─── Try Apple Calendar (CalDAV) ───
+  if (!removed && user.apple_calendar_connected && user.apple_caldav_username && user.apple_caldav_password) {
+    try {
+      const client = await createDAVClient({
+        serverUrl: "https://caldav.icloud.com",
+        credentials: {
+          username: user.apple_caldav_username,
+          password: user.apple_caldav_password,
+        },
+        authMethod: "Basic",
+        defaultAccountType: "caldav",
+      });
+      await client.deleteCalendarObject({
+        calendarObject: {
+          url: `https://caldav.icloud.com/${user.apple_caldav_username}/calendars/home/${googleEventId}.ics`,
+        } as DAVObject,
+      });
+      console.log(`🗑️ Removed Apple Calendar event ${googleEventId} for ${user.email}`);
+    } catch (err: any) {
+      console.warn(`Apple calendar delete failed for ${user.email}:`, err?.message || err);
+    }
+  }
+}
+
+/**
+ * Remove calendar events for all participants of a meetup and clear their google_event_id.
+ * @param meetupId The meetup ID
+ * @param excludeUserId Optional user ID to skip (e.g. the deleted user whose account is being removed)
+ */
+async function removeCalendarEventsForMeetup(meetupId: string, excludeUserId?: string): Promise<void> {
+  const sb = getSupabase();
+  let query = sb
+    .from("meetup_participants")
+    .select("user_id, google_event_id")
+    .eq("meetup_id", meetupId)
+    .not("google_event_id", "is", null);
+
+  if (excludeUserId) {
+    query = query.neq("user_id", excludeUserId);
+  }
+
+  const { data: participants } = await query;
+  if (!participants || participants.length === 0) return;
+
+  for (const p of participants) {
+    if (!p.google_event_id) continue;
+    const user = await getDbUserById(p.user_id);
+    if (user) {
+      await removeCalendarEvent(user, p.google_event_id);
+    }
+    // Clear the google_event_id regardless of success
+    await sb
+      .from("meetup_participants")
+      .update({ google_event_id: null })
+      .eq("meetup_id", meetupId)
+      .eq("user_id", p.user_id);
+  }
+}
+
+/**
+ * Remove calendar event for a single participant and clear google_event_id.
+ */
+async function removeCalendarEventForParticipant(meetupId: string, userId: string): Promise<void> {
+  const sb = getSupabase();
+  const { data: participant } = await sb
+    .from("meetup_participants")
+    .select("google_event_id")
+    .eq("meetup_id", meetupId)
+    .eq("user_id", userId)
+    .single();
+
+  if (!participant?.google_event_id) return;
+
+  const user = await getDbUserById(userId);
+  if (user) {
+    await removeCalendarEvent(user, participant.google_event_id);
+  }
+
+  await sb
+    .from("meetup_participants")
+    .update({ google_event_id: null })
+    .eq("meetup_id", meetupId)
+    .eq("user_id", userId);
 }
 
 // ---------------------------------------------------------------------------
@@ -742,9 +932,9 @@ app.get("/notifications", requireAuth, async (req: AuthRequest, res: Response) =
     );
     const filtered = notifications.filter((n: any) => {
       // Hide notifications for cancelled/didnt_happen meetups
-      if (["didnt_happen", "cancelled"].includes((n as any).meetup_status)) return false;
+      if (["didnt_happen", "cancelled", "counter_proposed"].includes((n as any).meetup_status)) return false;
       // Hide meetup notifications if I've declined the meetup
-      if ((n as any).my_rsvp === "declined" && ["meetup_confirmed", "meetup_request", "meetup_reminder"].includes(n.type)) return false;
+      if ((n as any).my_rsvp === "declined" && ["meetup_confirmed", "meetup_request", "meetup_reminder", "meetup_counter_proposed", "meetup_declined"].includes(n.type)) return false;
       // Hide meetup_request if a meetup_confirmed notification exists for the same meetup
       if (n.type === "meetup_request" && n.related_id && confirmedMeetupIds.has(n.related_id)) return false;
       return true;
@@ -1345,6 +1535,55 @@ app.delete("/account", requireAuth, async (req: AuthRequest, res: Response) => {
     const userId = me.id;
     const supabase = getSupabase();
 
+    // --- Cancel meetups created by this user and notify participants ---
+    const { data: createdMeetups } = await supabase
+      .from("meetups")
+      .select("id, title")
+      .eq("created_by", userId)
+      .in("status", ["proposed", "confirmed"]);
+
+    if (createdMeetups && createdMeetups.length > 0) {
+      for (const mtup of createdMeetups) {
+        // Remove calendar events for OTHER participants (deleted user's calendar cleans up automatically)
+        removeCalendarEventsForMeetup(mtup.id, userId).catch(() => {});
+
+        const { data: participants } = await supabase
+          .from("meetup_participants")
+          .select("user_id")
+          .eq("meetup_id", mtup.id)
+          .neq("user_id", userId);
+
+        // Notify participants that the meetup is cancelled
+        for (const p of participants || []) {
+          await createNotification({
+            userId: p.user_id,
+            type: "meetup_declined",
+            title: "📅 Plan cancelled",
+            body: `${me.display_name || "Someone"} deleted their account — "${mtup.title || "Hangout"}" has been cancelled.`,
+            relatedId: mtup.id,
+          });
+        }
+      }
+
+      // Cancel all meetups created by this user
+      await supabase
+        .from("meetups")
+        .update({ status: "cancelled" })
+        .eq("created_by", userId)
+        .in("status", ["proposed", "confirmed"]);
+    }
+
+    // --- Delete notifications ABOUT this user that others see ---
+    await supabase.from("notifications").delete().eq("related_user_id", userId);
+
+    // --- Delete OAuth tokens from Vault ---
+    for (const provider of ["google", "outlook", "apple"] as const) {
+      try { await deleteOAuthTokens(userId, provider); } catch {}
+    }
+
+    // --- Delete blocked_users entries (both directions) ---
+    await supabase.from("blocked_users").delete().or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`);
+
     // Delete in dependency order (child records first)
     await supabase.from("fcm_tokens").delete().eq("user_id", userId);
     await supabase.from("notifications").delete().eq("user_id", userId);
@@ -1355,6 +1594,7 @@ app.delete("/account", requireAuth, async (req: AuthRequest, res: Response) => {
     await supabase.from("event_invites").delete().or(`sender_id.eq.${userId},recipient_id.eq.${userId}`);
     await supabase.from("meetup_participants").delete().eq("user_id", userId);
     await supabase.from("meetup_logs").delete().eq("user_id", userId);
+    await supabase.from("meetups").delete().eq("created_by", userId);
     await supabase.from("friendships").delete().or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`);
     await supabase.from("pending_invites").delete().eq("inviter_id", userId);
     await supabase.from("feedback").delete().eq("user_id", userId);
@@ -1585,12 +1825,18 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
       return;
     }
 
+    // Check if either user has blocked the other
+    if (await isBlocked(me.id, invitee.id)) {
+      res.status(403).json({ error: "Unable to send request" });
+      return;
+    }
+
     // Check for declined friendship with cooldown (7 days)
     const iAmACheck = me.id < invitee.id;
     const [checkA, checkB] = iAmACheck ? [me.id, invitee.id] : [invitee.id, me.id];
     const { data: existingFriendship } = await getSupabase()
       .from("friendships")
-      .select("status, updated_at")
+      .select("status, updated_at, invited_by")
       .eq("user_a_id", checkA)
       .eq("user_b_id", checkB)
       .single();
@@ -1602,6 +1848,44 @@ app.post("/friends/invite", requireAuth, async (req: AuthRequest, res: Response)
         res.status(429).json({ error: "You can send another invite soon" });
         return;
       }
+    }
+
+    // FIX: If the other user already sent us a pending request, auto-accept both
+    if (existingFriendship?.status === "pending" && existingFriendship.invited_by !== me.id) {
+      // The other user invited us — they clearly want to be friends too, auto-accept
+      const { data: accepted, error: acceptErr } = await getSupabase()
+        .from("friendships")
+        .update({ status: "accepted" })
+        .eq("user_a_id", checkA)
+        .eq("user_b_id", checkB)
+        .select()
+        .single();
+
+      if (acceptErr) {
+        res.status(500).json({ error: acceptErr.message });
+        return;
+      }
+
+      // Notify both users
+      await createNotification({
+        userId: invitee.id,
+        type: "friend_accepted",
+        title: "You're now friends!",
+        body: `${me.display_name || me.email} also sent you a request — you're now connected on Slotted!`,
+        relatedUserId: me.id,
+        relatedId: accepted.id,
+      });
+      await createNotification({
+        userId: me.id,
+        type: "friend_accepted",
+        title: "You're now friends!",
+        body: `${invitee.display_name || invitee.email || "Your friend"} already invited you — you're now connected!`,
+        relatedUserId: invitee.id,
+        relatedId: accepted.id,
+      });
+
+      res.json(accepted);
+      return;
     }
 
     // Auto-detect friendship type based on neighborhoods
@@ -1905,6 +2189,105 @@ app.delete("/friends/:friendshipId", requireAuth, async (req: AuthRequest, res: 
       .eq("related_id", friendshipId);
 
     res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Block / Unblock Users
+// ---------------------------------------------------------------------------
+
+/** Helper: check if either user has blocked the other */
+async function isBlocked(userA: string, userB: string): Promise<boolean> {
+  const { data } = await getSupabase()
+    .from("blocked_users")
+    .select("id")
+    .or(`and(blocker_id.eq.${userA},blocked_id.eq.${userB}),and(blocker_id.eq.${userB},blocked_id.eq.${userA})`)
+    .limit(1);
+  return !!(data && data.length > 0);
+}
+
+/** POST /users/block/:userId — block a user */
+app.post("/users/block/:userId", requireAuth, async (req: AuthRequest, res: Response) => {
+  const { userId: targetId } = req.params;
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+    if (targetId === me.id) { res.status(400).json({ error: "Cannot block yourself" }); return; }
+
+    // Insert block
+    const { error: blockErr } = await getSupabase()
+      .from("blocked_users")
+      .upsert({ blocker_id: me.id, blocked_id: targetId }, { onConflict: "blocker_id,blocked_id" });
+
+    if (blockErr) { res.status(500).json({ error: blockErr.message }); return; }
+
+    // Remove any existing friendship between the two users
+    const [smallId, bigId] = me.id < targetId ? [me.id, targetId] : [targetId, me.id];
+    await getSupabase()
+      .from("friendships")
+      .delete()
+      .eq("user_a_id", smallId)
+      .eq("user_b_id", bigId);
+
+    res.json({ success: true, blocked: targetId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /users/block/:userId — unblock a user */
+app.delete("/users/block/:userId", requireAuth, async (req: AuthRequest, res: Response) => {
+  const { userId: targetId } = req.params;
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { error } = await getSupabase()
+      .from("blocked_users")
+      .delete()
+      .eq("blocker_id", me.id)
+      .eq("blocked_id", targetId);
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ success: true, unblocked: targetId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /users/blocked — list users I have blocked */
+app.get("/users/blocked", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { data, error } = await getSupabase()
+      .from("blocked_users")
+      .select("id, blocked_id, created_at")
+      .eq("blocker_id", me.id)
+      .order("created_at", { ascending: false });
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+
+    // Fetch display info for blocked users
+    const blockedIds = (data || []).map((b: any) => b.blocked_id);
+    let blockedUsers: any[] = [];
+    if (blockedIds.length > 0) {
+      const { data: users } = await getSupabase()
+        .from("users")
+        .select("id, display_name, photo_url")
+        .in("id", blockedIds);
+      blockedUsers = users || [];
+    }
+
+    const result = (data || []).map((b: any) => {
+      const user = blockedUsers.find((u: any) => u.id === b.blocked_id);
+      return { id: b.id, blockedId: b.blocked_id, displayName: user?.display_name, photoUrl: user?.photo_url, createdAt: b.created_at };
+    });
+
+    res.json({ blocked: result });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -2245,12 +2628,7 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
     }
   }
 
-  // Clear old availability for this user and write new data
-  await sb
-    .from("availability")
-    .delete()
-    .eq("user_id", dbUser.id);
-
+  // Upsert availability — insert/update new records, then remove stale ones (avoids zero-availability window)
   if (freeBlocks.length > 0) {
     const rows = freeBlocks.map((f) => ({
       user_id: dbUser.id,
@@ -2259,11 +2637,30 @@ async function syncUserCalendar(firebaseUid: string): Promise<{ synced: boolean;
       status: "free",
     }));
 
-    // Insert in batches of 100
+    // Upsert in batches of 100
     for (let i = 0; i < rows.length; i += 100) {
       const batch = rows.slice(i, i + 100);
-      await sb.from("availability").insert(batch);
+      await sb.from("availability").upsert(batch, { onConflict: "user_id,start_time,end_time" });
     }
+
+    // Delete stale records that are no longer in the calendar
+    const validTimeKeys = new Set(freeBlocks.map((f) => `${f.start}|${f.end}`));
+    const { data: existingSlots } = await sb
+      .from("availability")
+      .select("id, start_time, end_time")
+      .eq("user_id", dbUser.id);
+
+    if (existingSlots && existingSlots.length > 0) {
+      const staleIds = existingSlots
+        .filter((s: any) => !validTimeKeys.has(`${s.start_time}|${s.end_time}`))
+        .map((s: any) => s.id);
+      if (staleIds.length > 0) {
+        await sb.from("availability").delete().in("id", staleIds);
+      }
+    }
+  } else {
+    // No free blocks at all — clear everything
+    await sb.from("availability").delete().eq("user_id", dbUser.id);
   }
 
   console.log(`📅 Synced ${freeBlocks.length} free blocks for user ${dbUser.id} (${Date.now() - syncStart}ms)`);
@@ -3257,6 +3654,31 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
       } catch { /* ignore duplicate insert errors */ }
     }
 
+    const friendCalendarConnected = await strictCalendarCheck(friendId);
+
+    // Calendar nudge: if 0 suggestions and friend hasn't connected calendar, send one-time nudge (max 1/week per pair)
+    if (suggestions.length === 0 && !friendCalendarConnected) {
+      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: recentNudge } = await getSupabase()
+        .from("notifications")
+        .select("id")
+        .eq("user_id", friendId)
+        .eq("type", "calendar_match")
+        .eq("related_user_id", me.id)
+        .gte("created_at", oneWeekAgo)
+        .limit(1);
+
+      if (!recentNudge || recentNudge.length === 0) {
+        await createNotification({
+          userId: friendId,
+          type: "calendar_match",
+          title: "📅 Connect your calendar",
+          body: `${me.display_name || "A friend"} wants to find a time to hang — connect your calendar so Slotted can help!`,
+          relatedUserId: me.id,
+        });
+      }
+    }
+
     res.json({
       overlaps,
       suggestions,
@@ -3266,7 +3688,7 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
           synced: friendSync.synced,
           freeSlots: friendSync.slots,
           name: friendUser?.display_name || "Friend",
-          calendarConnected: await strictCalendarCheck(friendId),
+          calendarConnected: friendCalendarConnected,
         },
       },
     });
@@ -3274,6 +3696,13 @@ app.get("/availability/overlap/:friendId", requireAuth, async (req: AuthRequest,
     console.error("Overlap error:", err);
     res.status(500).json({ error: err.message });
   }
+});
+
+/** POST /availability/group-overlap — alias for multi-friend-overlap (frontend compat) */
+app.post("/availability/group-overlap", requireAuth, async (req: AuthRequest, res: Response) => {
+  // Forward to the same handler logic below
+  req.url = "/availability/multi-friend-overlap";
+  app.handle(req, res);
 });
 
 /** POST /availability/multi-friend-overlap — find mutual free slots among multiple friends */
@@ -3455,11 +3884,73 @@ app.post("/meetups", requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    // Validate time constraints
+    if (resolvedStartTime) {
+      const startDate = new Date(resolvedStartTime);
+      const fiveMinFromNow = new Date(Date.now() + 5 * 60 * 1000);
+      if (startDate < fiveMinFromNow) {
+        res.status(400).json({ error: "The proposed time has already passed — pick a future time." });
+        return;
+      }
+    }
+    if (resolvedStartTime && resolvedEndTime) {
+      if (new Date(resolvedEndTime) <= new Date(resolvedStartTime)) {
+        res.status(400).json({ error: "End time must be after start time." });
+        return;
+      }
+    }
+
     const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
     const unauthorizedParticipantIds = participantIds.filter((pid) => !acceptedFriendIds.has(pid));
     if (unauthorizedParticipantIds.length > 0) {
+      // Check if unauthorized participants are deleted users vs just not friends
+      const { data: existingUsers } = await getSupabase()
+        .from("users")
+        .select("id")
+        .in("id", unauthorizedParticipantIds);
+      const existingIds = new Set((existingUsers || []).map((u: any) => u.id));
+      const deletedIds = unauthorizedParticipantIds.filter((pid) => !existingIds.has(pid));
+      if (deletedIds.length > 0) {
+        res.status(410).json({ error: "One or more friends are no longer on Slotted" });
+        return;
+      }
       res.status(403).json({ error: "All participants must be accepted friends" });
       return;
+    }
+
+    // Check for blocks between creator and any participant
+    for (const pid of participantIds) {
+      if (await isBlocked(me.id, pid)) {
+        res.status(403).json({ error: "Unable to schedule with one or more participants" });
+        return;
+      }
+    }
+
+    // Duplicate meetup detection: check for existing proposed/confirmed meetups with overlapping time + same participants
+    if (resolvedStartTime && resolvedEndTime) {
+      const { data: existingMeetups } = await getSupabase()
+        .from("meetups")
+        .select("id, start_time, end_time, created_by")
+        .in("status", ["proposed", "confirmed"])
+        .lt("start_time", resolvedEndTime)
+        .gt("end_time", resolvedStartTime);
+
+      if (existingMeetups && existingMeetups.length > 0) {
+        for (const existing of existingMeetups) {
+          const { data: existingParts } = await getSupabase()
+            .from("meetup_participants")
+            .select("user_id")
+            .eq("meetup_id", existing.id);
+          const existingPartIds = new Set((existingParts || []).map((p: any) => p.user_id));
+          // Check if current participant set is a subset of (or equals) existing meetup's participants
+          const allCurrentIds = [me.id, ...participantIds];
+          const isSubset = allCurrentIds.every((id) => existingPartIds.has(id));
+          if (isSubset) {
+            res.status(409).json({ error: "A similar meetup already exists for this time", existingMeetupId: existing.id });
+            return;
+          }
+        }
+      }
     }
 
     // Check weekly quota — soft warning (not a block)
@@ -3733,6 +4224,29 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
           .from("meetups")
           .update({ status: "cancelled" })
           .eq("id", meetupId);
+        // Remove calendar events for ALL participants (meetup is dead)
+        removeCalendarEventsForMeetup(meetupId).catch(() => {});
+      } else {
+        // For 3+ person meetups: check if all non-creator participants have declined
+        const nonCreatorParticipants = allParticipants.filter((p: any) => p.user_id !== meetup.created_by);
+        const { data: currentRsvps } = await getSupabase()
+          .from("meetup_participants")
+          .select("user_id, rsvp")
+          .eq("meetup_id", meetupId)
+          .neq("user_id", meetup.created_by);
+
+        const allDeclined = (currentRsvps || []).every((p: any) => p.rsvp === "declined");
+        if (allDeclined && nonCreatorParticipants.length > 0) {
+          await getSupabase()
+            .from("meetups")
+            .update({ status: "cancelled" })
+            .eq("id", meetupId);
+          // Remove calendar events for ALL participants (meetup is dead)
+          removeCalendarEventsForMeetup(meetupId).catch(() => {});
+        } else {
+          // Meetup continues — only remove the declining user's calendar event
+          removeCalendarEventForParticipant(meetupId, me.id).catch(() => {});
+        }
       }
 
       // Mark all existing notifications for this meetup as read
@@ -3740,14 +4254,14 @@ app.patch("/meetups/:meetupId/rsvp", requireAuth, async (req: AuthRequest, res: 
         .from("notifications")
         .update({ read: true })
         .eq("related_id", meetupId)
-        .in("type", ["meetup_request", "meetup_confirmed", "meetup_reminder"]);
+        .in("type", ["meetup_request", "meetup_confirmed", "meetup_reminder", "meetup_counter_proposed"]);
 
       // Notify other participants
       for (const p of allParticipants) {
         if (p.user_id !== me.id) {
           await createNotification({
             userId: p.user_id,
-            type: "meetup_request",
+            type: "meetup_declined",
             title: `❌ ${me.display_name || "Someone"} can't make it`,
             body: meetup.title || "Hangout",
             relatedUserId: me.id,
@@ -3773,6 +4287,18 @@ app.post("/meetups/:meetupId/counter-propose", requireAuth, async (req: AuthRequ
 
   if (!startTime || !endTime) {
     res.status(400).json({ error: "startTime and endTime are required" });
+    return;
+  }
+
+  // Validate time constraints
+  const cpStartDate = new Date(startTime);
+  const cpFiveMinFromNow = new Date(Date.now() + 5 * 60 * 1000);
+  if (cpStartDate < cpFiveMinFromNow) {
+    res.status(400).json({ error: "The proposed time has already passed — pick a future time." });
+    return;
+  }
+  if (new Date(endTime) <= new Date(startTime)) {
+    res.status(400).json({ error: "End time must be after start time." });
     return;
   }
 
@@ -3808,6 +4334,12 @@ app.post("/meetups/:meetupId/counter-propose", requireAuth, async (req: AuthRequ
       .eq("meetup_id", meetupId)
       .eq("user_id", me.id);
 
+    // Mark the original meetup as superseded so it doesn't show as active
+    await getSupabase()
+      .from("meetups")
+      .update({ status: "counter_proposed" })
+      .eq("id", meetupId);
+
     // Get the original creator's ID (the person to receive the counter-proposal)
     const originalCreatorId = originalMeetup.created_by;
 
@@ -3818,7 +4350,11 @@ app.post("/meetups/:meetupId/counter-propose", requireAuth, async (req: AuthRequ
       .eq("meetup_id", meetupId)
       .neq("user_id", me.id);
 
-    const otherParticipantIds = (origParticipants || []).map((p: any) => p.user_id);
+    // Filter to only include participants who are accepted friends of counter-proposer
+    const counterProposerFriends = await getAcceptedFriendIdSet(me.id);
+    const otherParticipantIds = (origParticipants || [])
+      .map((p: any) => p.user_id)
+      .filter((pid: string) => counterProposerFriends.has(pid));
 
     // Create a new meetup with the counter-proposer as creator
     const newTitle = originalMeetup.title || "Hangout";
@@ -3865,7 +4401,7 @@ app.post("/meetups/:meetupId/counter-propose", requireAuth, async (req: AuthRequ
     for (const pid of otherParticipantIds) {
       await createNotification({
         userId: pid,
-        type: "meetup_request",
+        type: "meetup_counter_proposed",
         title: `🔄 ${me.display_name || "Someone"} suggested a different time`,
         body: `Can't make ${origTimeStr} — how about ${newTimeStr}? (${newTitle})`,
         relatedUserId: me.id,
@@ -3912,6 +4448,9 @@ app.patch("/meetups/:meetupId/didnt-happen", requireAuth, async (req: AuthReques
       res.status(500).json({ error: error.message });
       return;
     }
+
+    // Remove calendar events for all participants
+    removeCalendarEventsForMeetup(meetupId).catch(() => {});
 
     // Mark all notifications related to this meetup as read so they disappear
     await getSupabase()
@@ -4956,10 +5495,26 @@ interface ExternalEvent {
 function normalizeTitle(title: string): string {
   return title
     .toLowerCase()
+    .replace(/\s*[-\u2013\u2014]\s*(new york|nyc|broadway|chicago|los angeles|la|london)$/i, "")
     .replace(/\(.*?\)/g, "")           // strip parenthetical info
     .replace(/\b(the|a|an|at|in|on|of)\b/g, "")
     .replace(/[^a-z0-9\s]/g, "")       // remove punctuation
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Normalize venue name for comparison.
+ * Handles "The Hayes Theater" vs "Helen Hayes Theatre", "St. James Theatre" vs "St James Theater", etc.
+ */
+function normalizeVenue(venue: string): string {
+  return venue
+    .toLowerCase()
+    .replace(/\b(the|a)\b/g, "")
+    .replace(/theatre/g, "theater")
+    .replace(/ctr\b/g, "center")
+    .replace(/st\./g, "st")
+    .replace(/[^a-z0-9]/g, "")
     .trim();
 }
 
@@ -4971,10 +5526,8 @@ function normalizeTitle(title: string): string {
 function titlesMatch(a: string, b: string): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  // If one is a substring of the other (at least 8 chars to avoid false positives)
   if (a.length >= 8 && b.includes(a)) return true;
   if (b.length >= 8 && a.includes(b)) return true;
-  // Levenshtein-lite: if strings are very similar (differ by < 15% of chars)
   if (a.length > 10 && b.length > 10) {
     const shorter = a.length < b.length ? a : b;
     const longer = a.length < b.length ? b : a;
@@ -4984,41 +5537,56 @@ function titlesMatch(a: string, b: string): boolean {
 }
 
 /**
+ * Check if two venues are likely the same physical location.
+ */
+function venuesMatch(a: string, b: string): boolean {
+  const normA = normalizeVenue(a);
+  const normB = normalizeVenue(b);
+  if (!normA || !normB) return true; // missing venue = don't penalize
+  if (normA === normB) return true;
+  if (normA.length >= 8 && normB.includes(normA)) return true;
+  if (normB.length >= 8 && normA.includes(normB)) return true;
+  return false;
+}
+
+/**
+ * Parse a datetime string to epoch ms, handling missing trailing Z.
+ * SeatGeek omits trailing Z on UTC times; Ticketmaster includes it.
+ */
+function parseEventTime(dt: string): number {
+  if (!dt) return 0;
+  const normalized = dt.endsWith("Z") ? dt : dt + "Z";
+  return new Date(normalized).getTime();
+}
+
+/**
  * Deduplicate events from multiple sources.
- * Groups by similar title + same date, merges ticket links, keeps best metadata.
+ * Matches the SAME performance (same title + same datetime within 2hr) across platforms.
+ * Each distinct showtime remains a separate entry — recurring shows are NOT collapsed.
+ * When the same performance appears on multiple platforms, merges ticket links.
  */
 function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
+  const TIME_TOLERANCE_MS = 2 * 3600000; // 2 hours
   const groups: ExternalEvent[][] = [];
 
   for (const ev of events) {
     const normTitle = normalizeTitle(ev.title);
-    const evDate = ev.datetime?.slice(0, 10) || "";
+    const evTime = parseEventTime(ev.datetime);
 
-    // Try to find an existing group this event belongs to
     let matched = false;
     for (const group of groups) {
       const rep = group[0];
       const repNorm = normalizeTitle(rep.title);
-      const repDate = rep.datetime?.slice(0, 10) || "";
+      const repTime = parseEventTime(rep.datetime);
 
-      // Same or similar title + same venue area
-      // For recurring shows (same venue), merge across ALL dates — we'll show the next upcoming one
-      const evVenue = (ev.venue || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-      const repVenue = (rep.venue || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-      const sameVenue = !evVenue || !repVenue || evVenue === repVenue
-        || evVenue.includes(repVenue.slice(0, 10)) || repVenue.includes(evVenue.slice(0, 10));
+      if (!titlesMatch(normTitle, repNorm)) continue;
 
-      // For recurring shows at the same venue, merge across all dates
-      // For one-off events, still require same date
-      const dateDiff = Math.abs(new Date(evDate).getTime() - new Date(repDate).getTime());
-      const sameDate = dateDiff <= 86400000; // within 24h
-      const isRecurringShow = sameVenue && evVenue.length > 0;
+      const timeDiff = Math.abs(evTime - repTime);
+      if (timeDiff > TIME_TOLERANCE_MS) continue;
 
-      if (titlesMatch(normTitle, repNorm) && (sameDate || isRecurringShow)) {
-        group.push(ev);
-        matched = true;
-        break;
-      }
+      group.push(ev);
+      matched = true;
+      break;
     }
 
     if (!matched) {
@@ -5026,26 +5594,14 @@ function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
     }
   }
 
-  // Merge each group into a single event with combined metadata
   return groups.map((group) => {
-    // Sort group by date to pick the earliest upcoming showtime
-    const now = Date.now();
-    const futureEvents = group.filter((e) => new Date(e.datetime).getTime() >= now);
-    const sortedByDate = (futureEvents.length > 0 ? futureEvents : group)
-      .sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
-
-    // Pick the "best" listing as the primary (prefer Ticketmaster, then image, then lowest price)
-    const sorted = [...sortedByDate].sort((a, b) => {
-      // Prefer Ticketmaster as primary source
+    const sorted = [...group].sort((a, b) => {
       if (a.source === "ticketmaster" && b.source !== "ticketmaster") return -1;
       if (a.source !== "ticketmaster" && b.source === "ticketmaster") return 1;
-      // Then SeatGeek (StubHub) as secondary
       if (a.source === "seatgeek" && b.source !== "seatgeek") return -1;
       if (a.source !== "seatgeek" && b.source === "seatgeek") return 1;
-      // Prefer entries with images
       if (a.imageUrl && !b.imageUrl) return -1;
       if (!a.imageUrl && b.imageUrl) return 1;
-      // Then prefer lower price
       if ((a.priceMin || Infinity) !== (b.priceMin || Infinity)) {
         return (a.priceMin || Infinity) - (b.priceMin || Infinity);
       }
@@ -5054,10 +5610,8 @@ function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
 
     const primary = sorted[0];
 
-    // Collect all source URLs — deduplicate by source, prefer Ticketmaster first
     const seenSources = new Set<string>();
     const urls: { source: string; url: string }[] = [];
-    // Sort to put ticketmaster first
     const sortedGroup = [...group].sort((a, b) => {
       if (a.source === "ticketmaster") return -1;
       if (b.source === "ticketmaster") return 1;
@@ -5071,21 +5625,14 @@ function deduplicateEvents(events: ExternalEvent[]): ExternalEvent[] {
     }
     const sources = [...seenSources];
 
-    // Merge prices — take the lowest min and highest max across sources
     const allMins = group.map((e) => e.priceMin).filter((p): p is number => p !== undefined && p > 0);
     const allMaxes = group.map((e) => e.priceMax).filter((p): p is number => p !== undefined && p > 0);
-
-    // Merge performers — union of all
     const allPerformers = [...new Set(group.flatMap((e) => e.performers || []))];
-
-    // Use best image
-    const bestImage = group.find((e) => e.imageUrl)?.imageUrl;
+    const bestImage = group.find((e) => e.imageUrl && e.source === "seatgeek")?.imageUrl
+      || group.find((e) => e.imageUrl)?.imageUrl;
 
     return {
       ...primary,
-      // Use the earliest upcoming date (not the source-preferred one)
-      datetime: sortedByDate[0].datetime,
-      datetimeLocal: sortedByDate[0].datetimeLocal,
       sources,
       urls,
       imageUrl: bestImage || primary.imageUrl,
@@ -6493,13 +7040,19 @@ app.post("/events/share", requireAuth, async (req: AuthRequest, res: Response) =
 });
 
 // ---------------------------------------------------------------------------
-// Feedback — sends user feedback to developer
+// Feedback — sends user feedback to developer + creates GitHub issue
 // ---------------------------------------------------------------------------
 app.post("/feedback", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { message } = req.body;
-    if (!message || typeof message !== "string" || !message.trim()) {
-      res.status(400).json({ error: "Message is required" });
+    const { category, summary, details, message } = req.body;
+
+    // Support both new format (category+summary+details) and legacy (message)
+    const feedbackCategory = category || "idea";
+    const feedbackSummary = summary || message || "";
+    const feedbackDetails = details || "";
+
+    if (!feedbackSummary || typeof feedbackSummary !== "string" || !feedbackSummary.trim()) {
+      res.status(400).json({ error: "Summary/message is required" });
       return;
     }
 
@@ -6508,7 +7061,9 @@ app.post("/feedback", requireAuth, async (req: AuthRequest, res: Response) => {
       firebase_uid: req.uid,
       email: firebaseUser.email ?? "unknown",
       display_name: firebaseUser.displayName ?? "unknown",
-      message: message.trim(),
+      category: feedbackCategory,
+      message: feedbackSummary.trim(),
+      details: feedbackDetails.trim(),
       created_at: new Date().toISOString(),
     };
 
@@ -6519,11 +7074,65 @@ app.post("/feedback", requireAuth, async (req: AuthRequest, res: Response) => {
 
     if (error) {
       console.error("Failed to store feedback in Supabase:", error);
-      // Still log it even if DB insert fails
     }
 
-    // Always log so it's visible in Cloud Functions logs
     console.log("📬 USER FEEDBACK:", JSON.stringify(feedbackEntry));
+
+    // Create GitHub issue for automatic triage
+    const ghToken = process.env.GITHUB_TOKEN;
+    if (ghToken) {
+      try {
+        const categoryLabel: Record<string, string> = {
+          bug: "bug",
+          idea: "enhancement",
+          love: "love",
+        };
+        const categoryEmoji: Record<string, string> = {
+          bug: "Bug",
+          idea: "Idea",
+          love: "Love",
+        };
+        const issueTitle = `[${categoryEmoji[feedbackCategory] || "Feedback"}] ${feedbackSummary.trim().slice(0, 100)}`;
+        const issueBody = [
+          `**Category:** ${feedbackCategory}`,
+          `**From:** ${feedbackEntry.display_name} (${feedbackEntry.email})`,
+          `**Submitted:** ${feedbackEntry.created_at}`,
+          "",
+          `### Summary`,
+          feedbackSummary.trim(),
+          feedbackDetails.trim() ? `\n### Details\n${feedbackDetails.trim()}` : "",
+        ].join("\n");
+
+        const labels = ["feedback"];
+        if (categoryLabel[feedbackCategory]) {
+          labels.push(categoryLabel[feedbackCategory]);
+        }
+
+        const ghRes = await fetch("https://api.github.com/repos/spaltrowitz/slotted.ai/issues", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${ghToken}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title: issueTitle,
+            body: issueBody,
+            labels,
+            assignees: ["copilot"],
+          }),
+        });
+
+        if (!ghRes.ok) {
+          console.error("GitHub issue creation failed:", ghRes.status, await ghRes.text());
+        } else {
+          console.log("✅ GitHub issue created for feedback");
+        }
+      } catch (ghErr) {
+        console.error("Failed to create GitHub issue:", ghErr);
+      }
+    }
 
     // Notify the app owner via in-app notification
     try {
@@ -6537,7 +7146,7 @@ app.post("/feedback", requireAuth, async (req: AuthRequest, res: Response) => {
           userId: ownerRow.id,
           type: "feedback",
           title: `Feedback from ${feedbackEntry.display_name}`,
-          body: message.trim().slice(0, 500),
+          body: feedbackSummary.trim().slice(0, 500),
           relatedUserId: undefined,
           relatedId: undefined,
         });
@@ -6739,20 +7348,16 @@ async function getAuthedCalendarClient(firebaseUid: string) {
       : undefined,
   });
 
-  // Auto-refresh: listen for new tokens and persist them
+  // Auto-refresh: listen for new tokens and persist them in Vault
   oauth2.on("tokens", async (tokens) => {
-    const updates: Record<string, unknown> = {};
-    if (tokens.access_token) updates.google_access_token = tokens.access_token;
-    if (tokens.refresh_token) updates.google_refresh_token = tokens.refresh_token;
-    if (tokens.expiry_date) {
-      updates.google_token_expires_at = new Date(tokens.expiry_date).toISOString();
-    }
-
-    if (Object.keys(updates).length) {
-      await getSupabase()
-        .from("users")
-        .update(updates)
-        .eq("firebase_uid", firebaseUid);
+    if (user?.id && (tokens.access_token || tokens.refresh_token || tokens.expiry_date)) {
+      await saveOAuthTokens(user.id, "google", {
+        access_token: tokens.access_token || undefined,
+        refresh_token: tokens.refresh_token || undefined,
+        token_expires_at: tokens.expiry_date
+          ? new Date(tokens.expiry_date).toISOString()
+          : undefined,
+      });
     }
   });
 
@@ -6794,14 +7399,12 @@ async function getOutlookGraphClient(firebaseUid: string): Promise<GraphClient |
 
     if (!result) return null;
 
-    const updates: Record<string, unknown> = {
-      outlook_access_token: result.accessToken,
-      outlook_token_expires_at: result.expiresOn?.toISOString() || null,
-    };
-    await getSupabase()
-      .from("users")
-      .update(updates)
-      .eq("firebase_uid", firebaseUid);
+    if (user?.id) {
+      await saveOAuthTokens(user.id, "outlook", {
+        access_token: result.accessToken,
+        token_expires_at: result.expiresOn?.toISOString() || undefined,
+      });
+    }
 
     return GraphClient.init({
       authProvider: (done) => done(null, result.accessToken),
@@ -6853,21 +7456,17 @@ app.get("/calendar/callback", async (req: Request, res: Response) => {
     const oauth2 = getOAuth2Client();
     const { tokens } = await oauth2.getToken(code);
 
-    // Store tokens in the users table
-    const updates: Record<string, unknown> = {
-      google_access_token: tokens.access_token,
-      google_token_expires_at: tokens.expiry_date
-        ? new Date(tokens.expiry_date).toISOString()
-        : null,
-    };
-    if (tokens.refresh_token) {
-      updates.google_refresh_token = tokens.refresh_token;
+    // Store tokens in Vault
+    const dbUserForTokens = await getDbUser(firebaseUid);
+    if (dbUserForTokens) {
+      await saveOAuthTokens(dbUserForTokens.id, "google", {
+        access_token: tokens.access_token || undefined,
+        refresh_token: tokens.refresh_token || undefined,
+        token_expires_at: tokens.expiry_date
+          ? new Date(tokens.expiry_date).toISOString()
+          : undefined,
+      });
     }
-
-    await getSupabase()
-      .from("users")
-      .update(updates)
-      .eq("firebase_uid", firebaseUid);
 
     // After storing tokens, auto-fetch the user's calendar list and store defaults
     oauth2.setCredentials(tokens);
@@ -6999,10 +7598,29 @@ app.get("/admin/calendar-health", requireAuth, async (req: AuthRequest, res: Res
       return;
     }
 
+    // Get users with any calendar connection (check both boolean flags and oauth_tokens table)
+    const { data: oauthUserIds } = await getSupabase().rpc("users_with_oauth_provider", { p_provider: "google" });
+    const oauthIds = new Set((oauthUserIds || []).map((r: any) => r.user_id));
+
     const { data: users } = await getSupabase()
       .from("users")
-      .select("id, email, display_name, google_refresh_token, apple_calendar_connected, apple_caldav_username, outlook_calendar_connected, outlook_refresh_token")
-      .or("google_refresh_token.not.is.null,apple_calendar_connected.eq.true,outlook_calendar_connected.eq.true");
+      .select("id, email, display_name, apple_calendar_connected, outlook_calendar_connected")
+      .or("apple_calendar_connected.eq.true,outlook_calendar_connected.eq.true");
+
+    // Merge: include users with oauth tokens even if boolean flags are false
+    const allUserIds = new Set((users || []).map((u: any) => u.id));
+    const missingOauthUsers: any[] = [];
+    for (const oId of oauthIds) {
+      if (!allUserIds.has(oId)) {
+        const { data: u } = await getSupabase()
+          .from("users")
+          .select("id, email, display_name, apple_calendar_connected, outlook_calendar_connected")
+          .eq("id", oId)
+          .single();
+        if (u) missingOauthUsers.push(u);
+      }
+    }
+    const allUsers = [...(users || []), ...missingOauthUsers];
 
     const results: {
       email: string;
@@ -7012,9 +7630,11 @@ app.get("/admin/calendar-health", requireAuth, async (req: AuthRequest, res: Res
       outlook: "connected" | "none";
     }[] = [];
 
-    for (const u of users || []) {
+    for (const u of allUsers) {
+      // Overlay tokens from vault for this user
+      await overlayOAuthTokens(u);
       let googleStatus: "valid" | "stale" | "none" = "none";
-      if (u.google_refresh_token) {
+      if ((u as any).google_refresh_token) {
         // Look up firebase_uid for this user to test their token
         const { data: fullUser } = await getSupabase()
           .from("users")
@@ -7084,12 +7704,14 @@ app.post("/calendar/disconnect", requireAuth, async (req: AuthRequest, res: Resp
       }
     }
 
+    // Clear tokens from Vault
+    if (dbUser) {
+      await deleteOAuthTokens(dbUser.id, "google");
+    }
+
     await getSupabase()
       .from("users")
       .update({
-        google_access_token: null,
-        google_refresh_token: null,
-        google_token_expires_at: null,
         calendar_watch_channel: null,
         calendar_watch_resource_id: null,
         calendar_sync_token: null,
@@ -7337,12 +7959,15 @@ app.post("/calendar/apple/connect", requireAuth, async (req: AuthRequest, res: R
       return;
     }
 
-    // Store credentials
+    // Store credentials in Vault
+    await saveOAuthTokens(dbUser.id, "apple", {
+      caldav_username: username,
+      caldav_password: password,
+    });
+
     await getSupabase()
       .from("users")
       .update({
-        apple_caldav_username: username,
-        apple_caldav_password: password,
         apple_calendar_connected: true,
       })
       .eq("firebase_uid", req.uid!);
@@ -7415,17 +8040,21 @@ app.get("/calendar/apple/status", requireAuth, async (req: AuthRequest, res: Res
 /** POST /calendar/apple/disconnect — remove stored Apple Calendar credentials */
 app.post("/calendar/apple/disconnect", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
+    const dbUser = await getDbUser(req.uid!);
+
+    // Clear Apple tokens from Vault
+    if (dbUser) {
+      await deleteOAuthTokens(dbUser.id, "apple");
+    }
+
     await getSupabase()
       .from("users")
       .update({
-        apple_caldav_username: null,
-        apple_caldav_password: null,
         apple_calendar_connected: false,
       })
       .eq("firebase_uid", req.uid!);
 
     // Remove Apple calendars
-    const dbUser = await getDbUser(req.uid!);
     if (dbUser) {
       await getSupabase()
         .from("user_calendars")
@@ -7550,12 +8179,19 @@ app.get("/calendar/outlook/callback", async (req: Request, res: Response) => {
       redirectUri: process.env.MICROSOFT_REDIRECT_URI || "https://slotted-ai.web.app/api/calendar/outlook/callback",
     });
 
+    // Store tokens in Vault
+    const dbUserForOutlook = await getDbUser(firebaseUid);
+    if (dbUserForOutlook) {
+      await saveOAuthTokens(dbUserForOutlook.id, "outlook", {
+        access_token: tokenResponse.accessToken,
+        refresh_token: (tokenResponse as any).refreshToken || undefined,
+        token_expires_at: tokenResponse.expiresOn?.toISOString() || undefined,
+      });
+    }
+
     await getSupabase()
       .from("users")
       .update({
-        outlook_access_token: tokenResponse.accessToken,
-        outlook_refresh_token: (tokenResponse as any).refreshToken || null,
-        outlook_token_expires_at: tokenResponse.expiresOn?.toISOString() || null,
         outlook_calendar_connected: true,
       })
       .eq("firebase_uid", firebaseUid);
@@ -7614,17 +8250,20 @@ app.get("/calendar/outlook/callback", async (req: Request, res: Response) => {
 /** POST /calendar/outlook/disconnect — remove stored Outlook tokens */
 app.post("/calendar/outlook/disconnect", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
+    const dbUser = await getDbUser(req.uid!);
+
+    // Clear Outlook tokens from Vault
+    if (dbUser) {
+      await deleteOAuthTokens(dbUser.id, "outlook");
+    }
+
     await getSupabase()
       .from("users")
       .update({
-        outlook_access_token: null,
-        outlook_refresh_token: null,
-        outlook_token_expires_at: null,
         outlook_calendar_connected: false,
       })
       .eq("firebase_uid", req.uid!);
 
-    const dbUser = await getDbUser(req.uid!);
     if (dbUser) {
       await getSupabase()
         .from("user_calendars")
@@ -7885,15 +8524,8 @@ app.get("/calendar/events", requireAuth, async (req: AuthRequest, res: Response)
       } catch (err: any) {
         const errMsg = err?.response?.data?.error || err?.message || "";
         if (errMsg === "invalid_grant" || errMsg.includes("invalid_grant") || errMsg.includes("Token has been expired or revoked")) {
-          // Clear stale tokens
-          await getSupabase()
-            .from("users")
-            .update({
-              google_access_token: null,
-              google_refresh_token: null,
-              google_token_expires_at: null,
-            })
-            .eq("id", dbUser.id);
+          // Clear stale tokens from Vault
+          await deleteOAuthTokens(dbUser.id, "google");
           console.warn("Google Calendar token expired (invalid_grant) — cleared tokens for re-auth");
         } else {
           console.error("Google Calendar events fetch error:", err);
@@ -8416,14 +9048,7 @@ app.get("/calendar/list", requireAuth, async (req: AuthRequest, res: Response) =
       // Clear stale tokens so user can re-auth
       const dbUser = await getDbUser(req.uid!);
       if (dbUser) {
-        await getSupabase()
-          .from("users")
-          .update({
-            google_access_token: null,
-            google_refresh_token: null,
-            google_token_expires_at: null,
-          })
-          .eq("id", dbUser.id);
+        await deleteOAuthTokens(dbUser.id, "google");
       }
       res.status(401).json({ error: "calendar_reconnect_required", message: "Your Google Calendar connection has expired. Please reconnect." });
       return;
@@ -8935,12 +9560,16 @@ export const renewCalendarWatchChannels = onSchedule("every 6 hours", async () =
   const sb = getSupabase();
   const cutoff = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
+  const { data: googleUserIds } = await sb.rpc("users_with_oauth_provider", { p_provider: "google" });
+  const googleIdSet = new Set((googleUserIds || []).map((r: any) => r.user_id));
+
   const { data: users } = await sb.from("users")
     .select("id, firebase_uid, calendar_watch_channel, calendar_watch_resource_id")
-    .not("google_refresh_token", "is", null)
     .lt("calendar_watch_expiry", cutoff);
 
-  for (const user of (users || [])) {
+  const filteredUsers = (users || []).filter((u: any) => googleIdSet.has(u.id));
+
+  for (const user of filteredUsers) {
     try {
       const oauth2 = await getAuthedCalendarClient(user.firebase_uid);
       if (!oauth2) continue;
@@ -9789,6 +10418,55 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   if (!res.headersSent) {
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Scheduled: Meetup Expiry Cleanup (daily)
+// ---------------------------------------------------------------------------
+
+/**
+ * Scheduled function: Cleanup Expired Meetups
+ * Runs daily. Marks proposed meetups with start_time in the past as cancelled.
+ * Notifies participants that the plan has expired.
+ */
+export const cleanupExpiredMeetups = onSchedule("every day 06:00", async () => {
+  const sb = getSupabase();
+  const now = new Date().toISOString();
+
+  const { data: expiredMeetups } = await sb
+    .from("meetups")
+    .select("id, title, created_by")
+    .eq("status", "proposed")
+    .lt("start_time", now);
+
+  if (!expiredMeetups || expiredMeetups.length === 0) {
+    console.log("No expired meetups to clean up");
+    return;
+  }
+
+  for (const meetup of expiredMeetups) {
+    await sb.from("meetups").update({ status: "cancelled" }).eq("id", meetup.id);
+
+    // Remove calendar events for all participants
+    removeCalendarEventsForMeetup(meetup.id).catch(() => {});
+
+    const { data: participants } = await sb
+      .from("meetup_participants")
+      .select("user_id")
+      .eq("meetup_id", meetup.id);
+
+    for (const p of participants || []) {
+      await createNotification({
+        userId: p.user_id,
+        type: "meetup_declined",
+        title: "⏰ Plan expired",
+        body: `"${meetup.title || "Hangout"}" didn't get confirmed in time and has been cancelled.`,
+        relatedId: meetup.id,
+      });
+    }
+  }
+
+  console.log(`Cleaned up ${expiredMeetups.length} expired meetups`);
 });
 
 // ---------------------------------------------------------------------------

@@ -49,7 +49,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.post('/availability/group-overlap', {
+      const { data } = await api.post('/availability/multi-friend-overlap', {
         friendIds,
       });
       setSuggestions(data.suggestions || []);
@@ -67,6 +67,17 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
   }, [fetchGroupOverlaps]);
 
   const handleBook = async (slot: ScoredSlot) => {
+    // Validate: don't allow booking past times
+    if (new Date(slot.start) <= new Date()) {
+      setBookError("Pick a time that hasn't happened yet 😊");
+      setTimeout(() => setBookError(null), 4000);
+      return;
+    }
+    if (new Date(slot.end) <= new Date(slot.start)) {
+      setBookError("End time must be after start time");
+      setTimeout(() => setBookError(null), 4000);
+      return;
+    }
     setBookingSlot(slot.start);
     setBookError(null);
     try {

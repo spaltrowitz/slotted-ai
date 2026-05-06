@@ -53,6 +53,14 @@ export default function CounterProposePanel({
   }, [fetchSlots]);
 
   const handleCounterPropose = async (slot: ScoredSlot) => {
+    if (new Date(slot.start) <= new Date()) {
+      setError("Pick a time that hasn't happened yet 😊");
+      return;
+    }
+    if (new Date(slot.end) <= new Date(slot.start)) {
+      setError("End time must be after start time");
+      return;
+    }
     setProposing(slot.start);
     try {
       await api.post(`/meetups/${meetupId}/counter-propose`, {
