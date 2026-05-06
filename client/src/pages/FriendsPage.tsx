@@ -5,6 +5,7 @@ import AppShell from '../components/AppShell';
 import { useAuth } from '../contexts/AuthContext';
 import { trackFriendInvited, trackInviteLinkCopied, trackFriendAdded } from '../lib/analytics';
 import FriendAvailability from '../components/FriendAvailability';
+import GroupAvailability from '../components/GroupAvailability';
 import api from '../lib/api';
 import { getSmartDisplayName } from '../lib/utils';
 import {
@@ -29,6 +30,9 @@ export default function FriendsPage() {
   // Multi-select state
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Group availability state
+  const [groupFriendIds, setGroupFriendIds] = useState<string[] | null>(null);
 
   const inviteUrl = `https://slotted-ai.web.app?ref=${user?.uid ?? ''}`;
   const message = `Let's schedule time to hang :) This app syncs our calendars and finds the best time to meet up. ${inviteUrl}`;
@@ -290,6 +294,20 @@ export default function FriendsPage() {
         </div>
       )}
 
+      {groupFriendIds && groupFriendIds.length >= 2 && (
+        <div className="mb-6">
+          <GroupAvailability
+            friendIds={groupFriendIds}
+            friendNames={groupFriendIds.map(id => {
+              const f = acceptedFriends.find(fr => fr.friend.id === id);
+              return f?.friend.displayName ?? '';
+            })}
+            allFriendNames={allFriendNames}
+            onClose={() => setGroupFriendIds(null)}
+          />
+        </div>
+      )}
+
       {/* Incoming invites */}
       {incomingInvites.length > 0 && (
         <div className="mb-5">
@@ -426,7 +444,7 @@ export default function FriendsPage() {
         <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center px-4">
           <button
             onClick={() => {
-              // TODO: Navigate to group availability with selectedIds
+              setGroupFriendIds(Array.from(selectedIds));
               exitSelectMode();
             }}
             className="rounded-xl gradient-btn px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl"
