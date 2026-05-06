@@ -22,6 +22,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
 
   const [rsvpLoading, setRsvpLoading] = useState<string | null>(null);
   const [rsvpDone, setRsvpDone] = useState<Record<string, string>>({});
+  const [rsvpError, setRsvpError] = useState<string | null>(null);
   const [calendarModal, setCalendarModal] = useState<{
     meetupId: string;
     title: string;
@@ -30,9 +31,11 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
   } | null>(null);
   const [friendRequestLoading, setFriendRequestLoading] = useState<string | null>(null);
   const [friendRequestDone, setFriendRequestDone] = useState<Record<string, string>>({});
+  const [friendRequestError, setFriendRequestError] = useState<string | null>(null);
   const [counterProposeFor, setCounterProposeFor] = useState<string | null>(null);
   const [counterProposeActionLoading, setCounterProposeActionLoading] = useState<string | null>(null);
   const [counterProposeActionDone, setCounterProposeActionDone] = useState<Record<string, string>>({});
+  const [counterProposeActionError, setCounterProposeActionError] = useState<string | null>(null);
 
   const { data: notifications = [], isLoading: loading } = useQuery({
     queryKey: queryKeys.notifications,
@@ -145,8 +148,10 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
   });
 
   const counterProposeMutation = useMutation({
-    mutationFn: async ({ meetupId, action }: { meetupId: string; action: 'update_time' | 'keep_original' }) => {
+    mutationFn: async ({ meetupId, action, startTime, endTime }: { meetupId: string; action: 'update_time' | 'keep_original'; startTime?: string; endTime?: string }) => {
       if (action === 'update_time') {
+        await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'accepted', start_time: startTime, end_time: endTime });
+      } else {
         await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'accepted' });
       }
     },
@@ -176,6 +181,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
 
   const handleRsvp = async (notificationId: string, meetupId: string, rsvp: 'accepted' | 'declined' | 'maybe') => {
     setRsvpLoading(notificationId);
+    setRsvpError(null);
     try {
       const data = await rsvpMutation.mutateAsync({ meetupId, rsvp });
       if (data.quotaWarning && rsvp === 'accepted') {
@@ -200,29 +206,47 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
           }
         } catch { /* skip calendar prompt */ }
       }
-    } catch { /* silently fail */ } finally { setRsvpLoading(null); }
+    } catch {
+      setRsvpError(notificationId);
+    } finally { setRsvpLoading(null); }
   };
 
   const handleFriendRequest = async (notificationId: string, friendshipId: string, action: 'accept' | 'decline') => {
     setFriendRequestLoading(notificationId);
+    setFriendRequestError(null);
     try {
       await friendRequestMutation.mutateAsync({ friendshipId, action });
       await markAsReadMutation.mutateAsync(notificationId);
       setFriendRequestDone((prev) => ({ ...prev, [notificationId]: action }));
       const prev = queryClient.getQueryData<Notification[]>(queryKeys.notifications) ?? notifications;
       queryClient.setQueryData(queryKeys.notifications, prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)));
-    } catch { /* silently fail */ } finally { setFriendRequestLoading(null); }
+    } catch {
+      setFriendRequestError(notificationId);
+    } finally { setFriendRequestLoading(null); }
   };
 
-  const handleCounterProposeAction = async (notificationId: string, meetupId: string, action: 'update_time' | 'keep_original') => {
+  const handleCounterProposeAction = async (notificationId: string, meetupId: string, action: 'update_time' | 'keep_original', notification: Notification) => {
     setCounterProposeActionLoading(notificationId);
+    setCounterProposeActionError(null);
+    if (action === 'update_time' && !notification.proposed_start_time) {
+      setCounterProposeActionLoading(null);
+      setCounterProposeActionError(notificationId);
+      return;
+    }
     try {
-      await counterProposeMutation.mutateAsync({ meetupId, action });
+      await counterProposeMutation.mutateAsync({
+        meetupId,
+        action,
+        startTime: notification.proposed_start_time,
+        endTime: notification.proposed_end_time,
+      });
       await markAsReadMutation.mutateAsync(notificationId);
       setCounterProposeActionDone((prev) => ({ ...prev, [notificationId]: action }));
       const prev = queryClient.getQueryData<Notification[]>(queryKeys.notifications) ?? notifications;
       queryClient.setQueryData(queryKeys.notifications, prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)));
-    } catch { /* silently fail */ } finally { setCounterProposeActionLoading(null); }
+    } catch {
+      setCounterProposeActionError(notificationId);
+    } finally { setCounterProposeActionLoading(null); }
   };
 
   const handleNotificationClick = (notification: Notification) => {
@@ -244,7 +268,12 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
   };
 
   const timeAgo = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
+    // Ensure UTC interpretation if server omits timezone suffix
+    const normalized = dateStr.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(dateStr)
+      ? dateStr
+      : dateStr + 'Z';
+    const date = new Date(normalized);
+    const diff = Date.now() - date.getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'just now';
     if (mins < 60) return `${mins}m ago`;
@@ -252,7 +281,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days}d ago`;
-    return new Date(dateStr).toLocaleDateString();
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const typeConfig: Record<string, { emoji: string; bg: string; border: string }> = {
@@ -412,22 +441,27 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                               {friendRequestDone[notification.id] === 'accept' ? '✅ Accepted' : 'Not this time'}
                             </span>
                           ) : (
-                            <div className="flex gap-1.5">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleFriendRequest(notification.id, notification.related_id!, 'accept'); }}
-                                disabled={friendRequestLoading === notification.id}
-                                className="rounded-lg bg-emerald-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-emerald-600 shadow-sm disabled:opacity-50"
-                              >
-                                {friendRequestLoading === notification.id ? '...' : '✅ Accept'}
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleFriendRequest(notification.id, notification.related_id!, 'decline'); }}
-                                disabled={friendRequestLoading === notification.id}
-                                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-                              >
-                                Not this time
-                              </button>
-                            </div>
+                            <>
+                              <div className="flex gap-1.5">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleFriendRequest(notification.id, notification.related_id!, 'accept'); }}
+                                  disabled={friendRequestLoading === notification.id}
+                                  className="rounded-lg bg-emerald-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-emerald-600 shadow-sm disabled:opacity-50"
+                                >
+                                  {friendRequestLoading === notification.id ? '...' : '✅ Accept'}
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleFriendRequest(notification.id, notification.related_id!, 'decline'); }}
+                                  disabled={friendRequestLoading === notification.id}
+                                  className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                  Not this time
+                                </button>
+                              </div>
+                              {friendRequestError === notification.id && (
+                                <p className="mt-1 text-[10px] text-red-600 font-medium">Couldn't respond — tap to retry.</p>
+                              )}
+                            </>
                           )}
                         </div>
                       )}
@@ -448,6 +482,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                               {rsvpDone[notification.id] === 'accepted' ? '✅ Accepted' : rsvpDone[notification.id] === 'maybe' ? 'Maybe' : rsvpDone[notification.id] === 'counter_proposed' ? 'Suggested new time' : 'Not this time'}
                             </span>
                           ) : (
+                            <>
                             <div className="flex flex-wrap gap-1.5">
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleRsvp(notification.id, notification.related_id!, 'accepted'); }}
@@ -478,6 +513,10 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                                 Not this time
                               </button>
                             </div>
+                            {rsvpError === notification.id && (
+                              <p className="mt-1 text-[10px] text-red-600 font-medium">Couldn't respond — tap to retry.</p>
+                            )}
+                            </>
                           )}
 
                           {counterProposeFor === notification.id && notification.related_id && notification.related_user_id && (
@@ -553,22 +592,29 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                               View meetup
                             </Link>
                           ) : (
-                            <div className="flex gap-1.5">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'update_time'); }}
-                                disabled={counterProposeActionLoading === notification.id}
-                                className="rounded-lg bg-violet-500 px-3 py-1 text-[10px] font-semibold text-white hover:bg-violet-600 shadow-sm disabled:opacity-50"
-                              >
-                                {counterProposeActionLoading === notification.id ? '...' : 'Update time'}
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'keep_original'); }}
-                                disabled={counterProposeActionLoading === notification.id}
-                                className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-                              >
-                                Keep original
-                              </button>
-                            </div>
+                            <>
+                              <div className="flex gap-1.5">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'update_time', notification); }}
+                                  disabled={counterProposeActionLoading === notification.id}
+                                  className="rounded-lg bg-violet-500 px-3 py-1 text-[10px] font-semibold text-white hover:bg-violet-600 shadow-sm disabled:opacity-50"
+                                >
+                                  {counterProposeActionLoading === notification.id ? '...' : 'Update time'}
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'keep_original', notification); }}
+                                  disabled={counterProposeActionLoading === notification.id}
+                                  className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                  Keep original
+                                </button>
+                              </div>
+                              {counterProposeActionError === notification.id && (
+                                <p className="mt-1 text-[10px] text-red-600 font-medium">
+                                  {notification.proposed_start_time ? "Couldn't respond — tap to retry." : 'Open the meetup to review times'}
+                                </p>
+                              )}
+                            </>
                           )}
                         </div>
                       )}

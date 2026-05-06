@@ -4,6 +4,7 @@ import AppShell from '../components/AppShell';
 import CalendarPicker from '../components/CalendarPicker';
 import PushNotificationPrompt from '../components/PushNotificationPrompt';
 import InstallPrompt from '../components/InstallPrompt';
+import SocialBattery from '../components/SocialBattery';
 import { useAuth } from '../contexts/AuthContext';
 import { trackSettingsSaved } from '../lib/analytics';
 import api from '../lib/api';
@@ -58,6 +59,7 @@ export default function SettingsPage() {
   const [socialRecharge, setSocialRecharge] = useState('2-3-week');
   const [rechargingDays, setRechargingDays] = useState<number[]>([]);
   const [shareHangouts, setShareHangouts] = useState(false);
+  const [socialBatteryLevel, setSocialBatteryLevel] = useState<'open' | 'ask_me' | 'recharging'>('open');
   const [neighborhood, setNeighborhood] = useState('');
   const [workNeighborhood, setWorkNeighborhood] = useState('');
   const [officeDays, setOfficeDays] = useState<string[]>([]);
@@ -86,6 +88,9 @@ export default function SettingsPage() {
     if (me.planning_style) setPlanningStyle(me.planning_style);
     if (me.recharging_days) setRechargingDays(me.recharging_days);
     if (me.share_hangouts !== undefined) setShareHangouts(me.share_hangouts);
+    if (me.social_battery && ['open', 'ask_me', 'recharging'].includes(me.social_battery)) {
+      setSocialBatteryLevel(me.social_battery as 'open' | 'ask_me' | 'recharging');
+    }
     if (me.call_windows && Array.isArray(me.call_windows)) setCallWindows(me.call_windows);
     if (me.video_platforms && Array.isArray(me.video_platforms)) setVideoPlatforms(me.video_platforms);
     if (me.neighborhood) setNeighborhood(me.neighborhood);
@@ -123,6 +128,20 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings });
     },
   });
+
+  const batteryMutation = useMutation({
+    mutationFn: async (level: 'open' | 'ask_me' | 'recharging') => {
+      await api.patch('/users/me/battery', { level });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    },
+  });
+
+  const handleBatteryChange = (level: 'open' | 'ask_me' | 'recharging') => {
+    setSocialBatteryLevel(level);
+    batteryMutation.mutate(level);
+  };
 
   const handleSave = useCallback(async () => {
     if (!user) return;
@@ -544,6 +563,21 @@ export default function SettingsPage() {
 
             </div>
 
+        </section>
+
+        {/* ═══════════════════════════════════════════════ */}
+        {/* SECTION 3: SOCIAL BATTERY                      */}
+        {/* ═══════════════════════════════════════════════ */}
+        <section>
+          <div className="flex items-center gap-3 mb-3">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-purple-600 text-xs font-bold text-white shadow-sm">3</span>
+            <h2 className="text-sm font-bold text-gray-800">Social Battery</h2>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
+            <p className="text-xs text-gray-500 mb-3">How social are you feeling?</p>
+            <SocialBattery level={socialBatteryLevel} onChange={handleBatteryChange} />
+          </div>
         </section>
 
       </div>

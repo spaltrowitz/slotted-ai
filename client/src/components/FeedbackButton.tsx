@@ -6,6 +6,7 @@ export default function FeedbackButton() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState(false);
 
   const feedbackMutation = useMutation({
     mutationFn: async (message: string) => {
@@ -15,6 +16,7 @@ export default function FeedbackButton() {
 
   const handleSend = async () => {
     if (!text.trim()) return;
+    setError(false);
     try {
       await feedbackMutation.mutateAsync(text.trim());
       setSent(true);
@@ -24,7 +26,7 @@ export default function FeedbackButton() {
         setOpen(false);
       }, 1500);
     } catch {
-      // silently fail
+      setError(true);
     }
   };
 
@@ -65,12 +67,15 @@ export default function FeedbackButton() {
                 <p className="text-[10px] text-gray-400 mb-2">Bug or idea? Goes straight to the developer.</p>
                 <textarea
                   value={text}
-                  onChange={(e) => setText(e.target.value)}
+                  onChange={(e) => { setText(e.target.value); setError(false); }}
                   placeholder="What's on your mind?"
                   rows={3}
                   autoFocus
                   className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition-all focus:border-slotted-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slotted-100"
                 />
+                {error && (
+                  <p className="mt-1 text-[11px] text-red-600 font-medium">Couldn't send — try again</p>
+                )}
                 <div className="mt-3 flex justify-end">
                   <button
                     onClick={handleSend}
