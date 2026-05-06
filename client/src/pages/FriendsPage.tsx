@@ -90,6 +90,7 @@ export default function FriendsPage() {
   const handleFindTimes = (friendId: string, friendName: string) => {
     setSelectedFriendId(friendId);
     setSelectedFriendName(friendName);
+    setGroupFriendIds(null);
     setSearchParams({ findTimes: friendId });
   };
 
@@ -282,9 +283,10 @@ export default function FriendsPage() {
         </p>
       </div>
 
-      {selectedFriendId && (
+      {selectedFriendId && !groupFriendIds && (
         <div className="mb-6">
           <FriendAvailability
+            key={selectedFriendId}
             friendId={selectedFriendId}
             friendName={selectedFriendName}
             allFriendNames={allFriendNames}
@@ -445,6 +447,9 @@ export default function FriendsPage() {
           <button
             onClick={() => {
               setGroupFriendIds(Array.from(selectedIds));
+              setSelectedFriendId(null);
+              setSelectedFriendName('');
+              setSearchParams({});
               exitSelectMode();
             }}
             className="rounded-xl gradient-btn px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl"
