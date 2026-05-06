@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface AddToCalendarModalProps {
   meetupId: string;
@@ -65,6 +66,7 @@ export default function AddToCalendarModal({
 }: AddToCalendarModalProps) {
   const [added, setAdded] = useState(false);
   const [addedMethod, setAddedMethod] = useState<'google' | 'ics' | null>(null);
+  useBodyScrollLock(true);
 
   const handleGoogleCalendar = () => {
     window.open(buildGoogleCalendarLink(meetupTitle, startTime, endTime), '_blank');

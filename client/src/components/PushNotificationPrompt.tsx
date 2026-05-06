@@ -61,7 +61,7 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
               You'll get notified when friends want to hang, accept your invites, or when Slotted.ai finds a great time to meet up.
             </p>
             {!isStandalone && isMobile && (
-              <p className="mt-1.5 text-[10px] text-emerald-500/80">
+              <p className="mt-1.5 text-xs text-emerald-500/80">
                 For the most reliable notifications, install Slotted.ai as an app on your phone.
               </p>
             )}
@@ -82,7 +82,7 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
               Browser permission is granted, but we couldn't register your device for push notifications. This can happen if the service worker isn't active or you're not using the installed app.
             </p>
             {!isStandalone && isMobile && (
-              <p className="mt-1.5 text-[10px] text-amber-600">
+              <p className="mt-1.5 text-xs text-amber-600">
                 Installing Slotted.ai as an app (see above) gives the most reliable push notifications.
               </p>
             )}
@@ -133,7 +133,7 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
             Get instant alerts when friends want to hang out, new matches are found, or someone accepts your invite.
           </p>
           {!isStandalone && isMobile && (
-            <p className="mt-1.5 text-[10px] text-gray-400">
+            <p className="mt-1.5 text-xs text-gray-400">
               For the best experience, install Slotted.ai as an app first (see above), then enable notifications.
             </p>
           )}

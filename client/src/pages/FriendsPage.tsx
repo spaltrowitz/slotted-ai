@@ -446,7 +446,7 @@ export default function FriendsPage() {
 
       {/* Multi-select bottom bar */}
       {selectMode && selectedIds.size >= 1 && (
-        <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center gap-2 px-4">
+        <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center gap-2 px-4 pb-[env(safe-area-inset-bottom)]">
           {selectedIds.size >= 2 && (
             <button
               onClick={() => {

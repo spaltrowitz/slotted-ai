@@ -26,6 +26,8 @@ export default function StarRating({ onSubmit, onSkip, friendName, submitting = 
               onClick={() => setRating(star)}
               onMouseEnter={() => setHovering(star)}
               onMouseLeave={() => setHovering(0)}
+              onTouchStart={() => setHovering(star)}
+              onTouchEnd={() => { setRating(star); setHovering(0); }}
               className="flex items-center justify-center min-h-[44px] min-w-[44px] transition-transform hover:scale-110"
             >
               <svg

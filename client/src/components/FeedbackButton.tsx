@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import api from '../lib/api';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 type Category = 'bug' | 'idea' | 'love';
 
@@ -28,6 +29,7 @@ export default function FeedbackButton() {
   const [summary, setSummary] = useState('');
   const [details, setDetails] = useState('');
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  useBodyScrollLock(open);
 
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -126,7 +128,7 @@ export default function FeedbackButton() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="feedback-title"
-            className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-white p-5 sm:p-6 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-white p-5 sm:p-6 shadow-xl max-h-[85dvh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {status === 'success' ? (
@@ -144,7 +146,7 @@ export default function FeedbackButton() {
                   </h3>
                   <button
                     onClick={closeModal}
-                    className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="rounded-lg p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                     aria-label="Close feedback"
                   >
                     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -159,7 +161,7 @@ export default function FeedbackButton() {
                     <button
                       key={cat.key}
                       onClick={() => setCategory(cat.key)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+                      className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 min-h-[44px] text-sm font-medium transition-all ${
                         category === cat.key
                           ? 'bg-slotted-500 text-white shadow-md'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -207,7 +209,7 @@ export default function FeedbackButton() {
                       {feedbackMutation.isPending ? 'Submitting…' : 'Submit Feedback'}
                     </button>
 
-                    <p className="text-[10px] text-gray-400 text-center">
+                    <p className="text-xs text-gray-400 text-center">
                       Creates a GitHub issue assigned to Copilot for automatic triage
                     </p>
                   </div>

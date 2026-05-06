@@ -248,7 +248,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-gray-900">{slot.dayLabel}</p>
                     {idx === 0 && (
-                      <span className="rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                      <span className="rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-500 px-2 py-0.5 text-xs font-bold text-white">
                         Best match
                       </span>
                     )}
@@ -257,7 +257,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                   {slot.reasons.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
                       {slot.reasons.slice(0, 3).map((r) => (
-                        <span key={r} className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500">
+                        <span key={r} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
                           {r}
                         </span>
                       ))}

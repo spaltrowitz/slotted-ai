@@ -280,7 +280,7 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
                     description={
                       <>
                         In Chrome, click the install icon{' '}
-                        <span className="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium">⊕</span>{' '}
+                        <span className="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium">⊕</span>{' '}
                         in the address bar, or go to <strong>⋮ → Install Slotted.ai</strong>. In Edge, go to <strong>… → Apps → Install this site as an app</strong>.
                       </>
                     }

@@ -100,7 +100,7 @@ export default function LoginPage() {
               className={`rounded-xl border ${item.border} bg-gradient-to-br ${item.color} p-2 shadow-sm`}
             >
               <div className="flex items-center gap-1.5 mb-1">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-teal-500 text-[9px] font-bold text-white shadow-sm">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-teal-500 text-[11px] font-bold text-white shadow-sm">
                   {item.step}
                 </span>
               </div>

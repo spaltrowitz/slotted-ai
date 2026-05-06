@@ -314,7 +314,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
       {/* Sheet — bottom on mobile, dropdown on desktop */}
       <div
         ref={sheetRef}
-        className="fixed z-[70] md:absolute md:right-0 md:top-full md:mt-2 inset-x-0 top-14 bottom-0 md:top-auto md:inset-x-auto md:bottom-auto md:w-[420px] md:max-h-[60vh] flex flex-col md:rounded-2xl border border-gray-200/80 bg-white shadow-2xl overflow-hidden animate-slide-down md:animate-none"
+        className="fixed z-[70] md:absolute md:right-0 md:top-full md:mt-2 inset-x-0 top-14 bottom-0 md:top-auto md:inset-x-auto md:bottom-auto md:w-[420px] md:max-h-[60vh] flex flex-col md:rounded-2xl border border-gray-200/80 bg-white shadow-2xl overflow-hidden animate-slide-down md:animate-none pb-[env(safe-area-inset-bottom)] md:pb-0"
         style={{ animationDuration: '200ms' }}
       >
         {/* Drag handle — mobile only */}
@@ -400,8 +400,8 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-gradient-to-br from-purple-100 to-pink-100 text-sm"></div>
                                   )}
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-[10px] font-semibold text-gray-900 truncate">{sharedEvent.title}</p>
-                                    <p className="text-[9px] text-gray-500 truncate">
+                                    <p className="text-xs font-semibold text-gray-900 truncate">{sharedEvent.title}</p>
+                                    <p className="text-[11px] text-gray-500 truncate">
                                       {sharedEvent.datetimeLocal ? new Date(sharedEvent.datetimeLocal).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''}
                                       {sharedEvent.venue ? ` · ${sharedEvent.venue}` : ''}
                                     </p>
@@ -417,7 +417,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                           })()}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-[10px] text-gray-400">{timeAgo(notification.created_at)}</span>
+                          <span className="text-xs text-gray-400">{timeAgo(notification.created_at)}</span>
                           <button
                             onClick={(e) => { e.stopPropagation(); dismissNotification(notification.id); }}
                             className="rounded-full p-0.5 text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-all"
@@ -433,7 +433,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                       {notification.type === 'friend_request' && notification.related_id && (
                         <div className="mt-1.5">
                           {friendRequestDone[notification.id] ? (
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border ${
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border ${
                               friendRequestDone[notification.id] === 'accept'
                                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                 : 'border-gray-200 bg-gray-50 text-gray-600'
@@ -446,20 +446,20 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleFriendRequest(notification.id, notification.related_id!, 'accept'); }}
                                   disabled={friendRequestLoading === notification.id}
-                                  className="rounded-lg bg-emerald-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-emerald-600 shadow-sm disabled:opacity-50"
+                                  className="rounded-lg bg-emerald-500 px-3 py-2 min-h-[44px] text-xs font-semibold text-white hover:bg-emerald-600 shadow-sm disabled:opacity-50"
                                 >
                                   {friendRequestLoading === notification.id ? '...' : '✅ Accept'}
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleFriendRequest(notification.id, notification.related_id!, 'decline'); }}
                                   disabled={friendRequestLoading === notification.id}
-                                  className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 min-h-[44px] text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                                 >
                                   Not this time
                                 </button>
                               </div>
                               {friendRequestError === notification.id && (
-                                <p className="mt-1 text-[10px] text-red-600 font-medium">Couldn't respond — tap to retry.</p>
+                                <p className="mt-1 text-xs text-red-600 font-medium">Couldn't respond — tap to retry.</p>
                               )}
                             </>
                           )}
@@ -470,7 +470,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                       {notification.type === 'meetup_request' && notification.related_id && (
                         <div className="mt-1.5">
                           {rsvpDone[notification.id] ? (
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border ${
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border ${
                               rsvpDone[notification.id] === 'accepted'
                                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                 : rsvpDone[notification.id] === 'maybe'
@@ -487,14 +487,14 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleRsvp(notification.id, notification.related_id!, 'accepted'); }}
                                 disabled={rsvpLoading === notification.id}
-                                className="rounded-lg bg-emerald-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-emerald-600 shadow-sm disabled:opacity-50"
+                                className="rounded-lg bg-emerald-500 px-3 py-2 min-h-[44px] text-xs font-semibold text-white hover:bg-emerald-600 shadow-sm disabled:opacity-50"
                               >
                                 {rsvpLoading === notification.id ? '...' : '✅ Accept'}
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleRsvp(notification.id, notification.related_id!, 'maybe'); }}
                                 disabled={rsvpLoading === notification.id}
-                                className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 min-h-[44px] text-xs font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50"
                               >
                                 Maybe
                               </button>
@@ -508,13 +508,13 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                                   }
                                 }}
                                 disabled={rsvpLoading === notification.id}
-                                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                                className="rounded-lg border border-gray-200 bg-white px-3 py-2 min-h-[44px] text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                               >
                                 Not this time
                               </button>
                             </div>
                             {rsvpError === notification.id && (
-                              <p className="mt-1 text-[10px] text-red-600 font-medium">Couldn't respond — tap to retry.</p>
+                              <p className="mt-1 text-xs text-red-600 font-medium">Couldn't respond — tap to retry.</p>
                             )}
                             </>
                           )}
@@ -552,7 +552,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                                 if (meetup) setCalendarModal({ meetupId: meetup.id, title: meetup.title || 'Hangout', startTime: meetup.start_time, endTime: meetup.end_time });
                               } catch { /* silent */ }
                             }}
-                            className="rounded-lg border border-slotted-200 bg-slotted-50 px-3 py-1 text-[10px] font-semibold text-slotted-700 hover:bg-slotted-100 shadow-sm"
+                            className="rounded-lg border border-slotted-200 bg-slotted-50 px-3 py-2 min-h-[44px] text-xs font-semibold text-slotted-700 hover:bg-slotted-100 shadow-sm"
                           >
                             Add to calendar
                           </button>
@@ -565,7 +565,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                           <Link
                             to="/dashboard"
                             onClick={(e) => { e.stopPropagation(); onClose(); }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slotted-200 bg-slotted-50 px-3 py-1 text-[10px] font-semibold text-slotted-700 hover:bg-slotted-100 shadow-sm"
+                            className="inline-flex items-center gap-1 rounded-lg border border-slotted-200 bg-slotted-50 px-3 py-2 min-h-[44px] text-xs font-semibold text-slotted-700 hover:bg-slotted-100 shadow-sm"
                           >
                             View meetup
                           </Link>
@@ -576,7 +576,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                       {notification.type === 'meetup_counter_propose' && notification.related_id && (
                         <div className="mt-1.5">
                           {counterProposeActionDone[notification.id] ? (
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border ${
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border ${
                               counterProposeActionDone[notification.id] === 'update_time'
                                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                 : 'border-gray-200 bg-gray-50 text-gray-600'
@@ -587,7 +587,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                             <Link
                               to="/dashboard"
                               onClick={(e) => { e.stopPropagation(); onClose(); }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slotted-200 bg-slotted-50 px-3 py-1 text-[10px] font-semibold text-slotted-700 hover:bg-slotted-100 shadow-sm"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slotted-200 bg-slotted-50 px-3 py-2 min-h-[44px] text-xs font-semibold text-slotted-700 hover:bg-slotted-100 shadow-sm"
                             >
                               View meetup
                             </Link>
@@ -597,20 +597,20 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'update_time', notification); }}
                                   disabled={counterProposeActionLoading === notification.id}
-                                  className="rounded-lg bg-violet-500 px-3 py-1 text-[10px] font-semibold text-white hover:bg-violet-600 shadow-sm disabled:opacity-50"
+                                  className="rounded-lg bg-violet-500 px-3 py-2 min-h-[44px] text-xs font-semibold text-white hover:bg-violet-600 shadow-sm disabled:opacity-50"
                                 >
                                   {counterProposeActionLoading === notification.id ? '...' : 'Update time'}
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'keep_original', notification); }}
                                   disabled={counterProposeActionLoading === notification.id}
-                                  className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 min-h-[44px] text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                                 >
                                   Keep original
                                 </button>
                               </div>
                               {counterProposeActionError === notification.id && (
-                                <p className="mt-1 text-[10px] text-red-600 font-medium">
+                                <p className="mt-1 text-xs text-red-600 font-medium">
                                   {notification.proposed_start_time ? "Couldn't respond — tap to retry." : 'Open the meetup to review times'}
                                 </p>
                               )}
@@ -631,7 +631,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                                 if (meetup) setCalendarModal({ meetupId: meetup.id, title: meetup.title || 'Hangout', startTime: meetup.start_time, endTime: meetup.end_time });
                               } catch { /* silent */ }
                             }}
-                            className="rounded-lg border border-slotted-200 bg-slotted-50 px-3 py-1 text-[10px] font-semibold text-slotted-700 hover:bg-slotted-100 shadow-sm"
+                            className="rounded-lg border border-slotted-200 bg-slotted-50 px-3 py-2 min-h-[44px] text-xs font-semibold text-slotted-700 hover:bg-slotted-100 shadow-sm"
                           >
                             Add to calendar
                           </button>

@@ -98,7 +98,7 @@ export default function EventShowtimeCard({
 
             {/* Calendar hint badge */}
             {hint && (
-              <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+              <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
                 {hint.icon} {hint.label}
               </span>
             )}
@@ -109,7 +109,7 @@ export default function EventShowtimeCard({
             {showtime.allFree.map((name) => (
               <span
                 key={name}
-                className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
+                className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700"
               >
                 ✅ {name}
               </span>
@@ -117,7 +117,7 @@ export default function EventShowtimeCard({
             {showtime.conflicts.map((c) => (
               <span
                 key={c.name}
-                className="inline-flex items-center gap-0.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500"
+                className="inline-flex items-center gap-0.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500"
               >
                 {c.reason === 'busy' ? '❌' : '⚠️'} {c.name}
               </span>
@@ -131,7 +131,7 @@ export default function EventShowtimeCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="mt-2 inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-gray-600 transition-all hover:bg-gray-50 hover:border-gray-300"
+              className="mt-2 inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 min-h-[44px] text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 hover:border-gray-300"
             >
               🎟️ Tickets
             </a>

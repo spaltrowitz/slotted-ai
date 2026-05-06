@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../lib/api';
 import type { ScheduleEvent } from './EventSearchModal';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface InviteFriendModalProps {
   event: ScheduleEvent;
@@ -15,6 +16,7 @@ export default function InviteFriendModal({ event, eventScheduleId, onClose }: I
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  useBodyScrollLock(true);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -173,7 +175,7 @@ export default function InviteFriendModal({ event, eventScheduleId, onClose }: I
                 <p className="flex-1 text-xs text-gray-600 truncate font-mono">{inviteUrl}</p>
                 <button
                   onClick={handleCopy}
-                  className="shrink-0 rounded-lg bg-white border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-all"
+                  className="shrink-0 rounded-lg bg-white border border-gray-200 px-3 py-1.5 min-h-[44px] text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-all"
                 >
                   {copied ? '✓ Copied' : 'Copy'}
                 </button>
@@ -207,7 +209,7 @@ export default function InviteFriendModal({ event, eventScheduleId, onClose }: I
 
               <button
                 onClick={onClose}
-                className="w-full rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-200 transition-all"
+                className="w-full rounded-xl bg-gray-100 px-4 py-3 min-h-[44px] text-sm font-medium text-gray-600 hover:bg-gray-200 transition-all"
               >
                 Done
               </button>

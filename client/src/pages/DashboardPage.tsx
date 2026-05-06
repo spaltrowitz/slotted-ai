@@ -421,7 +421,7 @@ function StageActiveUser({
                   {getSmartDisplayName(f.displayName, allFriendNames)}
                 </p>
                 {f.lastHangout && (
-                  <p className="text-[10px] text-gray-400">{timeAgo(f.lastHangout)}</p>
+                  <p className="text-xs text-gray-400">{timeAgo(f.lastHangout)}</p>
                 )}
               </Link>
             ))}

@@ -210,7 +210,7 @@ export default function EventInviteLandingPage() {
       </nav>
 
       {/* Content */}
-      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-80px)] max-w-md flex-col items-center justify-center px-6 pb-12">
+      <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-80px)] max-w-md flex-col items-center justify-center px-6 pb-12">
         <div className="w-full space-y-5">
 
           {/* Inviter badge */}

@@ -187,7 +187,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
       {/* Video platform picker — only show when video mode is selected */}
       {hangoutMode === 'video' && (
         <div className="flex items-center gap-1.5 px-4 sm:px-5 py-2 border-b border-gray-100 bg-gray-50/30">
-          <span className="text-[10px] text-gray-400 mr-1">Platform:</span>
+          <span className="text-xs text-gray-400 mr-1">Platform:</span>
           {VIDEO_PLATFORMS.map((p) => (
             <button
               key={p.value}
@@ -361,7 +361,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-gray-900">{slot.dayLabel}</p>
                     {idx === 0 && (
-                      <span className="rounded-full bg-gradient-to-r from-slotted-500 to-purple-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                      <span className="rounded-full bg-gradient-to-r from-slotted-500 to-purple-500 px-2 py-0.5 text-xs font-bold text-white">
                         Best match
                       </span>
                     )}
@@ -370,7 +370,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                   {slot.reasons.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
                       {slot.reasons.slice(0, 3).map((r) => (
-                        <span key={r} className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500">
+                        <span key={r} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
                           {r}
                         </span>
                       ))}

@@ -169,7 +169,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
           {cal.calendar_name}
         </p>
       </div>
-      <span className="text-[10px] font-medium text-gray-400 flex-shrink-0 capitalize">
+      <span className="text-xs font-medium text-gray-400 flex-shrink-0 capitalize">
         {cal.access_role === 'owner' ? '' : cal.access_role}
       </span>
     </label>
@@ -259,7 +259,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
         {/* Owned calendars */}
         {ownedCalendars.length > 0 && (
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
               My Calendars
             </p>
             <div className="space-y-0.5">
@@ -271,7 +271,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
         {/* Shared / subscribed calendars */}
         {sharedCalendars.length > 0 && (
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
               Shared with Me
             </p>
             <div className="space-y-0.5">

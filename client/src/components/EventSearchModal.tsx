@@ -3,6 +3,7 @@ import api from '../lib/api';
 import { getSmartDisplayName } from '../lib/utils';
 import type { FriendRecord } from '../lib/queries';
 import EventShowtimesPoll from './EventShowtimesPoll';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface EventSearchModalProps {
   friends: FriendRecord[];
@@ -43,6 +44,7 @@ export default function EventSearchModal({
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<ScheduleResponse | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  useBodyScrollLock(true);
 
   const acceptedFriends = friends.filter((f) => f.status === 'accepted');
   const allFriendNames = friends.map((f) => f.friend.displayName);
@@ -100,7 +102,7 @@ export default function EventSearchModal({
         aria-modal="true"
         aria-label="Event showtimes"
       >
-        <div className="w-full max-h-[90vh] sm:max-w-lg rounded-t-2xl sm:rounded-2xl bg-white shadow-xl overflow-hidden flex flex-col">
+        <div className="w-full max-h-[85dvh] sm:max-w-lg rounded-t-2xl sm:rounded-2xl bg-white shadow-xl overflow-hidden flex flex-col">
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
             <button
               onClick={() => setResults(null)}
@@ -204,7 +206,7 @@ export default function EventSearchModal({
                           loading="lazy"
                         />
                       ) : (
-                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-violet-400 to-purple-500 text-[9px] font-bold text-white">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-violet-400 to-purple-500 text-[11px] font-bold text-white">
                           {f.friend.displayName?.[0]}
                         </span>
                       )}

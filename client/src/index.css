@@ -38,10 +38,21 @@
   --color-accent: #06b6d4;
 }
 
+/* Mobile: remove tap highlight and 300ms tap delay */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* Global smoothing */
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  touch-action: manipulation;
+}
+
+/* Safe area utility (iOS notch/home indicator) */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Gradient utilities */
