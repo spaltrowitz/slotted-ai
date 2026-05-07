@@ -805,21 +805,34 @@ router.get("/events/autocomplete", authWithRateLimit, async (req: AuthRequest, r
       return;
     }
 
-    // Use Ticketmaster keyword search with small page size for speed
+    // Use user's neighborhood to filter by city for more relevant results
+    const dbUser = await getDbUser(req.uid!);
+    const userCity = dbUser?.neighborhood
+      ? dbUser.neighborhood.split(",").pop()?.trim()
+      : undefined;
+
     const results: { id: string; title: string; venue: string; type: string }[] = [];
 
     if (TICKETMASTER_API_KEY) {
       const url = new URL("https://app.ticketmaster.com/discovery/v2/events.json");
       url.searchParams.set("apikey", TICKETMASTER_API_KEY);
       url.searchParams.set("keyword", q);
-      url.searchParams.set("size", "8");
+      url.searchParams.set("size", "20");
       url.searchParams.set("sort", "relevance,desc");
+      if (userCity) {
+        url.searchParams.set("city", userCity);
+      }
 
       const resp = await fetch(url.toString());
       if (resp.ok) {
         const data = await resp.json();
         const events = data._embedded?.events || [];
+        // Deduplicate by normalized title — same show with multiple showtimes should appear once
+        const seenTitles = new Set<string>();
         for (const ev of events) {
+          const normTitle = normalizeTitle(ev.name || "");
+          if (seenTitles.has(normTitle)) continue;
+          seenTitles.add(normTitle);
           const venue = ev._embedded?.venues?.[0];
           const segment = ev.classifications?.[0]?.segment?.name || "Event";
           results.push({
@@ -837,11 +850,18 @@ router.get("/events/autocomplete", authWithRateLimit, async (req: AuthRequest, r
       const url = new URL("https://api.seatgeek.com/2/events");
       url.searchParams.set("client_id", SEATGEEK_CLIENT_ID);
       url.searchParams.set("q", q);
-      url.searchParams.set("per_page", "8");
+      url.searchParams.set("per_page", "20");
+      if (userCity) {
+        url.searchParams.set("venue.city", userCity);
+      }
       const resp = await fetch(url.toString());
       if (resp.ok) {
         const data = await resp.json();
+        const seenTitles = new Set<string>();
         for (const ev of (data.events || [])) {
+          const normTitle = normalizeTitle(ev.short_title || ev.title || "");
+          if (seenTitles.has(normTitle)) continue;
+          seenTitles.add(normTitle);
           const typeName = ev.type || ev.taxonomies?.[0]?.name || "Event";
           results.push({
             id: `sg-${ev.id}`,
@@ -1433,20 +1453,10 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
     const showtimes: any[] = [];
 
     for (const ev of matchingEvents) {
-      if (!ev.datetime && !ev.datetimeLocal) {
-        showtimes.push({
-          datetime: ev.datetimeLocal || ev.datetime || null,
-          dateOnly: true,
-          available: null,
-          allFree: [],
-          conflicts: [],
-          ticketUrl: ev.url,
-          price: { min: ev.priceMin || null, max: ev.priceMax || null },
-        });
-        continue;
-      }
+      const dtValue = ev.datetimeLocal || ev.datetime;
+      if (!dtValue) continue; // skip events with no datetime
 
-      const eventStart = new Date(ev.datetimeLocal || ev.datetime);
+      const eventStart = new Date(dtValue);
       if (isNaN(eventStart.getTime())) continue;
 
       const showDurationMs = DEFAULT_SHOW_DURATION_MS;
@@ -1594,7 +1604,7 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
       }
 
       showtimes.push({
-        datetime: (ev.datetimeLocal || ev.datetime),
+        datetime: dtValue,
         available: conflicts.length === 0,
         allFree,
         conflicts,
@@ -2188,6 +2198,329 @@ router.post("/events/share", authWithRateLimit, async (req: AuthRequest, res: Re
 });
 
 // ---------------------------------------------------------------------------
+// Event Scheduling Polls — group voting on showtimes
+// POST /events/poll — create a schedule + creator vote
+// GET /events/schedules/:scheduleId — get schedule with all votes
+// POST /events/schedules/:scheduleId/vote — friend submits vote
+// ---------------------------------------------------------------------------
+
+router.post("/events/poll", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { eventTitle, eventVenue, eventImageUrl, eventUrl, showtimes, friendIds, selectedIndices } = req.body;
+    if (!eventTitle?.trim()) {
+      res.status(400).json({ error: "eventTitle is required" });
+      return;
+    }
+    if (!Array.isArray(showtimes) || showtimes.length === 0) {
+      res.status(400).json({ error: "showtimes must be a non-empty array" });
+      return;
+    }
+    if (!Array.isArray(selectedIndices) || selectedIndices.length === 0) {
+      res.status(400).json({ error: "selectedIndices must be a non-empty array" });
+      return;
+    }
+
+    const validFriendIds = Array.isArray(friendIds)
+      ? friendIds.filter((fid: unknown): fid is string => typeof fid === "string" && !!fid && fid !== me.id)
+      : [];
+
+    // Create the schedule
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .insert({
+        created_by: me.id,
+        event_title: eventTitle.trim(),
+        event_venue: eventVenue || null,
+        event_image_url: eventImageUrl || null,
+        event_url: eventUrl || null,
+        showtimes,
+        friend_ids: validFriendIds,
+      })
+      .select()
+      .maybeSingle();
+
+    if (schedErr || !schedule) {
+      res.status(500).json({ error: schedErr?.message || "Failed to create schedule" });
+      return;
+    }
+
+    // Record creator's vote
+    const { error: voteErr } = await getSupabase()
+      .from("event_schedule_votes")
+      .insert({
+        schedule_id: schedule.id,
+        user_id: me.id,
+        selected_indices: selectedIndices,
+      });
+
+    if (voteErr) {
+      console.error("Failed to record creator vote:", voteErr.message);
+    }
+
+    // Notify each friend
+    const creatorName = me.display_name?.split(" ")[0] || "A friend";
+    for (const friendId of validFriendIds) {
+      await createNotification({
+        userId: friendId,
+        type: "meetup_request",
+        title: `${creatorName} wants to see ${eventTitle.trim()}!`,
+        body: "Pick your dates — tap to vote on showtimes.",
+        relatedUserId: me.id,
+        relatedId: schedule.id,
+      });
+    }
+
+    res.json({ scheduleId: schedule.id, success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/events/schedules/:scheduleId", async (req: Request, res: Response) => {
+  try {
+    const { scheduleId } = req.params;
+    if (!scheduleId) { res.status(400).json({ error: "scheduleId is required" }); return; }
+
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .select("*")
+      .eq("id", scheduleId)
+      .maybeSingle();
+
+    if (schedErr || !schedule) {
+      res.status(404).json({ error: "Schedule not found" });
+      return;
+    }
+
+    // Fetch all votes
+    const { data: votes } = await getSupabase()
+      .from("event_schedule_votes")
+      .select("user_id, selected_indices, voted_at")
+      .eq("schedule_id", scheduleId);
+
+    // Fetch voter display names
+    const voterIds = (votes || []).map((v: any) => v.user_id);
+    let voterNames: Record<string, string> = {};
+    if (voterIds.length > 0) {
+      const { data: users } = await getSupabase()
+        .from("users")
+        .select("id, display_name")
+        .in("id", voterIds);
+      if (users) {
+        for (const u of users) {
+          voterNames[u.id] = u.display_name?.split(" ")[0] || "Friend";
+        }
+      }
+    }
+
+    // Per-showtime vote counts
+    const showtimeCount = Array.isArray(schedule.showtimes) ? schedule.showtimes.length : 0;
+    const voteCounts = new Array(showtimeCount).fill(0);
+    const votersByShowtime: string[][] = Array.from({ length: showtimeCount }, () => []);
+    for (const vote of (votes || [])) {
+      for (const idx of (vote.selected_indices || [])) {
+        if (idx >= 0 && idx < showtimeCount) {
+          voteCounts[idx]++;
+          votersByShowtime[idx].push(voterNames[vote.user_id] || "Friend");
+        }
+      }
+    }
+
+    res.json({
+      schedule: {
+        id: schedule.id,
+        eventTitle: schedule.event_title,
+        eventVenue: schedule.event_venue,
+        eventImageUrl: schedule.event_image_url,
+        eventUrl: schedule.event_url,
+        showtimes: schedule.showtimes,
+        status: schedule.status,
+        createdAt: schedule.created_at,
+        expiresAt: schedule.expires_at,
+      },
+      votes: (votes || []).map((v: any) => ({
+        userId: v.user_id,
+        name: voterNames[v.user_id] || "Friend",
+        selectedIndices: v.selected_indices,
+        votedAt: v.voted_at,
+      })),
+      voteCounts,
+      votersByShowtime,
+      totalVoters: voterIds.length,
+      totalInvited: (schedule.friend_ids || []).length + 1,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/events/schedules/:scheduleId/vote", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { scheduleId } = req.params;
+    const { selectedIndices } = req.body;
+    if (!scheduleId) { res.status(400).json({ error: "scheduleId is required" }); return; }
+    if (!Array.isArray(selectedIndices) || selectedIndices.length === 0) {
+      res.status(400).json({ error: "selectedIndices must be a non-empty array" });
+      return;
+    }
+
+    // Verify schedule exists
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .select("*")
+      .eq("id", scheduleId)
+      .maybeSingle();
+
+    if (schedErr || !schedule) {
+      res.status(404).json({ error: "Schedule not found" });
+      return;
+    }
+
+    if (schedule.status !== "voting") {
+      res.status(400).json({ error: "This poll is no longer accepting votes" });
+      return;
+    }
+
+    // Upsert vote
+    const { error: voteErr } = await getSupabase()
+      .from("event_schedule_votes")
+      .upsert(
+        {
+          schedule_id: scheduleId,
+          user_id: me.id,
+          selected_indices: selectedIndices,
+          voted_at: new Date().toISOString(),
+        },
+        { onConflict: "schedule_id,user_id" },
+      );
+
+    if (voteErr) {
+      res.status(500).json({ error: voteErr.message });
+      return;
+    }
+
+    // Notify creator
+    const voterName = me.display_name?.split(" ")[0] || "Someone";
+    await createNotification({
+      userId: schedule.created_by,
+      type: "meetup_request",
+      title: `${voterName} voted on ${schedule.event_title}!`,
+      body: "Tap to see everyone's availability.",
+      relatedUserId: me.id,
+      relatedId: schedule.id,
+    });
+
+    // Check if all invited friends have voted
+    const { data: allVotes } = await getSupabase()
+      .from("event_schedule_votes")
+      .select("user_id")
+      .eq("schedule_id", scheduleId);
+
+    const voterSet = new Set((allVotes || []).map((v: any) => v.user_id));
+    const allFriendsVoted = (schedule.friend_ids || []).every((fid: string) => voterSet.has(fid));
+
+    if (allFriendsVoted && (schedule.friend_ids || []).length > 0) {
+      // Re-fetch votes with selected_indices for tallying
+      const { data: fullVotes } = await getSupabase()
+        .from("event_schedule_votes")
+        .select("user_id, selected_indices")
+        .eq("schedule_id", scheduleId);
+
+      const voteCounts = new Map<number, number>();
+      for (const vote of (fullVotes || [])) {
+        for (const idx of (vote.selected_indices || [])) {
+          voteCounts.set(idx, (voteCounts.get(idx) || 0) + 1);
+        }
+      }
+
+      let bestIdx = 0;
+      let bestCount = 0;
+      for (const [idx, count] of voteCounts) {
+        if (count > bestCount) {
+          bestIdx = idx;
+          bestCount = count;
+        }
+      }
+
+      const showtimes = (schedule.showtimes || []) as { datetime?: string }[];
+      const winningShowtime = showtimes[bestIdx];
+
+      if (winningShowtime?.datetime) {
+        const startTime = new Date(winningShowtime.datetime);
+        const endTime = new Date(startTime.getTime() + 2.5 * 3600000);
+
+        const { data: meetup } = await getSupabase()
+          .from("meetups")
+          .insert({
+            title: schedule.event_title,
+            location: schedule.event_venue || undefined,
+            start_time: startTime.toISOString(),
+            end_time: endTime.toISOString(),
+            created_by: schedule.created_by,
+          })
+          .select()
+          .maybeSingle();
+
+        if (meetup) {
+          const allParticipantIds: string[] = [schedule.created_by, ...(schedule.friend_ids || [])];
+          await getSupabase()
+            .from("meetup_participants")
+            .insert(
+              allParticipantIds.map((uid: string) => ({
+                meetup_id: meetup.id,
+                user_id: uid,
+                rsvp: uid === schedule.created_by ? "accepted" : "pending",
+              })),
+            );
+
+          await getSupabase()
+            .from("event_schedules")
+            .update({ status: "confirmed" })
+            .eq("id", scheduleId);
+
+          const timeStr = startTime.toLocaleDateString("en-US", {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          });
+
+          for (const uid of allParticipantIds) {
+            if (uid === me.id) continue;
+            await createNotification({
+              userId: uid,
+              type: "meetup_request",
+              title: `${schedule.event_title} is confirmed! 🎉`,
+              body: `Everyone voted — you're going on ${timeStr}`,
+              relatedUserId: me.id,
+              relatedId: meetup.id,
+            });
+          }
+        }
+      } else {
+        await createNotification({
+          userId: schedule.created_by,
+          type: "meetup_request",
+          title: "Everyone's voted!",
+          body: `All friends voted on ${schedule.event_title} — pick a showtime!`,
+          relatedUserId: me.id,
+          relatedId: schedule.id,
+        });
+      }
+    }
+
+    res.json({ success: true, allVotesIn: allFriendsVoted });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Event-Anchored Friend Invite Links — invite non-users to join a scheduling poll
 // POST /events/friend-invite — create a shareable invite link
 // GET /events/friend-invite/:token — validate invite (unauthenticated)
@@ -2384,6 +2717,51 @@ router.post("/events/friend-invite/:token/accept", authWithRateLimit, async (req
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /event-invite-meta/:token — serves HTML with OG meta tags for link previews */
+router.get("/event-invite-meta/:token", async (req: Request, res: Response) => {
+  try {
+    const { token } = req.params;
+
+    const { data: invite } = await getSupabase()
+      .from("friend_invites")
+      .select("*")
+      .eq("token", token)
+      .maybeSingle();
+
+    const title = invite?.event_title || "You're invited to an event on Slotted";
+    const description = invite?.event_venue
+      ? `${invite.event_title} at ${invite.event_venue} — pick the dates that work for you`
+      : "Pick the dates that work for you on Slotted.ai";
+    const imageUrl = invite?.event_image_url || "https://slotted-ai.web.app/icons/icon-512.png";
+    const escTitle = title.replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    const escDesc = description.replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+    res.setHeader("Content-Type", "text/html");
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta property="og:title" content="${escTitle}" />
+  <meta property="og:description" content="${escDesc}" />
+  <meta property="og:image" content="${imageUrl}" />
+  <meta property="og:url" content="https://slotted-ai.web.app/invite/${token}" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escTitle}" />
+  <meta name="twitter:description" content="${escDesc}" />
+  <meta name="twitter:image" content="${imageUrl}" />
+  <meta http-equiv="refresh" content="0;url=/invite/${token}">
+  <title>${title.replace(/</g, "&lt;")}</title>
+</head>
+<body>
+  <p>Redirecting to <a href="/invite/${token}">Slotted.ai</a>...</p>
+</body>
+</html>`);
+  } catch {
+    res.redirect(`/invite/${req.params.token}`);
   }
 });
 

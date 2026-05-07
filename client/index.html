@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/calendar.svg" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#4f46e5" />
@@ -24,10 +24,23 @@
     <meta property="og:description" content="Syncs your calendars and finds the best time to meet up with friends." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://slotted-ai.web.app" />
+    <meta property="og:image" content="https://slotted-ai.web.app/icons/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Slotted.ai" />
+    <meta name="twitter:description" content="Syncs your calendars and finds the best time to meet up with friends." />
+    <meta name="twitter:image" content="https://slotted-ai.web.app/icons/icon-512.png" />
 
     <title>Slotted.ai</title>
   </head>
   <body>
+    <noscript>
+      <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:2rem;text-align:center;font-family:system-ui,sans-serif;background:#faf9f7">
+        <div>
+          <h1 style="font-size:1.5rem;font-weight:700;color:#1f2937">Slotted.ai</h1>
+          <p style="margin-top:0.5rem;color:#6b7280">Slotted requires JavaScript to run. Please enable JavaScript in your browser settings.</p>
+        </div>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -3,6 +3,8 @@ import api from '../lib/api';
 import { getSmartDisplayName } from '../lib/utils';
 import type { FriendRecord } from '../lib/queries';
 import EventShowtimesPoll from './EventShowtimesPoll';
+import EventAutocomplete from './EventAutocomplete';
+import type { AutocompleteEvent } from './EventAutocomplete';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface EventSearchModalProps {
@@ -21,6 +23,7 @@ export interface ScheduleShowtime {
 }
 
 export interface ScheduleEvent {
+  id?: string;
   title: string;
   venue: string;
   imageUrl?: string;
@@ -36,13 +39,15 @@ export default function EventSearchModal({
   preselectedFriendIds = [],
   onClose,
 }: EventSearchModalProps) {
-  const [query, setQuery] = useState('');
   const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(
     new Set(preselectedFriendIds),
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<ScheduleResponse | null>(null);
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkLoading, setLinkLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   useBodyScrollLock(true);
 
@@ -70,14 +75,14 @@ export default function EventSearchModal({
     });
   };
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
+  const handleAutocompleteSelect = async (event: AutocompleteEvent) => {
     setLoading(true);
     setError(null);
     setResults(null);
     try {
       const { data } = await api.post<ScheduleResponse>('/events/schedule', {
-        query: query.trim(),
+        query: event.title,
+        eventId: event.id,
         friendIds: Array.from(selectedFriendIds),
       });
       setResults(data);
@@ -90,8 +95,23 @@ export default function EventSearchModal({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleSearch();
+  const handleLinkSubmit = async () => {
+    if (!linkUrl.trim()) return;
+    setLinkLoading(true);
+    setError(null);
+    try {
+      const { data } = await api.post<ScheduleResponse>('/events/from-url', {
+        url: linkUrl.trim(),
+        friendIds: Array.from(selectedFriendIds),
+      });
+      setResults(data);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Could not extract event from that link';
+      setError(message);
+    } finally {
+      setLinkLoading(false);
+    }
   };
 
   if (results) {
@@ -115,7 +135,7 @@ export default function EventSearchModal({
             </h2>
             <button
               onClick={onClose}
-              className="text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-sm font-medium text-gray-500 hover:text-gray-600 transition-colors"
               aria-label="Close"
             >
               ✕
@@ -125,6 +145,7 @@ export default function EventSearchModal({
             <EventShowtimesPoll
               event={results.event}
               showtimes={results.showtimes}
+              friendIds={Array.from(selectedFriendIds)}
             />
           </div>
         </div>
@@ -143,10 +164,10 @@ export default function EventSearchModal({
       <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-white shadow-xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-          <h2 className="text-base font-semibold text-gray-900">🎭 Plan an Event</h2>
+          <h2 className="text-base font-semibold text-gray-900">🎟️ Find an event to go to</h2>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-600 transition-colors"
             aria-label="Close"
           >
             ✕
@@ -154,36 +175,57 @@ export default function EventSearchModal({
         </div>
 
         <div className="px-4 py-4 space-y-4">
-          {/* Search input */}
+          {/* Typeahead search */}
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">
               What do you want to see?
             </label>
-            <div className="flex gap-2">
-              <input
-                ref={inputRef}
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder='e.g., "Becky Shaw", "Hamilton", "Comedy show"'
-                className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100 transition-all"
-              />
+            <EventAutocomplete
+              onSelect={handleAutocompleteSelect}
+              inputRef={inputRef}
+            />
+          </div>
+
+          {/* Link fallback */}
+          <div className="text-center">
+            {!showLinkInput ? (
               <button
-                onClick={handleSearch}
-                disabled={!query.trim() || loading}
-                className="shrink-0 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => setShowLinkInput(true)}
+                className="text-xs text-gray-500 hover:text-violet-500 transition-colors underline underline-offset-2"
               >
-                Search
+                Can't find your event? Paste a Ticketmaster or SeatGeek link
               </button>
-            </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleLinkSubmit(); }}
+                  placeholder="https://ticketmaster.com/..."
+                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100 transition-all"
+                  autoFocus
+                />
+                <button
+                  onClick={handleLinkSubmit}
+                  disabled={!linkUrl.trim() || linkLoading}
+                  className="shrink-0 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                >
+                  {linkLoading ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  ) : (
+                    'Go'
+                  )}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Friend selector */}
           {acceptedFriends.length > 0 && (
             <div>
               <label className="text-xs font-medium text-gray-500 mb-2 block">
-                Who's coming? <span className="text-gray-400 font-normal">(optional)</span>
+                Who's coming? <span className="text-gray-500 font-normal">(optional)</span>
               </label>
               <div className="flex flex-wrap gap-2">
                 {acceptedFriends.map((f) => {
@@ -238,7 +280,7 @@ export default function EventSearchModal({
 
           {/* Empty hint */}
           {!loading && !error && (
-            <p className="text-center text-xs text-gray-400 pt-2">
+            <p className="text-center text-xs text-gray-500 pt-2">
               We'll find showtimes and check everyone's calendars ✨
             </p>
           )}

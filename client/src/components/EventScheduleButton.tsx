@@ -22,8 +22,8 @@ export default function EventScheduleButton({
           onClick={() => setShowModal(true)}
           className="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-fuchsia-50 px-4 py-2.5 text-sm font-semibold text-violet-700 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-violet-300"
         >
-          <span>🎭</span>
-          <span>Plan an Event</span>
+          <span>🎟️</span>
+          <span>Find an event to go to</span>
         </button>
         {showModal && (
           <EventSearchModal
@@ -42,7 +42,7 @@ export default function EventScheduleButton({
         onClick={() => setShowModal(true)}
         className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-3 text-center text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
       >
-        🎭 Plan an Event
+        🎟️ Find an event to go to
       </button>
       {showModal && (
         <EventSearchModal

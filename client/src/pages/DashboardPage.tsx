@@ -7,7 +7,7 @@ import EventScheduleButton from '../components/EventScheduleButton';
 import StarRating from '../components/StarRating';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
-import { getFirstName, getSmartDisplayName } from '../lib/utils';
+import { getFirstName, getSmartDisplayName, timeAgo, formatMeetupTime } from '../lib/utils';
 import { getUserStage, type UserStage } from '../lib/userStage';
 import {
   fetchDashboard,
@@ -18,30 +18,6 @@ import {
   type FriendToSee,
   type Meetup,
 } from '../lib/queries';
-
-/* ─── helpers ─── */
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days < 1) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days} days ago`;
-  const weeks = Math.floor(days / 7);
-  if (weeks === 1) return '1 week ago';
-  if (weeks < 5) return `${weeks} weeks ago`;
-  const months = Math.floor(days / 30);
-  if (months === 1) return '1 month ago';
-  return `${months} months ago`;
-}
-
-function formatMeetupTime(start: string) {
-  const d = new Date(start);
-  return (
-    d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) +
-    ' · ' +
-    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-  );
-}
 
 /* ─── stage components ─── */
 
@@ -134,7 +110,7 @@ function StagePendingInvite({
         {getSmartDisplayName(primary.friend.displayName, allFriendNames)} wants to connect!
       </h2>
       {othersCount > 0 && (
-        <p className="mt-1 text-sm text-gray-400">
+        <p className="mt-1 text-sm text-gray-500">
           and {othersCount} other{othersCount > 1 ? 's' : ''}
         </p>
       )}
@@ -235,7 +211,7 @@ function StageHasHangouts({
 
       <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
         <p className="text-sm font-medium text-gray-900">{displayTitle}</p>
-        <p className="mt-1 text-xs text-gray-400">{formatMeetupTime(hero.start_time)}</p>
+        <p className="mt-1 text-xs text-gray-500">{formatMeetupTime(hero.start_time)}</p>
         <div className="mt-4 flex items-center justify-between">
           <div className="flex -space-x-2">
             {others.slice(0, 3).map((p) =>
@@ -275,7 +251,7 @@ function StageHasHangouts({
               <div key={m.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{mTitle}</p>
-                  <p className="text-xs text-gray-400">{formatMeetupTime(m.start_time)}</p>
+                  <p className="text-xs text-gray-500">{formatMeetupTime(m.start_time)}</p>
                 </div>
                 <button
                   onClick={() => onCalendarModal({ meetupId: m.id, title: m.title, startTime: m.start_time, endTime: m.end_time })}
@@ -294,7 +270,7 @@ function StageHasHangouts({
           to="/friends"
           className="rounded-xl gradient-btn px-5 py-3 text-center text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
         >
-          Find times with a friend
+          📅 Find a time to hang out
         </Link>
         <EventScheduleButton variant="primary" />
         <ShareInviteButton inviteUrl={inviteUrl} variant="secondary" />
@@ -368,7 +344,7 @@ function StageActiveUser({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{displayTitle}</p>
-                    <p className="text-xs text-gray-400">{formatMeetupTime(m.start_time)}</p>
+                    <p className="text-xs text-gray-500">{formatMeetupTime(m.start_time)}</p>
                   </div>
                   <span
                     className={`shrink-0 text-xs font-medium ${isConfirmed ? 'text-emerald-600' : 'text-amber-600'}`}
@@ -421,7 +397,7 @@ function StageActiveUser({
                   {getSmartDisplayName(f.displayName, allFriendNames)}
                 </p>
                 {f.lastHangout && (
-                  <p className="text-xs text-gray-400">{timeAgo(f.lastHangout)}</p>
+                  <p className="text-xs text-gray-500">{timeAgo(f.lastHangout)}</p>
                 )}
               </Link>
             ))}
@@ -468,7 +444,7 @@ function ShareInviteButton({ inviteUrl, variant }: { inviteUrl: string; variant:
     return (
       <button
         onClick={handleShare}
-        className="w-full text-center text-xs font-medium text-gray-400 hover:text-slotted-600 transition-colors py-2"
+        className="w-full text-center text-xs font-medium text-gray-500 hover:text-slotted-600 transition-colors py-2"
       >
         {copied ? 'Copied!' : 'Invite someone new'}
       </button>
