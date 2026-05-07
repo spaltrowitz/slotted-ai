@@ -1,0 +1,92 @@
+TERMS OF SERVICE
+Slotted.ai
+Last Updated: May 7, 2026
+
+1. ACCEPTANCE OF TERMS
+By accessing or using the Slotted.ai web application ("Slotted.ai," "we," "us," or "our") at slotted-ai.web.app, you agree to these Terms of Service. If you do not agree, please do not use the application.
+
+2. SERVICE DESCRIPTION
+Slotted.ai is a social scheduling application that helps friends find mutual free time and plan hangouts. Features include:
+• Syncing calendars from Google, Apple (iCloud), and Microsoft Outlook
+• Finding overlapping free time with friends
+• Proposing and managing meetups with RSVP tracking
+• Discovering local events from Ticketmaster, SeatGeek, Eventbrite, and Meetup
+• Push notifications for meetup requests and confirmations
+• Adding confirmed meetups to connected calendars
+
+3. USER ACCOUNTS
+• You must sign in with a Google account via Firebase Authentication to use Slotted.ai.
+• You are responsible for maintaining the security of your Google account.
+• You must be at least 13 years of age to use Slotted.ai.
+• You are responsible for all activity under your account.
+
+4. CALENDAR ACCESS AND PERMISSIONS
+• By connecting a calendar provider (Google, Apple, or Outlook), you authorize Slotted.ai to read your calendar events and write confirmed meetups to your calendar.
+• We access only the calendars you explicitly select — you choose which calendars to sync.
+• We store free/busy time blocks derived from your events. Your friends see only that you are "busy" or "free" — not your event titles, descriptions, or attendees.
+• You may disconnect any calendar provider at any time. You may also revoke access through your Google, Microsoft, or Apple account settings.
+• Calendar data is synced automatically. By connecting a calendar, you consent to periodic synchronization.
+
+5. SOCIAL FEATURES AND FRIEND CONNECTIONS
+• You may send and accept friend requests within Slotted.ai.
+• By accepting a friend request, you consent to sharing your free/busy availability with that person.
+• You may remove a friend at any time, which immediately revokes their access to your availability.
+• You are responsible for managing your friend list. We do not verify the identity of users who send friend requests.
+• Meetup proposals, RSVPs, and confirmations are shared among meetup participants.
+
+6. EVENT DISCOVERY
+• Event listings are sourced from third-party services (Ticketmaster, SeatGeek, Eventbrite, Meetup) and may not be complete, accurate, or current.
+• We do not sell tickets or process event bookings. Ticket links redirect to third-party ticketing platforms.
+• Event pricing, availability, and details are provided by third parties and may change without notice.
+• We are not responsible for canceled events, incorrect pricing, or issues with third-party ticket purchases.
+
+7. PUSH NOTIFICATIONS
+• You may opt in to push notifications for meetup requests, confirmations, and reminders.
+• You may disable notifications at any time through your browser settings or in-app preferences.
+• We send notifications only for meetup-related activity — never for marketing or promotional purposes.
+
+8. ACCEPTABLE USE
+You agree not to:
+• Create fake accounts or impersonate another person
+• Harass, stalk, or send unwanted meetup requests to other users
+• Scrape, crawl, or automated-harvest user data or event listings
+• Attempt to access other users' calendar details, event titles, or personal information
+• Use the service for any commercial purpose without written consent
+• Attempt to gain unauthorized access to our systems or other users' accounts
+• Use the service for any unlawful purpose
+
+9. USER CONTENT
+• "User Content" includes your display name, profile photo, meetup proposals, and feedback.
+• You retain ownership of your User Content.
+• By using Slotted.ai, you grant us a non-exclusive license to display your display name and profile photo to your friends within the application.
+
+10. INTELLECTUAL PROPERTY
+The Slotted.ai application, including its design, code, algorithms, and scheduling logic, is owned by us.
+
+11. LIMITATION OF LIABILITY
+SLOTTED.AI IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED. TO THE FULLEST EXTENT PERMITTED BY LAW, WE SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING FROM YOUR USE OF THE SERVICE, INCLUDING BUT NOT LIMITED TO:
+• Incorrect availability calculations or missed overlap windows
+• Failed or missed meetup notifications
+• Calendar sync errors, delays, or data loss
+• Inaccurate event listings or pricing from third-party sources
+• Unauthorized access to your calendar data
+• Issues arising from friend interactions or meetup arrangements
+• Service interruptions or downtime
+
+12. TERMINATION
+• You may delete your account and all associated data at any time by contacting us.
+• We reserve the right to suspend or terminate your account at any time for violation of these Terms.
+• Upon termination, your data (including OAuth tokens, availability, and meetup history) will be permanently deleted.
+
+13. THIRD-PARTY SERVICES
+Slotted.ai integrates with third-party services (Firebase, Google, Microsoft, Apple, Supabase, Ticketmaster, SeatGeek, Eventbrite, Meetup). Your use of these services is subject to their respective terms of service.
+
+14. CHANGES TO TERMS
+We may update these Terms of Service from time to time. Changes will be posted on this page with an updated "Last Updated" date. Your continued use of the service after changes constitutes acceptance of the modified terms.
+
+15. GOVERNING LAW
+These Terms shall be governed by the laws of the State of New York, without regard to conflict of law provisions.
+
+16. CONTACT US
+For questions about these Terms of Service, contact:
+Email: sharipaltrowitz@gmail.com
