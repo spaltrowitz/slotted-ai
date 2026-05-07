@@ -1,0 +1,116 @@
+PRIVACY POLICY
+Slotted.ai
+Last Updated: May 7, 2026
+
+1. INTRODUCTION
+Slotted.ai ("we," "us," or "our") respects your privacy. This Privacy Policy explains how we collect, use, disclose, and protect your personal information when you use the Slotted.ai web application at slotted-ai.web.app.
+
+2. INFORMATION WE COLLECT
+
+Account Information:
+• Email address, display name, and profile photo (via Google Sign-In through Firebase Auth)
+
+Profile Preferences:
+• Timezone
+• Social battery level (how social you're feeling)
+• Notification preferences
+
+Calendar Data (with your explicit authorization):
+• Calendar event titles, start/end times, and locations from connected calendars
+• Free/busy status derived from your calendar events
+• Calendar sync tokens for incremental updates
+• We store free/busy blocks — not full event details — in our database
+
+Social Data:
+• Friends list (bidirectional friend relationships)
+• Friend preferences and interaction history
+• Meetup proposals, RSVPs, and confirmed hangouts
+• Meetup activity logs (when, where, with whom, your rating)
+
+Push Notification Tokens:
+• Firebase Cloud Messaging (FCM) device tokens for delivering push notifications
+
+Feedback:
+• Any feedback you submit through the app
+
+3. HOW WE USE YOUR INFORMATION
+We use your personal information solely for the following purposes:
+• Syncing your calendar availability to find mutual free time with friends
+• Displaying when you and your friends are both free
+• Creating, managing, and tracking meetup proposals and RSVPs
+• Adding confirmed meetups to your connected calendars
+• Discovering local events (concerts, shows, community events) relevant to your area
+• Sending push notifications for meetup requests, confirmations, and reminders
+• Tracking your social activity history (meetup logs)
+• Improving the app based on your feedback
+
+4. INFORMATION SHARING AND DISCLOSURE
+We do not sell, rent, or trade your personal information. We may share your information only in the following limited circumstances:
+
+• Google Calendar API: We read and write events on calendars you explicitly authorize. Your Google OAuth tokens are encrypted and stored in Supabase Vault. We use webhooks to receive real-time updates when your calendar changes.
+• Apple CalDAV (iCloud): If you connect your Apple Calendar, we authenticate via your iCloud app-specific password to read calendar events. Credentials are encrypted in Supabase Vault.
+• Microsoft Graph API (Outlook): If you connect Outlook, we use OAuth to read your calendar. Tokens are encrypted in Supabase Vault.
+• Ticketmaster, SeatGeek, Eventbrite, Meetup APIs: When you search for events, your search query (location, date, keywords) is sent to these services. No personal identifiers are included in these searches.
+• Firebase Cloud Messaging: FCM tokens are used to deliver push notifications to your device. Google processes the delivery.
+• Firebase Analytics: We track anonymized usage events (sign-ups, calendar connections, meetup scheduling) prefixed with "slotted_" for product improvement. No personally identifiable information is included in analytics events.
+• Friends: Your display name, profile photo, and free/busy availability are visible to people you have accepted as friends. Your calendar event titles and details are NOT shared — only free/busy blocks.
+• Legal Requirements: When required by law, regulation, or legal process
+
+5. DATA SECURITY
+We implement the following safeguards to protect your information:
+• OAuth tokens (Google, Outlook, Apple) are encrypted at rest in Supabase Vault — a dedicated encrypted secrets store
+• Supabase Row-Level Security (RLS) ensures users can only access their own data
+• Firebase Auth tokens are verified on every API request
+• OAuth CSRF protection uses HMAC-signed state tokens with 10-minute TTL
+• Rate limiting is applied per IP on all API endpoints
+• CORS is restricted to approved origins only
+• All data is transmitted over HTTPS
+• A predeploy check prevents accidental exposure of localhost URLs in production
+
+6. DATA STORAGE AND RETENTION
+• User data, friendships, availability, and meetups are stored in Supabase PostgreSQL with Row-Level Security
+• OAuth tokens are stored in Supabase Vault (encrypted at rest)
+• FCM tokens are stored in Supabase and removed when you log out or unregister notifications
+• We retain your data for as long as your account is active
+• You may request deletion of your account and all associated data at any time
+• Calendar data is synced incrementally — we store derived free/busy blocks, not raw calendar exports
+
+7. YOUR RIGHTS AND CHOICES
+You have the following rights:
+• Calendar Control: You choose which calendars to sync and can disconnect any calendar provider at any time
+• Friend Visibility: Only accepted friends can see your free/busy availability — you control your friend list
+• Push Notifications: You can enable or disable push notifications at any time through your browser settings or in-app
+• Access: You may request access to the personal information we have about you
+• Correction: You may request correction of inaccurate information
+• Deletion: You may request deletion of your account and all associated data, including OAuth tokens and meetup history
+• Revoke Calendar Access: You can revoke Google Calendar access via your Google Account settings, Outlook access via Microsoft account settings, or Apple CalDAV by changing your app-specific password
+
+8. CALENDAR DATA
+We take special care with calendar data because it reveals your schedule and habits:
+• We store free/busy time blocks — NOT full event details, attendee lists, or event descriptions
+• Calendar event titles are used only for the sync process and for displaying your own events back to you
+• Your friends see only that you are "busy" or "free" during time slots — not what the event is
+• Calendar webhook channels are secured with per-user tokens
+• You can select exactly which calendars to sync (e.g., work calendar only, personal only, or both)
+
+9. THIRD-PARTY SERVICES
+Our application integrates with the following third-party services, each governed by their own privacy policies:
+• Firebase (Auth, Hosting, Cloud Functions, Analytics, FCM): https://firebase.google.com/support/privacy
+• Google (OAuth, Calendar API): https://policies.google.com/privacy
+• Microsoft (Graph API, Outlook Calendar): https://privacy.microsoft.com/en-us/privacystatement
+• Apple (iCloud CalDAV): https://www.apple.com/legal/privacy
+• Supabase (database, Vault): https://supabase.com/privacy
+• Ticketmaster: https://www.ticketmaster.com/privacypolicy
+• SeatGeek: https://seatgeek.com/privacy
+• Eventbrite: https://www.eventbrite.com/privacypolicy
+• Meetup: https://www.meetup.com/privacy
+
+10. CHILDREN'S PRIVACY
+Slotted.ai is not intended for use by individuals under 13 years of age. We do not knowingly collect personal information from children under 13.
+
+11. CHANGES TO THIS PRIVACY POLICY
+We may update this Privacy Policy from time to time. Changes will be posted on this page with an updated "Last Updated" date.
+
+12. CONTACT US
+If you have questions about this Privacy Policy or wish to exercise your privacy rights, contact:
+Email: sharipaltrowitz@gmail.com
