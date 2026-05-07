@@ -18,6 +18,9 @@ export default function SettingsPage() {
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['weekday-evening', 'weekend-afternoon']);
   const [autoSaveIndicator, setAutoSaveIndicator] = useState(false);
 
+  const [exportingData, setExportingData] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
   const [showAppleConnect, setShowAppleConnect] = useState(false);
   const [appleEmail, setAppleEmail] = useState(user?.email || '');
   const [applePassword, setApplePassword] = useState('');
@@ -137,6 +140,47 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings });
     },
   });
+
+  const handleExportData = async () => {
+    setExportingData(true);
+    try {
+      const { data } = await api.get('/users/me/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `slotted-data-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err instanceof Error ? err.message : err);
+      alert('Failed to export data. Please try again.');
+    } finally {
+      setExportingData(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete your account? This action is permanent and cannot be undone. All your data will be erased.'
+    );
+    if (!confirmed) return;
+
+    const doubleConfirm = window.confirm(
+      'This is your last chance. Delete your account permanently?'
+    );
+    if (!doubleConfirm) return;
+
+    setDeletingAccount(true);
+    try {
+      await api.delete('/account');
+      await signOut();
+    } catch (err) {
+      console.error('Account deletion failed:', err instanceof Error ? err.message : err);
+      alert('Failed to delete account. Please try again or contact support.');
+      setDeletingAccount(false);
+    }
+  };
 
   const handleBatteryChange = (level: 'open' | 'ask_me' | 'recharging') => {
     setSocialBatteryLevel(level);
@@ -316,7 +360,7 @@ export default function SettingsPage() {
                 <div className="ml-8 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
                   <CalendarPicker source="apple" />
                   <div className="pt-1">
-                    <button onClick={disconnectAppleCalendar} className="w-full rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50">
+                    <button onClick={disconnectAppleCalendar} className="w-full rounded-lg border border-red-100 bg-red-50/50 px-3 py-2.5 min-h-[44px] text-xs font-medium text-red-500 hover:bg-red-50">
                       Disconnect
                     </button>
                   </div>
@@ -328,7 +372,7 @@ export default function SettingsPage() {
                   <p className="text-[11px] text-gray-600">
                     Enter your Apple ID and an <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">app-specific password</a>.
                   </p>
-                  <button onClick={() => setShowAppleWhy(!showAppleWhy)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                  <button onClick={() => setShowAppleWhy(!showAppleWhy)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-600 transition-colors">
                     <svg className={`h-3 w-3 transition-transform ${showAppleWhy ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                     Why do I need this?
                   </button>
@@ -376,14 +420,14 @@ export default function SettingsPage() {
               {showOutlookCalendarDetails && outlookCalendarConnected && (
                 <div className="ml-8 space-y-2 rounded-xl border border-gray-100 bg-gray-50/30 p-3">
                   <CalendarPicker source="outlook" />
-                  <div className="pt-1"><button onClick={disconnectOutlookCalendar} className="w-full rounded-lg border border-red-100 bg-red-50/50 px-2 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50">Disconnect</button></div>
+                  <div className="pt-1"><button onClick={disconnectOutlookCalendar} className="w-full rounded-lg border border-red-100 bg-red-50/50 px-3 py-2.5 min-h-[44px] text-xs font-medium text-red-500 hover:bg-red-50">Disconnect</button></div>
                 </div>
               )}
 
               {(googleCalendarConnected || appleCalendarConnected || outlookCalendarConnected) ? (
-                <p className="mt-2 text-xs text-gray-400 leading-relaxed">{'\u{1F512}'} Friends only see free or busy — never event details. You can disconnect anytime.</p>
+                <p className="mt-2 text-xs text-gray-500 leading-relaxed">{'\u{1F512}'} Friends only see free or busy — never event details. You can disconnect anytime.</p>
               ) : (
-                <p className="mt-2 text-xs text-gray-400 leading-relaxed">Connect at least one calendar so Slotted.ai can find times that work. We only read busy/free — never event details.</p>
+                <p className="mt-2 text-xs text-gray-500 leading-relaxed">Connect at least one calendar so Slotted.ai can find times that work. We only read busy/free — never event details.</p>
               )}
             </div>
           </div>
@@ -400,7 +444,7 @@ export default function SettingsPage() {
         <section>
           <div className="flex items-center gap-3 mb-3">
             <div className="h-px flex-1 bg-gray-200" />
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Advanced</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Advanced</span>
             <div className="h-px flex-1 bg-gray-200" />
           </div>
 
@@ -446,7 +490,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="mt-3 border-t border-gray-100 pt-3">
                   <label className="block text-[11px] font-semibold text-gray-700">No-plans days</label>
-                  <p className="mt-0.5 text-xs text-gray-400">Slotted.ai won{"'"}t suggest hangouts on these days</p>
+                  <p className="mt-0.5 text-xs text-gray-500">Slotted.ai won{"'"}t suggest hangouts on these days</p>
                   <div className="mt-2 grid grid-cols-7 gap-1 sm:gap-2">
                     {[{ day: 0, label: 'Sun' },{ day: 1, label: 'Mon' },{ day: 2, label: 'Tue' },{ day: 3, label: 'Wed' },{ day: 4, label: 'Thu' },{ day: 5, label: 'Fri' },{ day: 6, label: 'Sat' }].map(({ day, label }) => {
                       const selected = rechargingDays.includes(day);
@@ -454,9 +498,9 @@ export default function SettingsPage() {
                     })}
                   </div>
                 </div>
-                {rechargingDays.length > 0 && (<div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-1.5"><p className="text-xs text-gray-400">No plans on {rechargingDays.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}</p></div>)}
+                {rechargingDays.length > 0 && (<div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-1.5"><p className="text-xs text-gray-500">No plans on {rechargingDays.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}</p></div>)}
                 <div className="mt-3 border-t border-gray-100 pt-3">
-                  <label className="block text-[11px] font-semibold text-gray-700">Social goal<span className="ml-1 font-normal text-gray-400">— how often you want to see friends</span></label>
+                  <label className="block text-[11px] font-semibold text-gray-700">Social goal<span className="ml-1 font-normal text-gray-500">— how often you want to see friends</span></label>
                   <div className="mt-2 grid grid-cols-3 gap-2">
                     {[{ value: 'increase', label: 'More' },{ value: 'maintain', label: 'Same' },{ value: 'decrease', label: 'Less' }].map((opt) => (
                       <button key={opt.value} onClick={() => setSocialGoal(opt.value)} className={`rounded-lg border px-2 py-2 text-center text-xs transition-all ${socialGoal === opt.value ? 'border-slotted-400 bg-gradient-to-r from-slotted-50 to-purple-50 text-slotted-700 shadow-sm font-semibold' : 'border-gray-200 text-gray-500 hover:border-slotted-200 hover:bg-gray-50'}`}><p className="text-xs leading-tight">{opt.label}</p></button>
@@ -472,7 +516,7 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2"><label className="text-[11px] font-semibold text-gray-700">Share hangout activity</label></div>
-                    <p className="mt-0.5 text-xs text-gray-400">{shareHangouts ? 'Friends only see a simple "You caught up with [Name]" signal when both people enable sharing.' : 'Your hangouts stay private.'}</p>
+                    <p className="mt-0.5 text-xs text-gray-500">{shareHangouts ? 'Friends only see a simple "You caught up with [Name]" signal when both people enable sharing.' : 'Your hangouts stay private.'}</p>
                   </div>
                   <button type="button" role="switch" aria-checked={shareHangouts} onClick={() => setShareHangouts(!shareHangouts)} className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${shareHangouts ? 'bg-slotted-500' : 'bg-gray-200'}`}>
                     <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${shareHangouts ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
@@ -487,8 +531,8 @@ export default function SettingsPage() {
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-700 mb-1">Neighborhoods</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <div><label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Home</label><input type="text" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} placeholder="e.g. West Village, NYC" className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-100" /></div>
-                      <div><label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Work</label><input type="text" value={workNeighborhood} onChange={(e) => setWorkNeighborhood(e.target.value)} placeholder="e.g. Midtown, NYC" className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-100" /></div>
+                      <div><label className="block text-xs font-medium uppercase tracking-wider text-gray-500">Home</label><input type="text" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} placeholder="e.g. West Village, NYC" className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-100" /></div>
+                      <div><label className="block text-xs font-medium uppercase tracking-wider text-gray-500">Work</label><input type="text" value={workNeighborhood} onChange={(e) => setWorkNeighborhood(e.target.value)} placeholder="e.g. Midtown, NYC" className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-100" /></div>
                     </div>
                   </div>
                   <div className="border-t border-teal-100 pt-3">
@@ -504,11 +548,11 @@ export default function SettingsPage() {
                     <label className="block text-[11px] font-semibold text-gray-700 mb-1.5">When are you free?</label>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Weekdays</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Weekdays</p>
                         {[{ value: 'weekday-morning', label: 'Morning' },{ value: 'weekday-afternoon', label: 'Afternoon' },{ value: 'weekday-evening', label: 'Evening' }].map((opt) => { const selected = preferredTimes.includes(opt.value); return (<button key={opt.value} onClick={() => toggleTime(opt.value)} className={`w-full rounded-lg border px-3 py-2 text-left text-[11px] transition-all ${selected ? 'border-teal-400 bg-teal-50 text-teal-700 shadow-sm font-semibold' : 'border-gray-200 text-gray-500 hover:border-teal-200 hover:bg-gray-50'}`}>{opt.label}</button>); })}
                       </div>
                       <div className="space-y-1.5">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Weekends</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Weekends</p>
                         {[{ value: 'weekend-morning', label: 'Morning' },{ value: 'weekend-afternoon', label: 'Afternoon' },{ value: 'weekend-evening', label: 'Evening' }].map((opt) => { const selected = preferredTimes.includes(opt.value); return (<button key={opt.value} onClick={() => toggleTime(opt.value)} className={`w-full rounded-lg border px-3 py-2 text-left text-[11px] transition-all ${selected ? 'border-teal-400 bg-teal-50 text-teal-700 shadow-sm font-semibold' : 'border-gray-200 text-gray-500 hover:border-teal-200 hover:bg-gray-50'}`}>{opt.label}</button>); })}
                       </div>
                     </div>
@@ -531,12 +575,12 @@ export default function SettingsPage() {
                   <div className="flex flex-wrap gap-1.5">
                     {[{ value: 'phone', label: 'Phone Call' },{ value: 'facetime', label: 'FaceTime' },{ value: 'zoom', label: 'Zoom' },{ value: 'google_meet', label: 'Google Meet' },{ value: 'teams', label: 'Teams' },{ value: 'whatsapp', label: 'WhatsApp' }].map((p) => { const selected = videoPlatforms.includes(p.value); return (<button key={p.value} onClick={() => setVideoPlatforms((prev) => selected ? prev.filter((v) => v !== p.value) : [...prev, p.value])} className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${selected ? 'border-violet-400 bg-violet-50 text-violet-700 shadow-sm' : 'border-gray-200 text-gray-500 hover:border-violet-200 hover:bg-violet-50/50'}`}>{p.label}</button>); })}
                   </div>
-                  <p className="mt-1.5 text-xs text-gray-400">Friends see your preferences when scheduling calls</p>
+                  <p className="mt-1.5 text-xs text-gray-500">Friends see your preferences when scheduling calls</p>
                 </div>
-                {callWindows.length > 0 && (<div className="space-y-2 mb-3">{callWindows.map((w, idx) => { const dayLabel = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w.day] || '?'; return (<div key={idx} className="flex items-center justify-between rounded-xl border border-violet-100 bg-violet-50/30 px-3 py-2"><div className="flex items-center gap-2"><span className="text-[11px] font-semibold text-gray-700">{dayLabel}</span><span className="text-[11px] text-gray-500">{w.start} – {w.end}</span>{w.label && <span className="text-xs text-gray-400">({w.label})</span>}</div><button onClick={() => setCallWindows((prev) => prev.filter((_, i) => i !== idx))} className="text-gray-400 hover:text-red-500 transition-colors"><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button></div>); })}</div>)}
-                {callWindows.length === 0 && (<div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/20 px-4 py-5 text-center mb-3"><p className="text-xs text-violet-400">No call windows yet</p><p className="text-xs text-gray-400 mt-1">Add preset times below or create a custom window</p></div>)}
+                {callWindows.length > 0 && (<div className="space-y-2 mb-3">{callWindows.map((w, idx) => { const dayLabel = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w.day] || '?'; return (<div key={idx} className="flex items-center justify-between rounded-xl border border-violet-100 bg-violet-50/30 px-3 py-2"><div className="flex items-center gap-2"><span className="text-[11px] font-semibold text-gray-700">{dayLabel}</span><span className="text-[11px] text-gray-500">{w.start} – {w.end}</span>{w.label && <span className="text-xs text-gray-500">({w.label})</span>}</div><button onClick={() => setCallWindows((prev) => prev.filter((_, i) => i !== idx))} className="text-gray-500 hover:text-red-500 transition-colors"><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button></div>); })}</div>)}
+                {callWindows.length === 0 && (<div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/20 px-4 py-5 text-center mb-3"><p className="text-xs text-violet-400">No call windows yet</p><p className="text-xs text-gray-500 mt-1">Add preset times below or create a custom window</p></div>)}
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-gray-400 mb-2">Quick add</p>
+                  <p className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-2">Quick add</p>
                   <div className="flex flex-wrap gap-1.5">
                     {[{ label: 'Weekday lunch', days: [1,2,3,4,5], start: '12:00', end: '13:00', tag: 'Lunch break' },{ label: 'Morning commute', days: [1,2,3,4,5], start: '07:30', end: '09:00', tag: 'Commute' },{ label: 'Evening commute', days: [1,2,3,4,5], start: '17:00', end: '18:30', tag: 'Commute' },{ label: 'Weekday evening', days: [1,2,3,4,5], start: '19:00', end: '21:00', tag: 'Evening' },{ label: 'Weekend morning', days: [0,6], start: '09:00', end: '11:00', tag: 'Morning' },{ label: 'Weekend evening', days: [0,6], start: '18:00', end: '21:00', tag: 'Evening' }].map((preset) => (<button key={preset.label} onClick={() => { const nw = preset.days.map((day) => ({ day, start: preset.start, end: preset.end, label: preset.tag })); setCallWindows((prev) => { const ex = new Set(prev.map((w) => `${w.day}-${w.start}-${w.end}`)); return [...prev, ...nw.filter((w) => !ex.has(`${w.day}-${w.start}-${w.end}`))]; }); }} className="rounded-lg border border-violet-200 px-3 py-1.5 text-[11px] font-medium text-gray-600 transition-all hover:border-violet-400 hover:bg-violet-50">{preset.label}</button>))}
                   </div>
@@ -544,11 +588,11 @@ export default function SettingsPage() {
                 <details className="mt-3">
                   <summary className="text-[11px] font-medium text-violet-500 hover:text-violet-700 cursor-pointer transition-colors">+ Add custom window</summary>
                   <div className="mt-3 space-y-3">
-                    <div><label className="block text-xs text-gray-400 mb-1.5">Select days</label><div className="flex gap-1.5">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, i) => (<button key={d} type="button" onClick={() => { setCustomCallDays((prev) => { const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next; }); }} className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-all ${customCallDays.has(i) ? 'border-violet-400 bg-violet-50 text-violet-700' : 'border-gray-200 text-gray-500 hover:border-violet-200'}`}>{d}</button>))}</div></div>
+                    <div><label className="block text-xs text-gray-500 mb-1.5">Select days</label><div className="flex gap-1.5">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, i) => (<button key={d} type="button" onClick={() => { setCustomCallDays((prev) => { const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next; }); }} className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-all ${customCallDays.has(i) ? 'border-violet-400 bg-violet-50 text-violet-700' : 'border-gray-200 text-gray-500 hover:border-violet-200'}`}>{d}</button>))}</div></div>
                     <div className="flex flex-wrap items-end gap-2">
-                      <div><label className="block text-xs text-gray-400 mb-0.5">Start</label><input type="time" value={customCallStart} onChange={(e) => setCustomCallStart(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-violet-400 focus:outline-none" /></div>
-                      <div><label className="block text-xs text-gray-400 mb-0.5">End</label><input type="time" value={customCallEnd} onChange={(e) => setCustomCallEnd(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-violet-400 focus:outline-none" /></div>
-                      <div className="flex-1 min-w-[120px]"><label className="block text-xs text-gray-400 mb-0.5">Label (optional)</label><input type="text" value={customCallLabel} onChange={(e) => setCustomCallLabel(e.target.value)} placeholder="e.g. Lunch" className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-violet-400 focus:outline-none" /></div>
+                      <div><label className="block text-xs text-gray-500 mb-0.5">Start</label><input type="time" value={customCallStart} onChange={(e) => setCustomCallStart(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-violet-400 focus:outline-none" /></div>
+                      <div><label className="block text-xs text-gray-500 mb-0.5">End</label><input type="time" value={customCallEnd} onChange={(e) => setCustomCallEnd(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-violet-400 focus:outline-none" /></div>
+                      <div className="flex-1 min-w-[120px]"><label className="block text-xs text-gray-500 mb-0.5">Label (optional)</label><input type="text" value={customCallLabel} onChange={(e) => setCustomCallLabel(e.target.value)} placeholder="e.g. Lunch" className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-violet-400 focus:outline-none" /></div>
                       <button onClick={() => { if (customCallDays.size > 0 && customCallStart && customCallEnd) { const nw = Array.from(customCallDays).map((day) => ({ day, start: customCallStart, end: customCallEnd, label: customCallLabel })); setCallWindows((prev) => { const ex = new Set(prev.map((w) => `${w.day}-${w.start}-${w.end}`)); return [...prev, ...nw.filter((w) => !ex.has(`${w.day}-${w.start}-${w.end}`))]; }); setCustomCallDays(new Set()); setCustomCallStart('12:00'); setCustomCallEnd('13:00'); setCustomCallLabel(''); } }} disabled={customCallDays.size === 0} className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all">Add</button>
                     </div>
                   </div>
@@ -577,6 +621,61 @@ export default function SettingsPage() {
           <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
             <p className="text-xs text-gray-500 mb-3">How social are you feeling?</p>
             <SocialBattery level={socialBatteryLevel} onChange={handleBatteryChange} />
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════ */}
+        {/* SECTION 4: YOUR DATA (GDPR)                    */}
+        {/* ═══════════════════════════════════════════════ */}
+        <section className="mt-8 pt-6 border-t border-gray-200">
+          <h2 className="text-sm font-bold text-gray-800 mb-3">Your Data</h2>
+          <div className="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-800">Export your data</p>
+                <p className="text-xs text-gray-500 mt-0.5">Download all your Slotted data as JSON</p>
+              </div>
+              <button
+                onClick={handleExportData}
+                disabled={exportingData}
+                className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 min-h-[44px] text-xs font-medium text-gray-700 transition-all hover:bg-gray-50 disabled:opacity-50"
+              >
+                {exportingData ? 'Exporting…' : 'Export data'}
+              </button>
+            </div>
+
+            <div className="border-t border-gray-100 pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-red-600">Delete account</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Permanently delete your account and all data</p>
+                </div>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount}
+                  className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 min-h-[44px] text-xs font-semibold text-red-600 transition-all hover:bg-red-100 disabled:opacity-50"
+                >
+                  {deletingAccount ? 'Deleting…' : 'Delete account'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Legal */}
+          <div className="rounded-2xl border border-gray-200/80 bg-white/60 p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100">
+                <span className="text-lg">📋</span>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Legal</p>
+                <div className="flex gap-3 mt-0.5">
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-xs text-teal-600 hover:text-teal-700 transition-colors">Privacy Policy</a>
+                  <span className="text-xs text-gray-300">·</span>
+                  <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-xs text-teal-600 hover:text-teal-700 transition-colors">Terms of Service</a>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
