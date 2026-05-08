@@ -257,12 +257,12 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
 
     if (notification.type === 'calendar_match' && notification.related_user_id && !isSharedEvent) {
       onClose();
-      navigate(`/friends?findTimes=${encodeURIComponent(notification.related_user_id)}`);
+      navigate(`/dashboard?findTimes=${encodeURIComponent(notification.related_user_id)}`);
       return;
     }
     if (isFriendJoined) {
       onClose();
-      navigate(notification.related_user_id ? `/friends?findTimes=${encodeURIComponent(notification.related_user_id)}` : '/friends');
+      navigate(notification.related_user_id ? `/dashboard?findTimes=${encodeURIComponent(notification.related_user_id)}` : '/dashboard');
       return;
     }
   };

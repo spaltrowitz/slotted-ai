@@ -30,7 +30,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 
 const LoginPage = lazyWithRetry(() => import('./pages/LoginPage'), 'login');
 const DashboardPage = lazyWithRetry(() => import('./pages/DashboardPage'), 'dashboard');
-const FriendsPage = lazyWithRetry(() => import('./pages/FriendsPage'), 'friends');
+
 const OnboardingPage = lazyWithRetry(() => import('./pages/OnboardingPage'), 'onboarding');
 const SettingsPage = lazyWithRetry(() => import('./pages/SettingsPage'), 'settings');
 const NotificationsPage = lazyWithRetry(() => import('./pages/NotificationsPage'), 'notifications');
@@ -142,7 +142,7 @@ export default function App() {
               <Route element={<ProtectedRoute />}>
                 <Route path="/onboarding" element={<OnboardingPage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/friends" element={<FriendsPage />} />
+                <Route path="/friends" element={<Navigate to="/dashboard" replace />} />
 
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />

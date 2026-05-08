@@ -1,14 +1,17 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, startTransition } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
 import EventScheduleButton from '../components/EventScheduleButton';
 import StarRating from '../components/StarRating';
 import SmartSuggestions from '../components/SmartSuggestions';
+import FriendAvailability from '../components/FriendAvailability';
+import GroupAvailability from '../components/GroupAvailability';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
-import { getFirstName, getSmartDisplayName, timeAgo, formatMeetupTime } from '../lib/utils';
+import { getFirstName, getSmartDisplayName, formatMeetupTime } from '../lib/utils';
+import { trackFriendInvited, trackFriendAdded } from '../lib/analytics';
 import { getUserStage, type UserStage } from '../lib/userStage';
 import {
   fetchDashboard,
@@ -16,8 +19,6 @@ import {
   fetchMeetups,
   queryKeys,
   type FriendRecord,
-  type FriendToSee,
-  type Meetup,
 } from '../lib/queries';
 
 /* ─── stage components ─── */
@@ -134,296 +135,6 @@ function StagePendingInvite({
   );
 }
 
-function StageFirstHangout({
-  friends,
-  allFriendNames,
-}: {
-  friends: FriendRecord[];
-  allFriendNames: string[];
-}) {
-  const sorted = [...friends].sort((a, b) =>
-    getFirstName(a.friend.displayName).localeCompare(getFirstName(b.friend.displayName)),
-  );
-
-  return (
-    <div className="px-2 py-6">
-      <h2 className="text-lg font-semibold text-gray-900 text-center">
-        Who do you want to hang out with?
-      </h2>
-      <p className="mt-1 text-sm text-gray-500 text-center">Tap anyone to find times together</p>
-
-      <div className="mt-5 grid grid-cols-4 sm:grid-cols-5 gap-3">
-        {sorted.map((f) => (
-          <Link
-            key={f.friend.id}
-            to={`/friends?findTimes=${f.friend.id}`}
-            className="flex flex-col items-center gap-1 group"
-          >
-            {f.friend.photoUrl ? (
-              <img
-                src={f.friend.photoUrl}
-                alt=""
-                className="h-12 w-12 rounded-full ring-2 ring-white shadow-sm group-hover:ring-slotted-300 transition-all"
-                loading="lazy"
-              />
-            ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white shadow-sm ring-2 ring-white group-hover:ring-slotted-300 transition-all">
-                {f.friend.displayName?.[0] ?? '?'}
-              </div>
-            )}
-            <p className="w-full text-center text-[11px] font-medium text-gray-600 group-hover:text-slotted-600 transition-colors truncate">
-              {getSmartDisplayName(f.friend.displayName, allFriendNames)}
-            </p>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StageHasHangouts({
-  upcoming,
-  inviteUrl,
-  currentUserId,
-  allFriendNames,
-  onExpand: _onExpand,
-  expandedId: _expandedId,
-  calendarModal,
-  onCalendarModal,
-}: {
-  upcoming: Meetup[];
-  inviteUrl: string;
-  currentUserId: string;
-  allFriendNames: string[];
-  onExpand: (id: string | null) => void;
-  expandedId: string | null;
-  calendarModal: { meetupId: string; title: string; startTime: string; endTime: string } | null;
-  onCalendarModal: (m: { meetupId: string; title: string; startTime: string; endTime: string } | null) => void;
-}) {
-  const hero = upcoming[0];
-  const others = hero.participants.filter((p) => p.userId !== currentUserId);
-  const displayTitle = hero.title || others.map((p) => getSmartDisplayName(p.displayName, allFriendNames)).join(', ');
-
-  return (
-    <div className="space-y-6">
-      <h2 className="text-sm font-semibold text-gray-900">Coming up</h2>
-
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p className="text-sm font-medium text-gray-900">{displayTitle}</p>
-        <p className="mt-1 text-xs text-gray-500">{formatMeetupTime(hero.start_time)}</p>
-        <div className="mt-4 flex items-center justify-between">
-          <div className="flex -space-x-2">
-            {others.slice(0, 3).map((p) =>
-              p.photoUrl ? (
-                <img
-                  key={p.userId}
-                  src={p.photoUrl}
-                  alt=""
-                  className="h-8 w-8 rounded-full ring-2 ring-white"
-                  loading="lazy"
-                />
-              ) : (
-                <div
-                  key={p.userId}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xs font-semibold text-white ring-2 ring-white"
-                >
-                  {p.displayName?.[0] ?? '?'}
-                </div>
-              ),
-            )}
-          </div>
-          <button
-            onClick={() => onCalendarModal({ meetupId: hero.id, title: hero.title, startTime: hero.start_time, endTime: hero.end_time })}
-            className="text-xs font-medium text-slotted-600 hover:text-slotted-700 transition-colors"
-          >
-            View →
-          </button>
-        </div>
-      </div>
-
-      {upcoming.length > 1 && (
-        <div className="space-y-2">
-          {upcoming.slice(1, 4).map((m) => {
-            const mOthers = m.participants.filter((p) => p.userId !== currentUserId);
-            const mTitle = m.title || mOthers.map((p) => getSmartDisplayName(p.displayName, allFriendNames)).join(', ');
-            return (
-              <div key={m.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{mTitle}</p>
-                  <p className="text-xs text-gray-500">{formatMeetupTime(m.start_time)}</p>
-                </div>
-                <button
-                  onClick={() => onCalendarModal({ meetupId: m.id, title: m.title, startTime: m.start_time, endTime: m.end_time })}
-                  className="shrink-0 text-xs font-medium text-slotted-600 hover:text-slotted-700 transition-colors"
-                >
-                  View →
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3 pt-2">
-        <Link
-          to="/friends"
-          className="rounded-xl gradient-btn px-5 py-3 text-center text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
-        >
-          📅 Find a time to hang out
-        </Link>
-        <EventScheduleButton variant="primary" />
-        <ShareInviteButton inviteUrl={inviteUrl} variant="secondary" />
-      </div>
-
-      {calendarModal && (
-        <AddToCalendarModal
-          meetupId={calendarModal.meetupId}
-          meetupTitle={calendarModal.title}
-          startTime={calendarModal.startTime}
-          endTime={calendarModal.endTime}
-          onClose={() => onCalendarModal(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-function StageActiveUser({
-  upcoming,
-  friendsToSee,
-  inviteUrl,
-  currentUserId,
-  allFriendNames,
-  calendarModal,
-  onCalendarModal,
-}: {
-  upcoming: Meetup[];
-  friendsToSee: FriendToSee[];
-  inviteUrl: string;
-  currentUserId: string;
-  allFriendNames: string[];
-  calendarModal: { meetupId: string; title: string; startTime: string; endTime: string } | null;
-  onCalendarModal: (m: { meetupId: string; title: string; startTime: string; endTime: string } | null) => void;
-}) {
-  return (
-    <div className="space-y-6">
-      {/* Upcoming */}
-      {upcoming.length > 0 && (
-        <div>
-          <h2 className="mb-3 text-sm font-semibold text-gray-900">Upcoming</h2>
-          <div className="space-y-2">
-            {upcoming.slice(0, 3).map((m) => {
-              const others = m.participants.filter((p) => p.userId !== currentUserId);
-              const displayTitle = m.title || others.map((p) => getSmartDisplayName(p.displayName, allFriendNames)).join(', ');
-              const isConfirmed = m.status === 'confirmed' || m.participants.every((p) => p.rsvp === 'accepted');
-              return (
-                <div
-                  key={m.id}
-                  className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm"
-                >
-                  <div className="flex -space-x-2 shrink-0">
-                    {others.slice(0, 2).map((p) =>
-                      p.photoUrl ? (
-                        <img
-                          key={p.userId}
-                          src={p.photoUrl}
-                          alt=""
-                          className="h-8 w-8 rounded-full ring-2 ring-white"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div
-                          key={p.userId}
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xs font-semibold text-white ring-2 ring-white"
-                        >
-                          {p.displayName?.[0] ?? '?'}
-                        </div>
-                      ),
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{displayTitle}</p>
-                    <p className="text-xs text-gray-500">{formatMeetupTime(m.start_time)}</p>
-                  </div>
-                  <span
-                    className={`shrink-0 text-xs font-medium ${isConfirmed ? 'text-emerald-600' : 'text-amber-600'}`}
-                  >
-                    {isConfirmed ? '✅' : '⏳'}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {upcoming.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/50 p-6 text-center">
-          <p className="text-sm text-gray-500">No upcoming hangouts</p>
-          <Link
-            to="/friends"
-            className="mt-3 inline-block rounded-xl gradient-btn px-5 py-2.5 text-xs font-semibold text-white shadow-sm"
-          >
-            Find a time with a friend
-          </Link>
-        </div>
-      )}
-
-      {/* Time to reconnect */}
-      {friendsToSee.length > 0 && (
-        <div>
-          <h2 className="mb-3 text-sm font-semibold text-gray-900">Time to reconnect?</h2>
-          <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
-            {friendsToSee.slice(0, 4).map((f) => (
-              <Link
-                key={f.id}
-                to={`/friends?findTimes=${f.id}`}
-                className="flex flex-shrink-0 flex-col items-center gap-1.5 w-16 group"
-              >
-                {f.photoUrl ? (
-                  <img
-                    src={f.photoUrl}
-                    alt=""
-                    className="h-12 w-12 rounded-full ring-2 ring-white shadow-sm group-hover:ring-slotted-300 transition-all"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white shadow-sm ring-2 ring-white group-hover:ring-slotted-300 transition-all">
-                    {f.displayName?.[0] ?? '?'}
-                  </div>
-                )}
-                <p className="w-full text-center text-xs font-medium text-gray-600 group-hover:text-slotted-600 transition-colors truncate">
-                  {getSmartDisplayName(f.displayName, allFriendNames)}
-                </p>
-                {f.lastHangout && (
-                  <p className="text-xs text-gray-500">{timeAgo(f.lastHangout)}</p>
-                )}
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* AI-powered suggestions */}
-      <SmartSuggestions />
-
-      {/* Invite CTA */}
-      <EventScheduleButton variant="compact" />
-      <ShareInviteButton inviteUrl={inviteUrl} variant="subtle" />
-
-      {calendarModal && (
-        <AddToCalendarModal
-          meetupId={calendarModal.meetupId}
-          meetupTitle={calendarModal.title}
-          startTime={calendarModal.startTime}
-          endTime={calendarModal.endTime}
-          onClose={() => onCalendarModal(null)}
-        />
-      )}
-    </div>
-  );
-}
-
 function ShareInviteButton({ inviteUrl, variant }: { inviteUrl: string; variant: 'secondary' | 'subtle' }) {
   const [copied, setCopied] = useState(false);
   const message = `Let's hang! This app finds times we're both free — no more back-and-forth 📅`;
@@ -485,8 +196,8 @@ function DashboardSkeleton() {
 export default function DashboardPage() {
   const { user, calendarConnected, calendarJustConnected } = useAuth();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [expandedMeetupId, setExpandedMeetupId] = useState<string | null>(null);
   const [calendarModal, setCalendarModal] = useState<{
     meetupId: string;
     title: string;
@@ -494,15 +205,23 @@ export default function DashboardPage() {
     endTime: string;
   } | null>(null);
 
+  // Friend selection state (merged from FriendsPage)
+  const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
+  const [selectedFriendName, setSelectedFriendName] = useState<string>('');
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [groupFriendIds, setGroupFriendIds] = useState<string[] | null>(null);
+
   const today = new Date();
   const greeting =
     today.getHours() < 12 ? 'Good morning' : today.getHours() < 18 ? 'Good afternoon' : 'Good evening';
 
   const userUid = user?.uid;
   const inviteUrl = `https://slotted-ai.web.app?ref=${userUid ?? ''}`;
+  const message = `Let's hang! This app finds times we're both free — no more back-and-forth 📅`;
 
   /* ─── data fetching ─── */
-  const { data: friendsToSee = [], isLoading: dashboardLoading } = useQuery({
+  const { isLoading: dashboardLoading } = useQuery({
     queryKey: queryKeys.dashboard,
     queryFn: fetchDashboard,
     enabled: !!userUid,
@@ -550,6 +269,11 @@ export default function DashboardPage() {
     [friendsData],
   );
 
+  const outgoingInvites = useMemo(
+    () => friendsData.filter((f) => f.status === 'pending' && f.invitedBy !== f.friend.id),
+    [friendsData],
+  );
+
   const upcoming = useMemo(
     () =>
       meetups.filter((m) => {
@@ -568,19 +292,106 @@ export default function DashboardPage() {
     [meetups, now],
   );
 
+  const completedHangoutCount = completedHangouts.length;
+
   const stage: UserStage = useMemo(
     () =>
       getUserStage({
         calendarConnected,
         friendCount: acceptedFriends.length,
         pendingInvitesCount: pendingInbound.length,
-        completedHangoutCount: completedHangouts.length,
+        completedHangoutCount,
         upcomingHangoutCount: upcoming.length,
       }),
-    [calendarConnected, acceptedFriends.length, pendingInbound.length, completedHangouts.length, upcoming.length],
+    [calendarConnected, acceptedFriends.length, pendingInbound.length, completedHangoutCount, upcoming.length],
   );
 
   const isLoading = dashboardLoading;
+
+  /* ─── friend selection handlers (from FriendsPage) ─── */
+  useEffect(() => {
+    const findTimesId = searchParams.get('findTimes');
+    if (findTimesId && friendsData.length > 0) {
+      const friend = friendsData.find(f => f.friend.id === findTimesId && f.status === 'accepted');
+      if (friend) {
+        setSelectedFriendId(findTimesId);
+        setSelectedFriendName(friend.friend.displayName);
+      }
+    }
+  }, [searchParams, friendsData]);
+
+  const handleFindTimes = useCallback((friendId: string, friendName: string) => {
+    setSelectedFriendId(friendId);
+    setSelectedFriendName(friendName);
+    setGroupFriendIds(null);
+    setSelectedIds(new Set([friendId]));
+    if (!selectMode) setSelectMode(true);
+  }, [selectMode]);
+
+  const handleCloseFindTimes = useCallback(() => {
+    setSelectedFriendId(null);
+    setSelectedFriendName('');
+    setSelectedIds(new Set());
+    setSelectMode(false);
+    startTransition(() => {
+      setSearchParams({}, { replace: true });
+    });
+  }, [setSearchParams]);
+
+  const toggleSelect = useCallback((friendId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(friendId)) next.delete(friendId);
+      else next.add(friendId);
+      return next;
+    });
+  }, []);
+
+  const handleRowClick = useCallback((f: FriendRecord) => {
+    if (selectMode) {
+      toggleSelect(f.friend.id);
+    } else {
+      handleFindTimes(f.friend.id, f.friend.displayName);
+    }
+  }, [selectMode, toggleSelect, handleFindTimes]);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  useEffect(() => {
+    if (selectedIds.size === 0 && selectMode) {
+      setSelectMode(false);
+    }
+  }, [selectedIds, selectMode]);
+
+  const handleFriendAction = async (friendshipId: string, action: 'accept' | 'decline') => {
+    if (!user) return;
+    try {
+      await friendActionMutation.mutateAsync({ friendshipId, action });
+      if (action === 'accept') trackFriendAdded();
+    } catch (err) {
+      console.error('Failed to update friendship:', err);
+    }
+  };
+
+  const handleText = () => {
+    trackFriendInvited('sms');
+    window.open(`sms:?&body=${encodeURIComponent(message)}`, '_blank');
+  };
+
+  const lastSeenLabel = (f: FriendRecord) => {
+    const days = f.daysSinceLastHangout;
+    if (days === undefined || days === null || !f.lastHangoutDate) return '';
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days}d ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `${weeks}w ago`;
+    const months = Math.floor(days / 30);
+    return `${months}mo ago`;
+  };
 
   /* ─── hangout rating prompt ─── */
   const RATED_KEY = 'slotted_rated_meetups';
@@ -638,11 +449,14 @@ export default function DashboardPage() {
     } catch { /* ignore */ }
   }, [ratedIds]);
 
+  /* ─── active user stage: unified layout ─── */
+  const isActiveStage = stage === 'active-user' || stage === 'has-hangouts' || stage === 'first-hangout';
+
   /* ─── render ─── */
   return (
     <AppShell>
       {/* Greeting — only for content-heavy stages */}
-      {(stage === 'has-hangouts' || stage === 'active-user') && (
+      {isActiveStage && (
         <div className="mb-5">
           <h1 className="font-display text-xl font-semibold tracking-tight text-gray-900">
             {greeting}, {getFirstName(user?.displayName)}
@@ -686,33 +500,285 @@ export default function DashboardPage() {
         />
       )}
 
-      {!isLoading && stage === 'first-hangout' && (
-        <StageFirstHangout friends={acceptedFriends} allFriendNames={allFriendNames} />
+      {/* ─── Unified active stage (first-hangout / has-hangouts / active-user) ─── */}
+      {!isLoading && isActiveStage && (
+        <div className="space-y-6">
+          {/* 1. Smart AI Suggestions */}
+          <SmartSuggestions />
+
+          {/* 2. Upcoming meetups */}
+          {upcoming.length > 0 && (
+            <div>
+              <h2 className="mb-3 text-sm font-semibold text-gray-900">Upcoming</h2>
+              <div className="space-y-2">
+                {upcoming.slice(0, 3).map((m) => {
+                  const others = m.participants.filter((p) => p.userId !== currentUserId);
+                  const displayTitle = m.title || others.map((p) => getSmartDisplayName(p.displayName, allFriendNames)).join(', ');
+                  const isConfirmed = m.status === 'confirmed' || m.participants.every((p) => p.rsvp === 'accepted');
+                  return (
+                    <div
+                      key={m.id}
+                      className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm cursor-pointer"
+                      onClick={() => setCalendarModal({ meetupId: m.id, title: m.title, startTime: m.start_time, endTime: m.end_time })}
+                    >
+                      <div className="flex -space-x-2 shrink-0">
+                        {others.slice(0, 2).map((p) =>
+                          p.photoUrl ? (
+                            <img
+                              key={p.userId}
+                              src={p.photoUrl}
+                              alt=""
+                              className="h-8 w-8 rounded-full ring-2 ring-white"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div
+                              key={p.userId}
+                              className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xs font-semibold text-white ring-2 ring-white"
+                            >
+                              {p.displayName?.[0] ?? '?'}
+                            </div>
+                          ),
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{displayTitle}</p>
+                        <p className="text-xs text-gray-500">{formatMeetupTime(m.start_time)}</p>
+                      </div>
+                      <span
+                        className={`shrink-0 text-xs font-medium ${isConfirmed ? 'text-emerald-600' : 'text-amber-600'}`}
+                      >
+                        {isConfirmed ? '✅' : '⏳'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 3. Friend availability panels (inline) */}
+          {selectedFriendId && !groupFriendIds && (
+            <div className="scroll-mt-4" ref={(el) => el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>
+              <FriendAvailability
+                key={selectedFriendId}
+                friendId={selectedFriendId}
+                friendName={selectedFriendName}
+                allFriendNames={allFriendNames}
+                onClose={handleCloseFindTimes}
+                completedHangouts={completedHangoutCount}
+              />
+            </div>
+          )}
+
+          {groupFriendIds && groupFriendIds.length >= 2 && (
+            <GroupAvailability
+              friendIds={groupFriendIds}
+              friendNames={groupFriendIds.map(id => {
+                const f = acceptedFriends.find(fr => fr.friend.id === id);
+                return f?.friend.displayName ?? '';
+              })}
+              allFriendNames={allFriendNames}
+              onClose={() => setGroupFriendIds(null)}
+            />
+          )}
+
+          {/* 4. Friend grid (3-col) */}
+          {acceptedFriends.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-gray-900">Friends</h2>
+                {acceptedFriends.length > 1 && (
+                  <button
+                    onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    {selectMode ? 'Cancel' : 'Select'}
+                  </button>
+                )}
+              </div>
+
+              {selectMode && (
+                <p className="text-xs font-medium text-gray-500 mb-2">
+                  {selectedIds.size} of {acceptedFriends.length} selected
+                </p>
+              )}
+
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {acceptedFriends.map((f) => {
+                  const isSelected = selectedIds.has(f.friend.id);
+                  const isViewing = selectedFriendId === f.friend.id;
+                  const seen = lastSeenLabel(f);
+                  return (
+                    <button
+                      key={f.friendshipId}
+                      onClick={() => handleRowClick(f)}
+                      className={`relative flex flex-col items-center gap-1.5 rounded-xl border p-3 transition-all min-h-[44px] ${
+                        isSelected || isViewing
+                          ? 'border-slotted-300 bg-slotted-50/60 shadow-sm'
+                          : 'border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm'
+                      }`}
+                    >
+                      {(isSelected || isViewing) && (
+                        <div className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slotted-500 text-white">
+                          <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      )}
+                      {f.friend.photoUrl ? (
+                        <img src={f.friend.photoUrl} alt="" className="h-11 w-11 rounded-full" loading="lazy" />
+                      ) : (
+                        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white">
+                          {f.friend.displayName?.[0] ?? '?'}
+                        </div>
+                      )}
+                      <p className="text-xs font-medium text-gray-900 truncate max-w-full">
+                        {getSmartDisplayName(f.friend.displayName, allFriendNames)}
+                      </p>
+                      {seen && (
+                        <p className="text-[10px] text-gray-500 -mt-0.5">{seen}</p>
+                      )}
+                      {f.friendshipType && f.friendshipType !== 'local' && (
+                        <span className="text-[9px] text-gray-400">
+                          {f.friendshipType === 'long_distance' ? '✈️' : '📍'}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 5. EventScheduleButton */}
+          <EventScheduleButton variant="compact" />
+
+          {/* 6. Invite a friend */}
+          {acceptedFriends.length > 0 && (
+            <button
+              onClick={handleText}
+              className="flex w-full items-center gap-3 rounded-xl border border-dashed border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-700 hover:bg-gray-50"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-400">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </span>
+              Invite a friend
+            </button>
+          )}
+
+          {/* 7. Friend requests (incoming + outgoing) */}
+          {pendingInbound.length > 0 && (
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Friend Requests</h2>
+              <div className="overflow-hidden rounded-xl border border-amber-100 bg-gradient-to-r from-amber-50/50 to-orange-50/30">
+                {pendingInbound.map((f, i) => (
+                  <div
+                    key={f.friendshipId}
+                    className={`flex items-center justify-between gap-3 px-3 py-3 ${
+                      i !== pendingInbound.length - 1 ? 'border-b border-amber-100' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {f.friend.photoUrl ? (
+                        <img src={f.friend.photoUrl} alt="" className="h-9 w-9 rounded-full" loading="lazy" />
+                      ) : (
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-xs font-semibold text-white">
+                          {f.friend.displayName?.[0] ?? '?'}
+                        </div>
+                      )}
+                      <p className="text-sm font-medium text-gray-900 truncate">{getSmartDisplayName(f.friend.displayName, allFriendNames)}</p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => handleFriendAction(f.friendshipId, 'accept')}
+                        className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:bg-emerald-600"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => handleFriendAction(f.friendshipId, 'decline')}
+                        className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50"
+                      >
+                        Not now
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {outgoingInvites.length > 0 && (
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Pending</h2>
+              <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
+                {outgoingInvites.map((f, i) => (
+                  <div
+                    key={f.friendshipId}
+                    className={`flex items-center justify-between gap-3 px-3 py-2.5 ${
+                      i !== outgoingInvites.length - 1 ? 'border-b border-gray-100' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {f.friend.photoUrl ? (
+                        <img src={f.friend.photoUrl} alt="" className="h-9 w-9 rounded-full" loading="lazy" />
+                      ) : (
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-gray-400 to-gray-500 text-xs font-semibold text-white">
+                          {f.friend.displayName?.[0] ?? '?'}
+                        </div>
+                      )}
+                      <p className="text-sm font-medium text-gray-900 truncate">{getSmartDisplayName(f.friend.displayName, allFriendNames)}</p>
+                    </div>
+                    <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
+                      Pending
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <ShareInviteButton inviteUrl={inviteUrl} variant="subtle" />
+
+          {calendarModal && (
+            <AddToCalendarModal
+              meetupId={calendarModal.meetupId}
+              meetupTitle={calendarModal.title}
+              startTime={calendarModal.startTime}
+              endTime={calendarModal.endTime}
+              onClose={() => setCalendarModal(null)}
+            />
+          )}
+        </div>
       )}
 
-      {!isLoading && stage === 'has-hangouts' && (
-        <StageHasHangouts
-          upcoming={upcoming}
-          inviteUrl={inviteUrl}
-          currentUserId={currentUserId}
-          allFriendNames={allFriendNames}
-          onExpand={setExpandedMeetupId}
-          expandedId={expandedMeetupId}
-          calendarModal={calendarModal}
-          onCalendarModal={setCalendarModal}
-        />
-      )}
-
-      {!isLoading && stage === 'active-user' && (
-        <StageActiveUser
-          upcoming={upcoming}
-          friendsToSee={friendsToSee}
-          inviteUrl={inviteUrl}
-          currentUserId={currentUserId}
-          allFriendNames={allFriendNames}
-          calendarModal={calendarModal}
-          onCalendarModal={setCalendarModal}
-        />
+      {/* Multi-select bottom bar */}
+      {selectMode && selectedIds.size >= 1 && (
+        <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center px-4 pb-[env(safe-area-inset-bottom)]">
+          <button
+            onClick={() => {
+              if (selectedIds.size >= 2) {
+                setGroupFriendIds(Array.from(selectedIds));
+                setSelectedFriendId(null);
+                setSelectedFriendName('');
+                startTransition(() => {
+                  setSearchParams({}, { replace: true });
+                });
+              } else {
+                const friendId = Array.from(selectedIds)[0];
+                const friend = acceptedFriends.find(f => f.friend.id === friendId);
+                if (friend) handleFindTimes(friend.friend.id, friend.friend.displayName);
+              }
+              exitSelectMode();
+            }}
+            className="rounded-xl gradient-btn px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl"
+          >
+            Let's hang out{selectedIds.size > 1 ? ` (${selectedIds.size} friends)` : ''} →
+          </button>
+        </div>
       )}
     </AppShell>
   );

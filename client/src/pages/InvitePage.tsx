@@ -42,11 +42,11 @@ export default function InvitePage() {
       try {
         await api.post('/friends/invite', { userId: inviter.uid });
         setConnected(true);
-        setTimeout(() => navigate('/friends'), 2000);
+        setTimeout(() => navigate('/dashboard'), 2000);
       } catch {
         // May already be friends — redirect anyway
         setConnected(true);
-        setTimeout(() => navigate('/friends'), 1500);
+        setTimeout(() => navigate('/dashboard'), 1500);
       } finally {
         setConnecting(false);
       }

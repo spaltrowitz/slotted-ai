@@ -338,7 +338,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
           <p className="text-[11px] text-gray-500">Based on the next 2 weeks of all calendars</p>
         )}
         <button
-          onClick={fetchGroupOverlaps}
+          onClick={() => fetchGroupOverlaps()}
           disabled={loading}
           className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
         >

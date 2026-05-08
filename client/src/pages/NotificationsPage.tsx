@@ -271,15 +271,15 @@ export default function NotificationsPage() {
     const isFriendJoinedNotification = notification.type === 'friend_accepted';
 
     if (notification.type === 'calendar_match' && notification.related_user_id && !isSharedEvent) {
-      navigate(`/friends?findTimes=${encodeURIComponent(notification.related_user_id)}`);
+      navigate(`/dashboard?findTimes=${encodeURIComponent(notification.related_user_id)}`);
       return;
     }
 
     if (isFriendJoinedNotification) {
       if (notification.related_user_id) {
-        navigate(`/friends?findTimes=${encodeURIComponent(notification.related_user_id)}`);
+        navigate(`/dashboard?findTimes=${encodeURIComponent(notification.related_user_id)}`);
       } else {
-        navigate('/friends');
+        navigate('/dashboard');
       }
       return;
     }

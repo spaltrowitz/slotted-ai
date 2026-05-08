@@ -71,11 +71,11 @@ export default function EventInviteLandingPage() {
         },
       });
       setPhase('done');
-      setTimeout(() => navigate('/friends'), 1500);
+      setTimeout(() => navigate('/dashboard'), 1500);
     } catch {
       // Still redirect — they're in the system
       setPhase('done');
-      setTimeout(() => navigate('/friends'), 1500);
+      setTimeout(() => navigate('/dashboard'), 1500);
     } finally {
       setAccepting(false);
     }

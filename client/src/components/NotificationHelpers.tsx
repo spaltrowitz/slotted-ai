@@ -23,7 +23,7 @@ export function parseSharedEvent(body: string) {
 
 export function NotificationBody({ text }: { text: string }) {
   const linkMap: [RegExp, string][] = [
-    [/Friends tab/gi, '/friends'],
+    [/Friends tab/gi, '/dashboard'],
     [/Settings/gi, '/settings'],
     [/Events tab/gi, '/events'],
     [/Dashboard/gi, '/'],

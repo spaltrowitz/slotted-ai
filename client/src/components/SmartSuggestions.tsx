@@ -58,7 +58,7 @@ export default function SmartSuggestions() {
               <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{s.reason}</p>
             </div>
             <Link
-              to={`/friends?findTimes=${s.friendId}`}
+              to={`/dashboard?findTimes=${s.friendId}`}
               className="shrink-0 text-xs font-medium text-slotted-600 hover:text-slotted-700 transition-colors mt-0.5"
             >
               Find a time →
