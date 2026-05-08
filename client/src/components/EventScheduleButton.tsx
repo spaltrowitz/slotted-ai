@@ -42,7 +42,7 @@ export default function EventScheduleButton({
         onClick={() => setShowModal(true)}
         className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-3 text-center text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
       >
-        🎟️ Find an event to go to
+        🎟️ Browse events
       </button>
       {showModal && (
         <EventSearchModal

@@ -1,29 +1,12 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchNotifications, queryKeys } from '../lib/queries';
 import NotificationDropdown from './NotificationDropdown';
-import FeedbackButton from './FeedbackButton';
-
-const bottomNavItems = [
-  {
-    path: '/settings',
-    label: 'Settings',
-    icon: (
-      <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ),
-  },
-];
-
-const desktopNavItems = bottomNavItems;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
-  const location = useLocation();
   const touchStartY = useRef<number | null>(null);
   const pullDistance = useRef(0);
   const isPulling = useRef(false);
@@ -109,28 +92,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <span className="font-display text-lg font-bold text-gray-900">Slotted.ai</span>
             </Link>
 
-            {/* Desktop nav — Home, Friends, Settings */}
-            <nav className="hidden md:flex items-center gap-1">
-              {desktopNavItems.map((item) => {
-                const isActive = location.pathname.startsWith(item.path);
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={`relative flex items-center gap-2 rounded-lg px-3 py-2.5 min-h-[44px] text-sm font-medium transition-all ${
-                      isActive
-                        ? 'bg-slotted-50 text-slotted-700'
-                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                    }`}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
           </div>
-
+          
           {/* Right — bell icon, profile/settings icon */}
           <div className="flex items-center gap-2">
             {/* Bell icon — notifications dropdown trigger */}
@@ -182,6 +145,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       </svg>
                       Settings
                     </Link>
+                    <Link
+                      to="/help"
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                      </svg>
+                      Send feedback
+                    </Link>
                     <div className="mx-3 my-1 border-t border-gray-100" />
                     <button
                       onClick={async () => { setProfileMenuOpen(false); await signOut(); }}
@@ -200,37 +173,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Main content — extra bottom padding on mobile for tab bar */}
+      {/* Main content */}
       <main className="flex-1">
-        <div className="mx-auto max-w-6xl px-4 py-6 pb-28 sm:px-6 sm:py-8 md:pb-8">{children}</div>
+        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</div>
       </main>
 
-      <FeedbackButton />
-
-      {/* Mobile bottom tab bar — 2 tabs: Home + Settings */}
-      <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-gray-200/80 bg-white/95 backdrop-blur-xl md:hidden">
-        <div className="mx-auto flex h-16 max-w-lg items-center justify-around px-1">
-          {bottomNavItems.map((item) => {
-            const isActive = location.pathname.startsWith(item.path);
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 transition-all ${
-                  isActive
-                    ? 'text-slotted-600'
-                    : 'text-gray-400'
-                }`}
-              >
-                <span className="h-6 w-6 [&>svg]:h-6 [&>svg]:w-6">{item.icon}</span>
-                <span className="max-w-full truncate px-0.5 text-[11px] font-medium">{item.label}</span>
-              </Link>
-            );
-          })}
+      {/* Footer */}
+      <footer className="border-t border-gray-100 py-4 px-4">
+        <div className="mx-auto max-w-6xl flex items-center justify-center gap-4 text-[11px] text-gray-400">
+          <Link to="/privacy" className="hover:text-gray-600 transition-colors">Privacy</Link>
+          <span>·</span>
+          <Link to="/terms" className="hover:text-gray-600 transition-colors">Terms</Link>
+          <span>·</span>
+          <Link to="/help" className="hover:text-gray-600 transition-colors">Help</Link>
         </div>
-        {/* Safe area for phones with home indicator */}
-        <div className="h-[env(safe-area-inset-bottom)]" />
-      </nav>
+      </footer>
     </div>
   );
 }

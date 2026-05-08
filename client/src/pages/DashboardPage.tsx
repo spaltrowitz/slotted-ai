@@ -670,12 +670,14 @@ export default function DashboardPage() {
 
           {/* 5. Events section */}
           <div className="rounded-2xl border border-violet-100 bg-gradient-to-r from-violet-50/60 to-fuchsia-50/40 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-lg">🎟️</span>
-              <h2 className="text-sm font-semibold text-gray-900">Find an event</h2>
+            <div className="flex items-start gap-3">
+              <span className="text-2xl mt-0.5">🎟️</span>
+              <div className="flex-1">
+                <h2 className="text-sm font-semibold text-gray-900">Want to do something together?</h2>
+                <p className="text-xs text-gray-500 mt-1 mb-3">Find shows, concerts, comedy, or things to do near you</p>
+                <EventScheduleButton friends={friendsData} variant="primary" />
+              </div>
             </div>
-            <p className="text-xs text-gray-500 mb-3">Search for shows, concerts, or things to do — invite friends along</p>
-            <EventScheduleButton friends={friendsData} variant="primary" />
           </div>
 
           {/* 6. Invite a friend */}
