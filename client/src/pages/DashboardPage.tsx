@@ -603,23 +603,23 @@ export default function DashboardPage() {
           {/* 4. Friend grid (3-col) */}
           {acceptedFriends.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-1">
+              <div className="mb-1">
                 <h2 className="text-sm font-semibold text-gray-900">Who do you want to see?</h2>
-                {acceptedFriends.length > 1 && (
-                  <button
-                    onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
-                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                  >
-                    {selectMode ? 'Cancel' : 'Select multiple'}
-                  </button>
-                )}
               </div>
-              <p className="text-xs text-gray-500 mb-3">Tap a friend to find times together</p>
+              <p className="text-xs text-gray-500 mb-3">Tap to find times · check multiple for group plans</p>
 
-              {selectMode && (
-                <p className="text-xs font-medium text-gray-500 mb-2">
-                  {selectedIds.size} of {acceptedFriends.length} selected
-                </p>
+              {selectedIds.size >= 2 && (
+                <div className="flex items-center justify-between mb-2 rounded-lg bg-slotted-50 px-3 py-2">
+                  <p className="text-xs font-medium text-slotted-700">
+                    {selectedIds.size} friends selected
+                  </p>
+                  <button
+                    onClick={() => { exitSelectMode(); }}
+                    className="text-xs text-slotted-600 hover:text-slotted-800 font-medium"
+                  >
+                    Clear
+                  </button>
+                </div>
               )}
 
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
@@ -628,41 +628,55 @@ export default function DashboardPage() {
                   const isViewing = selectedFriendId === f.friend.id;
                   const seen = lastSeenLabel(f);
                   return (
-                    <button
+                    <div
                       key={f.friendshipId}
-                      onClick={() => handleRowClick(f)}
-                      className={`relative flex flex-col items-center gap-1.5 rounded-xl border p-3 transition-all min-h-[44px] ${
+                      className={`relative flex flex-col items-center gap-1.5 rounded-xl border p-3 transition-all ${
                         isSelected || isViewing
                           ? 'border-slotted-300 bg-slotted-50/60 shadow-sm'
                           : 'border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm'
                       }`}
                     >
-                      {(isSelected || isViewing) && (
-                        <div className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slotted-500 text-white">
-                          <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
-                      {f.friend.photoUrl ? (
-                        <img src={f.friend.photoUrl} alt="" className="h-11 w-11 rounded-full" loading="lazy" />
-                      ) : (
-                        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white">
-                          {f.friend.displayName?.[0] ?? '?'}
-                        </div>
-                      )}
-                      <p className="text-xs font-medium text-gray-900 truncate max-w-full">
-                        {getSmartDisplayName(f.friend.displayName, allFriendNames)}
-                      </p>
-                      {seen && (
-                        <p className="text-[10px] text-gray-500 -mt-0.5">{seen}</p>
-                      )}
-                      {f.friendshipType && f.friendshipType !== 'local' && (
-                        <span className="text-[9px] text-gray-400">
-                          {f.friendshipType === 'long_distance' ? '✈️' : '📍'}
-                        </span>
-                      )}
-                    </button>
+                      {/* Checkbox — always visible in top-right */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelect(f.friend.id);
+                          if (!selectMode) setSelectMode(true);
+                        }}
+                        className="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-md border transition-all"
+                        style={{ borderColor: isSelected ? 'transparent' : '#d1d5db' }}
+                      >
+                        {isSelected ? (
+                          <div className="flex h-5 w-5 items-center justify-center rounded-md bg-slotted-500">
+                            <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        ) : (
+                          <div className="h-5 w-5 rounded-md border-2 border-gray-300 bg-white" />
+                        )}
+                      </button>
+
+                      {/* Tappable avatar + name area */}
+                      <button
+                        onClick={() => handleRowClick(f)}
+                        className="flex flex-col items-center gap-1.5 w-full"
+                      >
+                        {f.friend.photoUrl ? (
+                          <img src={f.friend.photoUrl} alt="" className="h-11 w-11 rounded-full" loading="lazy" />
+                        ) : (
+                          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white">
+                            {f.friend.displayName?.[0] ?? '?'}
+                          </div>
+                        )}
+                        <p className="text-xs font-medium text-gray-900 truncate max-w-full">
+                          {getSmartDisplayName(f.friend.displayName, allFriendNames)}
+                        </p>
+                        {seen && (
+                          <p className="text-[10px] text-gray-500 -mt-0.5">{seen}</p>
+                        )}
+                      </button>
+                    </div>
                   );
                 })}
               </div>
