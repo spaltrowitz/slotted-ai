@@ -78,7 +78,7 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
       />
 
       {open && (query.trim().length >= 2 || loading) && (
-        <div className="absolute left-0 right-0 top-full z-60 mt-2 max-h-64 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl">
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl">
           {loading ? (
             <div className="flex items-center gap-2 px-3.5 py-3 text-sm text-gray-500">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-violet-300 border-t-violet-600" />

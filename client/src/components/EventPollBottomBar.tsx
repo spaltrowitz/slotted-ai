@@ -45,7 +45,7 @@ export default function EventPollBottomBar({
               : 'bg-gray-300 cursor-not-allowed'
           }`}
         >
-          {submitting ? 'Confirming…' : 'Confirm'}
+          {submitting ? 'Sending…' : 'Send to friends'}
         </button>
       </div>
     </div>

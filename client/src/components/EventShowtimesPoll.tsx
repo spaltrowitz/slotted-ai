@@ -55,7 +55,7 @@ export default function EventShowtimesPoll({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const { data } = await api.post<{ scheduleId: string; success: boolean }>('/events/poll', {
+      const { data } = await api.post<{ scheduleId: string }>('/events/poll', {
         eventTitle: event.title,
         eventVenue: event.venue,
         eventImageUrl: event.imageUrl,
@@ -152,7 +152,7 @@ export default function EventShowtimesPoll({
       )}
 
       {/* Showtime cards */}
-      <div className="space-y-2.5">
+      <div className="space-y-2.5 pb-20">
         {sortedWithOriginalIndex.map(({ showtime, originalIndex }) => (
           <EventShowtimeCard
             key={originalIndex}
