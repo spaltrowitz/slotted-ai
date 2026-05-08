@@ -50,7 +50,7 @@ export default function ActivityPicker({ date, startTime, endTime, onSelectEvent
   const resyDate = new Date(date).toISOString().split('T')[0];
   const openTableDateTime = `${resyDate}T${startTime}`;
   const resyUrl = `https://resy.com/cities/ny?date=${resyDate}&seats=${partySize}`;
-  const openTableUrl = `https://www.opentable.com/s?covers=${partySize}&dateTime=${openTableDateTime}`;
+  const _openTableUrl = `https://www.opentable.com/s?covers=${partySize}&dateTime=${openTableDateTime}`;
 
   if (mode === 'choose') {
     return (
