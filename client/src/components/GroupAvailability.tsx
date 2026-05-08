@@ -3,6 +3,7 @@ import api from '../lib/api';
 import { trackMeetupScheduled } from '../lib/analytics';
 import { getSmartDisplayName } from '../lib/utils';
 import AddToCalendarModal from './AddToCalendarModal';
+import EventScheduleButton from './EventScheduleButton';
 
 interface ScoredSlot {
   start: string;
@@ -255,6 +256,9 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                     >
                       Send {unsynced.length === 1 ? 'a' : ''} reminder{unsynced.length > 1 ? 's' : ''}
                     </button>
+                    <div className="mt-3 w-full">
+                      <EventScheduleButton preselectedFriendIds={friendIds} variant="compact" />
+                    </div>
                   </>
                 );
               }
@@ -265,6 +269,9 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                   <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
                     No common free times for all {friendNames.length + 1} people in the next 2 weeks. Try a smaller group or check back soon!
                   </p>
+                  <div className="mt-4 w-full">
+                    <EventScheduleButton preselectedFriendIds={friendIds} variant="compact" />
+                  </div>
                 </>
               );
             })()}

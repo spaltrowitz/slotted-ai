@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../lib/api';
-import { useDebounce } from '../hooks/useDebounce';
 
 export interface AutocompleteEvent {
   id: string;
@@ -31,43 +30,63 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const debouncedQuery = useDebounce(query, 300);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    if (debouncedQuery.length < 2) {
+  const doSearch = (q: string) => {
+    if (q.length < 2) {
       setResults([]);
       setOpen(false);
+      setLoading(false);
       return;
     }
 
-    let cancelled = false;
     setLoading(true);
 
+    // Cancel any in-flight request
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     api
-      .get('/events/autocomplete', { params: { q: debouncedQuery } })
+      .get('/events/autocomplete', { params: { q }, signal: controller.signal })
       .then((resp) => {
-        if (!cancelled) {
-          const items = Array.isArray(resp.data) ? resp.data : [];
-          setResults(items);
-          setOpen(items.length > 0);
-          setActiveIndex(-1);
-        }
+        const items = Array.isArray(resp.data) ? resp.data : [];
+        setResults(items);
+        setOpen(items.length > 0);
+        setActiveIndex(-1);
+        setLoading(false);
       })
       .catch((err) => {
-        if (!cancelled) {
-          console.error('Event autocomplete failed:', err?.response?.status, err?.message);
-          setResults([]);
-          setOpen(false);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
+        console.error('Event autocomplete failed:', err?.response?.status, err?.message);
+        setResults([]);
+        setOpen(false);
+        setLoading(false);
       });
+  };
 
-    return () => { cancelled = true; };
-  }, [debouncedQuery]);
+  const handleChange = (value: string) => {
+    setQuery(value);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    if (value.length < 2) {
+      setResults([]);
+      setOpen(false);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    debounceTimer.current = setTimeout(() => doSearch(value), 400);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (activeIndex >= 0 && listRef.current) {
@@ -106,7 +125,7 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
           ref={inputRef as React.RefObject<HTMLInputElement>}
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => { if (results.length > 0) setOpen(true); }}
           onBlur={() => { setTimeout(() => setOpen(false), 200); }}
