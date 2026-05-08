@@ -603,16 +603,18 @@ export default function DashboardPage() {
           {/* 4. Friend grid (3-col) */}
           {acceptedFriends.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-gray-900">Friends</h2>
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-sm font-semibold text-gray-900">Who do you want to see?</h2>
                 {acceptedFriends.length > 1 && (
                   <button
                     onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
                     className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
                   >
-                    {selectMode ? 'Cancel' : 'Select'}
+                    {selectMode ? 'Cancel' : 'Select multiple'}
                   </button>
                 )}
+              </div>
+              <p className="text-xs text-gray-500 mb-3">Tap a friend to find times together</p>
               </div>
 
               {selectMode && (
