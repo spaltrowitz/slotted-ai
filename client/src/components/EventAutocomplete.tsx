@@ -92,7 +92,6 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
               <button
                 key={event.id}
                 type="button"
-                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => handleSelect(event)}
                 className="flex w-full min-w-0 flex-col border-b border-gray-100 px-3.5 py-3 text-left last:border-b-0 hover:bg-violet-50 focus:bg-violet-50 focus:outline-none"
               >
