@@ -775,8 +775,20 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
     }));
 
     const eventTitle = meetup.title || "Hangout";
-    const eventDescription = (meetup.description || `Scheduled via Slotted with ${attendees.map((a: any) => a.displayName).join(", ")}`)
-      + "\n\nManaged by Slotted.ai — https://slotted-ai.web.app";
+    const quickLinks = [
+      `Running late? https://slotted-ai.web.app/quick/status/${meetup.id}?action=late`,
+      `Need to reschedule? https://slotted-ai.web.app/quick/reschedule/${meetup.id}`,
+      `Can't make it? https://slotted-ai.web.app/quick/cancel/${meetup.id}`,
+    ].join("\n");
+
+    const eventDescription = [
+      meetup.description || `Hangout with ${attendees.map((a: any) => a.displayName).join(", ")}`,
+      "",
+      "───────────",
+      quickLinks,
+      "",
+      "Managed by Slotted.ai — https://slotted-ai.web.app",
+    ].join("\n");
 
     // ─── Google Calendar ───
     if (source === "google") {
@@ -800,6 +812,7 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
         requestBody: {
           summary: eventTitle,
           description: eventDescription,
+          colorId: "9",
           location: meetup.location || undefined,
           start: {
             dateTime: meetup.start_time,

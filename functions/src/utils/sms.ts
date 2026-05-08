@@ -73,31 +73,31 @@ export async function sendSMS(to: string, body: string): Promise<boolean> {
 
 export const SMS_TEMPLATES = {
   welcome: (url: string) =>
-    `📅 Welcome to Slotted! I'll help you and your friends actually make plans. Save my contact: slotted-ai.web.app/add-contact.html\nConnect your calendar: ${url}`,
+    `hey! welcome to slotted 📅 i'll help you and your friends actually make plans.\nconnect your calendar: ${url}`,
 
   friendRequest: (fromName: string) =>
-    `👋 ${fromName} added you on Slotted! Reply 1 to accept, 2 to pass`,
+    `hey! ${fromName} just added you on slotted. reply 1 to connect, 2 to skip`,
 
   meetupProposal: (fromName: string, date: string, activity: string) =>
-    `📅 ${fromName} wants to hang out!\n${date} — ${activity}\nReply 1 accept, 2 suggest another time, 3 not this time`,
+    `${fromName} wants to hang! ${date} — ${activity}. reply 1 yes, 2 different time, 3 not this time`,
 
   meetupConfirmed: (title: string, date: string) =>
-    `✅ It's on! ${title}\n${date}\nAdded to your calendar 📅`,
+    `you're all set! ${title}, ${date}. added to your calendar 📅`,
 
   counterPropose: (fromName: string, date: string, activity: string) =>
-    `🔄 ${fromName} suggested a different time:\n${date} — ${activity}\nReply 1 to accept, 2 not this time`,
+    `${fromName} suggested a different time: ${date} — ${activity}. reply 1 yes, 2 not this time`,
 
   reminder: (title: string, date: string) =>
-    `⏰ Reminder: ${title}\n${date}\nReply 1 to confirm, 2 can't make it`,
+    `reminder: ${title} is ${date}. reply 1 see you there, 2 can't make it`,
 
   cancellation: (friendName: string) =>
-    `💬 ${friendName} can't make it anymore. Want Slotted to find another time?\nReply 1 yes, 2 no`,
+    `${friendName} can't make it anymore. want me to find another time? reply 1 yes, 2 no`,
 
   eventPoll: (fromName: string, eventTitle: string, options: string) =>
-    `🎟️ ${fromName} wants to see ${eventTitle}!\n${options}\nReply the numbers that work (e.g. "1 2")`,
+    `${fromName} wants to see ${eventTitle}!\n${options}\nreply the numbers that work (e.g. "1 2")`,
 
   nudge: (friendName: string, weeks: number) =>
-    `👀 You haven't hung out with ${friendName} in ${weeks} weeks. Want me to find a time?\nReply 1 yes`,
+    `you and ${friendName} haven't hung out in ${weeks} weeks. want me to find a time? reply 1 yeah`,
 };
 
 export function formatSMSDate(isoDate: string): string {

@@ -224,8 +224,20 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
       .map((u: any) => ({ email: u.email, displayName: u.display_name }));
 
     const eventTitle = meetup.title || "Hangout";
-    const eventDescription = (meetup.description || `Scheduled via Slotted with ${attendees.map((a: any) => a.displayName).join(", ")}`)
-      + "\n\nManaged by Slotted.ai — https://slotted-ai.web.app";
+    const quickLinks = [
+      `Running late? https://slotted-ai.web.app/quick/status/${meetup.id}?action=late`,
+      `Need to reschedule? https://slotted-ai.web.app/quick/reschedule/${meetup.id}`,
+      `Can't make it? https://slotted-ai.web.app/quick/cancel/${meetup.id}`,
+    ].join("\n");
+
+    const eventDescription = [
+      meetup.description || `Hangout with ${attendees.map((a: any) => a.displayName).join(", ")}`,
+      "",
+      "───────────",
+      quickLinks,
+      "",
+      "Managed by Slotted.ai — https://slotted-ai.web.app",
+    ].join("\n");
 
     let addedEventId: string | null = null;
 
@@ -240,6 +252,7 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
             requestBody: {
               summary: eventTitle,
               description: eventDescription,
+              colorId: "9",
               location: meetup.location || undefined,
               start: {
                 dateTime: meetup.start_time,

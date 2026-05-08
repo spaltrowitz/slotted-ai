@@ -27,6 +27,7 @@ import adminRouter from "./routes/admin";
 import smsRouter from "./routes/sms";
 import couplesRouter from "./routes/couples";
 import recurringRouter from "./routes/recurring";
+import quickRouter from "./routes/quick";
 
 // ---------------------------------------------------------------------------
 // Firebase & global config
@@ -124,6 +125,7 @@ app.use(adminRouter);
 app.use(smsRouter);
 app.use(couplesRouter);
 app.use(recurringRouter);
+app.use(quickRouter);
 
 // Global error handler
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
