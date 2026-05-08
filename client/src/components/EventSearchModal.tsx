@@ -117,12 +117,12 @@ export default function EventSearchModal({
   if (results) {
     return (
       <div
-        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-0 sm:px-4"
+        className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-0 sm:items-center sm:px-4"
         role="dialog"
         aria-modal="true"
         aria-label="Event showtimes"
       >
-        <div className="w-full max-h-[85dvh] sm:max-w-lg rounded-t-2xl sm:rounded-2xl bg-white shadow-xl overflow-hidden flex flex-col">
+        <div className="flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-h-[85dvh] sm:max-w-lg sm:rounded-2xl">
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
             <button
               onClick={() => setResults(null)}
@@ -155,13 +155,13 @@ export default function EventSearchModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-0 sm:px-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-0 sm:items-center sm:px-4"
       role="dialog"
       aria-modal="true"
       aria-label="Plan an event"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-white shadow-xl overflow-hidden">
+      <div className="flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-h-[85dvh] sm:max-w-md sm:rounded-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
           <h2 className="text-base font-semibold text-gray-900">🎟️ Find an event to go to</h2>
@@ -174,7 +174,7 @@ export default function EventSearchModal({
           </button>
         </div>
 
-        <div className="px-4 py-4 space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
           {/* Typeahead search */}
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">
@@ -196,14 +196,14 @@ export default function EventSearchModal({
                 Can't find your event? Paste a Ticketmaster or SeatGeek link
               </button>
             ) : (
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 min-[360px]:flex-row">
                 <input
                   type="url"
                   value={linkUrl}
                   onChange={(e) => setLinkUrl(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleLinkSubmit(); }}
                   placeholder="https://ticketmaster.com/..."
-                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100 transition-all"
+                   className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100 transition-all"
                   autoFocus
                 />
                 <button

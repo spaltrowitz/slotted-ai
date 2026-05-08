@@ -60,7 +60,7 @@ export default function EventShowtimeCard({
       onClick={onToggle}
       disabled={disabled}
       aria-pressed={selected}
-      className={`w-full rounded-xl border p-3.5 text-left transition-all ${
+      className={`w-full overflow-hidden rounded-xl border p-3.5 text-left transition-all ${
         selected
           ? 'ring-2 ring-violet-400 border-violet-300 bg-violet-50/60'
           : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
@@ -83,9 +83,9 @@ export default function EventShowtimeCard({
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <p className="text-sm font-semibold text-gray-900">
                 {formatShowtimeDate(showtime.datetime)} · {formatShowtimeTime(showtime.datetime)}
               </p>
@@ -98,28 +98,30 @@ export default function EventShowtimeCard({
 
             {/* Calendar hint badge */}
             {hint && (
-              <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+              <span className="inline-flex max-w-full items-center gap-1 self-start rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
                 {hint.icon} {hint.label}
               </span>
             )}
           </div>
 
           {/* Availability summary row */}
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
             {showtime.allFree.map((name) => (
               <span
                 key={name}
-                className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700"
+                className="inline-flex max-w-full items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700"
               >
-                ✅ {name}
+                <span className="shrink-0">✅</span>
+                <span className="truncate">{name}</span>
               </span>
             ))}
             {showtime.conflicts.map((c) => (
               <span
                 key={c.name}
-                className="inline-flex items-center gap-0.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500"
+                className="inline-flex max-w-full items-center gap-0.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500"
               >
-                {c.reason === 'busy' ? '❌' : '⚠️'} {c.name}
+                <span className="shrink-0">{c.reason === 'busy' ? '❌' : '⚠️'}</span>
+                <span className="truncate">{c.name}</span>
               </span>
             ))}
           </div>

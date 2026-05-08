@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import api from '../lib/api';
 import EventShowtimeCard from './EventShowtimeCard';
 import EventPollBottomBar from './EventPollBottomBar';
 import InviteFriendButton from './InviteFriendButton';
@@ -7,14 +8,19 @@ import type { ScheduleEvent, ScheduleShowtime } from './EventSearchModal';
 interface EventShowtimesPollProps {
   event: ScheduleEvent;
   showtimes: ScheduleShowtime[];
+  friendIds: string[];
 }
 
 export default function EventShowtimesPoll({
   event,
   showtimes,
+  friendIds,
 }: EventShowtimesPollProps) {
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [scheduleId, setScheduleId] = useState<string | undefined>();
   const [pendingFriends] = useState<string[]>(() => {
     const names = new Set<string>();
     for (const s of showtimes) {
@@ -43,9 +49,31 @@ export default function EventShowtimesPoll({
     });
   };
 
-  const handleSubmit = () => {
-    setSubmitted(true);
-    // TODO: Wire to backend — POST /events/poll with selected datetime indices
+  const handleSubmit = async () => {
+    if (selectedIndices.size === 0 || submitting) return;
+
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const { data } = await api.post<{ scheduleId: string; success: boolean }>('/events/poll', {
+        eventTitle: event.title,
+        eventVenue: event.venue,
+        eventImageUrl: event.imageUrl,
+        eventUrl: showtimes.find((s) => s.ticketUrl)?.ticketUrl,
+        showtimes,
+        friendIds,
+        selectedIndices: Array.from(selectedIndices).sort((a, b) => a - b),
+      });
+      setScheduleId(data.scheduleId);
+      setSubmitted(true);
+    } catch (err: unknown) {
+      const maybeError = err as { response?: { data?: { error?: string } }; message?: string };
+      setSubmitError(
+        maybeError.response?.data?.error || maybeError.message || 'Could not confirm your dates. Please try again.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (sorted.length === 0) {
@@ -67,7 +95,7 @@ export default function EventShowtimesPoll({
   }));
 
   return (
-    <div className="px-4 pt-4 pb-28 space-y-3">
+    <div className="space-y-3 px-4 pt-4">
       {/* Event header */}
       <div className="flex items-center gap-3 mb-2">
         {event.imageUrl && (
@@ -115,7 +143,13 @@ export default function EventShowtimesPoll({
       )}
 
       {/* Invite friend */}
-      <InviteFriendButton event={event} />
+      <InviteFriendButton event={event} eventScheduleId={scheduleId} />
+
+      {submitError && (
+        <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2">
+          <p className="text-xs font-medium text-red-700">{submitError}</p>
+        </div>
+      )}
 
       {/* Showtime cards */}
       <div className="space-y-2.5">
@@ -134,6 +168,7 @@ export default function EventShowtimesPoll({
       <EventPollBottomBar
         selectedCount={selectedIndices.size}
         submitted={submitted}
+        submitting={submitting}
         pendingFriends={pendingFriends}
         onSubmit={handleSubmit}
       />
