@@ -46,16 +46,18 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
     setLoading(true);
 
     api
-      .get<AutocompleteEvent[]>('/events/autocomplete', { params: { q: debouncedQuery } })
-      .then(({ data }) => {
+      .get('/events/autocomplete', { params: { q: debouncedQuery } })
+      .then((resp) => {
         if (!cancelled) {
-          setResults(data);
-          setOpen(data.length > 0);
+          const items = Array.isArray(resp.data) ? resp.data : [];
+          setResults(items);
+          setOpen(items.length > 0);
           setActiveIndex(-1);
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) {
+          console.error('Event autocomplete failed:', err?.response?.status, err?.message);
           setResults([]);
           setOpen(false);
         }

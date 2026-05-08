@@ -255,7 +255,24 @@ export default function DashboardPage() {
   const now = useMemo(() => new Date(), []);
 
   const acceptedFriends = useMemo(
-    () => friendsData.filter((f) => f.status === 'accepted'),
+    () => {
+      const accepted = friendsData.filter((f) => f.status === 'accepted');
+      // Smart sort: overdue friends first, then by recency, then alphabetical
+      return accepted.sort((a, b) => {
+        // Friends with upcoming meetups go to "coming up" (lower priority — already handled)
+        // Overdue friends first (days since / avg cadence, higher = more overdue)
+        const aOverdue = (a.daysSinceLastHangout ?? 999) / (a.avgCadenceDays || 14);
+        const bOverdue = (b.daysSinceLastHangout ?? 999) / (b.avgCadenceDays || 14);
+        // Calendar connected friends before unconnected (actionable first)
+        const aActionable = a.friend.calendarConnected ? 1 : 0;
+        const bActionable = b.friend.calendarConnected ? 1 : 0;
+        if (aActionable !== bActionable) return bActionable - aActionable;
+        // Then by overdue-ness
+        if (Math.abs(aOverdue - bOverdue) > 0.3) return bOverdue - aOverdue;
+        // Fallback: alphabetical
+        return getFirstName(a.friend.displayName).localeCompare(getFirstName(b.friend.displayName));
+      });
+    },
     [friendsData],
   );
 
@@ -651,8 +668,15 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* 5. EventScheduleButton */}
-          <EventScheduleButton variant="compact" />
+          {/* 5. Events section */}
+          <div className="rounded-2xl border border-violet-100 bg-gradient-to-r from-violet-50/60 to-fuchsia-50/40 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🎟️</span>
+              <h2 className="text-sm font-semibold text-gray-900">Find an event</h2>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">Search for shows, concerts, or things to do — invite friends along</p>
+            <EventScheduleButton friends={friendsData} variant="primary" />
+          </div>
 
           {/* 6. Invite a friend */}
           {acceptedFriends.length > 0 && (
