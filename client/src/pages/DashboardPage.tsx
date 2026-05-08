@@ -146,38 +146,36 @@ function StageFirstHangout({
   );
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6 py-12">
-      <h2 className="text-xl font-semibold text-gray-900 text-center">
+    <div className="px-2 py-6">
+      <h2 className="text-lg font-semibold text-gray-900 text-center">
         Who do you want to hang out with?
       </h2>
-      <p className="mt-2 text-sm text-gray-500">Tap anyone to find times together</p>
+      <p className="mt-1 text-sm text-gray-500 text-center">Tap anyone to find times together</p>
 
-      <div className="mt-8 w-full overflow-x-auto scrollbar-hide">
-        <div className="flex gap-4 px-4 pb-1 justify-center flex-wrap">
-          {sorted.map((f) => (
-            <Link
-              key={f.friend.id}
-              to={`/friends?findTimes=${f.friend.id}`}
-              className="flex flex-shrink-0 flex-col items-center gap-1.5 w-18 group"
-            >
-              {f.friend.photoUrl ? (
-                <img
-                  src={f.friend.photoUrl}
-                  alt=""
-                  className="h-14 w-14 rounded-full ring-2 ring-white shadow-sm group-hover:ring-slotted-300 transition-all"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-base font-semibold text-white shadow-sm ring-2 ring-white group-hover:ring-slotted-300 transition-all">
-                  {f.friend.displayName?.[0] ?? '?'}
-                </div>
-              )}
-              <p className="w-full text-center text-xs font-medium text-gray-600 group-hover:text-slotted-600 transition-colors truncate">
-                {getSmartDisplayName(f.friend.displayName, allFriendNames)}
-              </p>
-            </Link>
-          ))}
-        </div>
+      <div className="mt-5 grid grid-cols-4 sm:grid-cols-5 gap-3">
+        {sorted.map((f) => (
+          <Link
+            key={f.friend.id}
+            to={`/friends?findTimes=${f.friend.id}`}
+            className="flex flex-col items-center gap-1 group"
+          >
+            {f.friend.photoUrl ? (
+              <img
+                src={f.friend.photoUrl}
+                alt=""
+                className="h-12 w-12 rounded-full ring-2 ring-white shadow-sm group-hover:ring-slotted-300 transition-all"
+                loading="lazy"
+              />
+            ) : (
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white shadow-sm ring-2 ring-white group-hover:ring-slotted-300 transition-all">
+                {f.friend.displayName?.[0] ?? '?'}
+              </div>
+            )}
+            <p className="w-full text-center text-[11px] font-medium text-gray-600 group-hover:text-slotted-600 transition-colors truncate">
+              {getSmartDisplayName(f.friend.displayName, allFriendNames)}
+            </p>
+          </Link>
+        ))}
       </div>
     </div>
   );

@@ -266,14 +266,61 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
             {error}
           </div>
         ) : suggestions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <span className="text-4xl">—</span>
-            <h4 className="mt-3 text-sm font-semibold text-gray-800">No overlapping free times found</h4>
-            <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-              {!syncStatus?.me.synced
-                ? "Connect your Google Calendar in Settings to let Slotted.ai find available times."
-                : "Both calendars are packed for the next 2 weeks. Try adjusting your schedules or check back later."}
-            </p>
+          <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+            {(() => {
+              const meNotSynced = !syncStatus?.me.synced;
+              const friendNotSynced = syncStatus?.friend && !syncStatus.friend.calendarConnected;
+              const displayName = syncStatus?.friend?.name || friendFirst;
+
+              if (meNotSynced && friendNotSynced) {
+                return (
+                  <>
+                    <span className="text-3xl">📅</span>
+                    <h4 className="mt-3 text-sm font-semibold text-gray-800">Neither of you have calendars connected yet!</h4>
+                    <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                      Connect your calendar in Settings so Slotted can find times you're both free. Ask {displayName} to connect theirs too!
+                    </p>
+                    <a href="/settings" className="mt-4 inline-flex rounded-lg gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm">
+                      Connect my calendar
+                    </a>
+                  </>
+                );
+              }
+              if (meNotSynced) {
+                return (
+                  <>
+                    <span className="text-3xl">📅</span>
+                    <h4 className="mt-3 text-sm font-semibold text-gray-800">Connect your calendar first</h4>
+                    <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                      Slotted needs your calendar to find when you're free. It only sees busy/free — never event details.
+                    </p>
+                    <a href="/settings" className="mt-4 inline-flex rounded-lg gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm">
+                      Connect my calendar
+                    </a>
+                  </>
+                );
+              }
+              if (friendNotSynced) {
+                return (
+                  <>
+                    <span className="text-3xl">👋</span>
+                    <h4 className="mt-3 text-sm font-semibold text-gray-800">{displayName} hasn't connected their calendar yet</h4>
+                    <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                      Give them a nudge! Once they connect, Slotted will automatically find times you're both free.
+                    </p>
+                  </>
+                );
+              }
+              return (
+                <>
+                  <span className="text-3xl">😅</span>
+                  <h4 className="mt-3 text-sm font-semibold text-gray-800">You're both pretty busy!</h4>
+                  <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                    No overlapping free times in the next 2 weeks. Try checking back in a few days — schedules change!
+                  </p>
+                </>
+              );
+            })()}
           </div>
         ) : isFirstTime && suggestions.length > 0 ? (
           /* ──── Single-suggestion mode for first-time schedulers ──── */

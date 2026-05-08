@@ -226,13 +226,41 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
             {error}
           </div>
         ) : suggestions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <span className="text-4xl">—</span>
-            <h4 className="mt-3 text-sm font-semibold text-gray-800">No common free times found</h4>
-            <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-              All {friendNames.length + 1} people are busy for the next 2 weeks.
-              Try reducing the group size or checking back later.
-            </p>
+          <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+            {(() => {
+              const unsynced = participants.filter(p => !p.calendarConnected);
+              if (unsynced.length > 0) {
+                const names = unsynced.map(p => p.displayName.split(' ')[0]).join(', ');
+                const allUnsynced = unsynced.length === participants.length;
+                return (
+                  <>
+                    <span className="text-3xl">📅</span>
+                    <h4 className="mt-3 text-sm font-semibold text-gray-800">
+                      {allUnsynced ? "No one has connected their calendar yet!" : `${names} haven't connected their calendars`}
+                    </h4>
+                    <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                      {allUnsynced
+                        ? "Everyone needs to connect a calendar so Slotted can find times that work. Share a reminder!"
+                        : `Once ${names} connect${unsynced.length === 1 ? 's' : ''}, Slotted will find times everyone is free.`}
+                    </p>
+                    {unsynced.some(p => p.userId === participants[0]?.userId) && (
+                      <a href="/settings" className="mt-4 inline-flex rounded-lg bg-gradient-to-r from-purple-500 to-fuchsia-500 px-4 py-2 text-xs font-semibold text-white shadow-sm">
+                        Connect my calendar
+                      </a>
+                    )}
+                  </>
+                );
+              }
+              return (
+                <>
+                  <span className="text-3xl">😅</span>
+                  <h4 className="mt-3 text-sm font-semibold text-gray-800">Everyone's pretty busy!</h4>
+                  <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                    No common free times for all {friendNames.length + 1} people in the next 2 weeks. Try a smaller group or check back soon!
+                  </p>
+                </>
+              );
+            })()}
           </div>
         ) : (
           <div className="space-y-2">
