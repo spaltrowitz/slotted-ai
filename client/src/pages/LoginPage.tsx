@@ -1,8 +1,9 @@
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
   const { user, loading, signInWithGoogle, isSigningIn, authError } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -12,7 +13,8 @@ export default function LoginPage() {
     );
   }
 
-  if (user) {
+  // Only auto-redirect on /login, not on / (landing page should always be viewable)
+  if (user && location.pathname !== '/') {
     return <Navigate to="/dashboard" replace />;
   }
 

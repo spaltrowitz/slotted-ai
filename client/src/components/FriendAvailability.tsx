@@ -6,7 +6,6 @@ import { getFirstName, getSmartDisplayName } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import AddToCalendarModal from './AddToCalendarModal';
 import ActivityPicker from './ActivityPicker';
-import EventScheduleButton from './EventScheduleButton';
 
 type HangoutMode = 'in_person' | 'call';
 type VideoPlatform = 'phone' | 'facetime' | 'zoom' | 'google_meet' | 'teams' | 'whatsapp' | '';
