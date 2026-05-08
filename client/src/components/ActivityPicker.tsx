@@ -56,7 +56,7 @@ export default function ActivityPicker({ date, startTime, endTime, onSelectEvent
     return (
       <div className="mt-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm animate-in fade-in slide-in-from-bottom-2">
         <p className="text-sm font-semibold text-gray-900 mb-3">What do you want to do?</p>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <button
             onClick={onSelectFreestyle}
             className="rounded-lg border border-gray-200 bg-white p-3 text-center hover:bg-gray-50 transition-all min-h-[44px]"
@@ -64,6 +64,16 @@ export default function ActivityPicker({ date, startTime, endTime, onSelectEvent
             <span className="text-lg">☕</span>
             <p className="text-xs font-medium text-gray-700 mt-1">Just hang out</p>
           </button>
+          <a
+            href={resyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => onSelectFreestyle()}
+            className="rounded-lg border border-gray-200 bg-white p-3 text-center hover:bg-gray-50 transition-all min-h-[44px]"
+          >
+            <span className="text-lg">🍽️</span>
+            <p className="text-xs font-medium text-gray-700 mt-1">Go out for a meal</p>
+          </a>
           <button
             onClick={() => setMode('events')}
             className="rounded-lg border border-gray-200 bg-white p-3 text-center hover:bg-gray-50 transition-all min-h-[44px]"
@@ -72,12 +82,6 @@ export default function ActivityPicker({ date, startTime, endTime, onSelectEvent
             <p className="text-xs font-medium text-gray-700 mt-1">Find an event</p>
           </button>
         </div>
-        <p className="text-[11px] text-gray-400 text-center mt-3">
-          Need a dinner spot? Book on{' '}
-          <a href={resyUrl} target="_blank" rel="noopener noreferrer" className="text-slotted-600 underline">Resy</a>
-          {' '}or{' '}
-          <a href={openTableUrl} target="_blank" rel="noopener noreferrer" className="text-slotted-600 underline">OpenTable</a>
-        </p>
       </div>
     );
   }
