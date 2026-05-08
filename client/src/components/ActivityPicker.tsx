@@ -48,9 +48,7 @@ export default function ActivityPicker({ date, startTime, endTime, onSelectEvent
   // Build restaurant deep links with date/time/party size
   const partySize = 2; // default for a hangout
   const resyDate = new Date(date).toISOString().split('T')[0];
-  const openTableDateTime = `${resyDate}T${startTime}`;
   const resyUrl = `https://resy.com/cities/ny?date=${resyDate}&seats=${partySize}`;
-  const _openTableUrl = `https://www.opentable.com/s?covers=${partySize}&dateTime=${openTableDateTime}`;
 
   if (mode === 'choose') {
     return (
