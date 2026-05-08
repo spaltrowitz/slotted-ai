@@ -1351,24 +1351,17 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
       res.status(400).json({ error: "Query is required" });
       return;
     }
-    if (!Array.isArray(friendIds) || friendIds.length === 0) {
-      res.status(400).json({ error: "friendIds must be a non-empty array" });
-      return;
-    }
+    // Friends are optional — event browsing works solo
+    const requestedFriendIds: string[] = Array.isArray(friendIds)
+      ? [...new Set(friendIds.filter((fid: unknown): fid is string => typeof fid === "string" && !!fid))]
+      : [];
 
     const me = await getDbUser(req.uid!);
     if (!me) { res.status(404).json({ error: "User not found" }); return; }
 
-    // Validate all friendIds are accepted friends
-    const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
-    const requestedFriendIds = [...new Set(
-      friendIds.filter((fid: unknown): fid is string => typeof fid === "string" && !!fid && fid !== me.id),
-    )];
-    const unauthorizedFriendIds = requestedFriendIds.filter((fid) => !acceptedFriendIds.has(fid));
-    if (unauthorizedFriendIds.length > 0) {
-      res.status(403).json({ error: "All friendIds must be accepted friends" });
-      return;
-    }
+    // Validate friendIds are accepted friends (if any provided)
+    const acceptedFriendIds = requestedFriendIds.length > 0 ? await getAcceptedFriendIdSet(me.id) : new Set<string>();
+    const validFriendIds = requestedFriendIds.filter((fid) => fid !== me.id && (requestedFriendIds.length === 0 || acceptedFriendIds.has(fid)));
 
     // 1. Search events (Ticketmaster-first waterfall)
     // Use perPage=200 (Ticketmaster max) to get ALL showtimes for a run
@@ -1414,7 +1407,7 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
     };
 
     // 2. Fetch friend DB records + check calendar connectivity via OAuth tokens
-    const friendUsers = await Promise.all(requestedFriendIds.map((fid: string) => getDbUserById(fid)));
+    const friendUsers = await Promise.all(validFriendIds.map((fid: string) => getDbUserById(fid)));
 
     // Determine calendar connectivity by checking actual OAuth tokens (not strictCalendarCheck
     // which requires recent busy blocks and fails for users with empty calendars)
@@ -1460,7 +1453,7 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
     const PRE_BUFFER_MS = 1 * 3600000; // 1 hour before
     const POST_BUFFER_MS = 30 * 60000; // 30 min after
 
-    const allUserIds = [me.id, ...requestedFriendIds];
+    const allUserIds = [me.id, ...validFriendIds];
     const participantNames = [
       me.display_name?.split(" ")[0] || "You",
       ...friendUsers.map((u) => u?.display_name?.split(" ")[0] || "Friend"),

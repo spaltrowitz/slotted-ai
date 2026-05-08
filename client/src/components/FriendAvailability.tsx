@@ -306,8 +306,21 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                     <span className="text-3xl">👋</span>
                     <h4 className="mt-3 text-sm font-semibold text-gray-800">{displayName} hasn't connected their calendar yet</h4>
                     <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-                      Give them a nudge! Once they connect, Slotted will automatically find times you're both free.
+                      We can send them a friendly reminder to sync up. You can still plan something — just pick a time that works for you and we'll ask if they're free!
                     </p>
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.post('/notifications/nudge-calendar', { friendId });
+                            alert(`Sent ${displayName} a reminder to connect their calendar!`);
+                          } catch { /* silent */ }
+                        }}
+                        className="inline-flex rounded-lg border border-slotted-200 bg-slotted-50 px-4 py-2 text-xs font-semibold text-slotted-700 hover:bg-slotted-100 transition-all"
+                      >
+                        Send a reminder
+                      </button>
+                    </div>
                   </>
                 );
               }

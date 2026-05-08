@@ -179,4 +179,45 @@ router.delete("/notifications/:id", authWithRateLimit, async (req: AuthRequest, 
 });
 
 
+/** POST /notifications/nudge-calendar — send a friend a reminder to connect their calendar */
+router.post("/notifications/nudge-calendar", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { friendId } = req.body;
+    if (!friendId) { res.status(400).json({ error: "friendId required" }); return; }
+
+    const firstName = me.display_name?.split(" ")[0] || "A friend";
+
+    // Send in-app notification
+    await createNotification({
+      userId: friendId,
+      type: "calendar_match",
+      title: "📅 Connect your calendar",
+      body: `${firstName} wants to find a time to hang! Connect your calendar in Settings so Slotted can find when you're both free.`,
+      relatedUserId: me.id,
+    });
+
+    // Also send SMS if they have a phone
+    try {
+      const { sendSMSNotification } = await import("../utils/smsNotifier");
+      const { getDbUserById } = await import("../utils/helpers");
+      const friend = await getDbUserById(friendId);
+      if (friend?.phone_number) {
+        const { sendSMS } = await import("../utils/sms");
+        await sendSMS(
+          friend.phone_number,
+          `hey! ${firstName.toLowerCase()} wants to make plans with you on slotted. connect your calendar so we can find a time: slotted-ai.web.app/settings`,
+        );
+      }
+    } catch { /* SMS is best-effort */ }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 export default router;

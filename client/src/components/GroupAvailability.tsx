@@ -230,24 +230,29 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
             {(() => {
               const unsynced = participants.filter(p => !p.calendarConnected);
               if (unsynced.length > 0) {
-                const names = unsynced.map(p => p.displayName.split(' ')[0]).join(', ');
-                const allUnsynced = unsynced.length === participants.length;
+                const names = unsynced.map(p => p.displayName.split(' ')[0]).join(' & ');
                 return (
                   <>
                     <span className="text-3xl">📅</span>
                     <h4 className="mt-3 text-sm font-semibold text-gray-800">
-                      {allUnsynced ? "No one has connected their calendar yet!" : `${names} haven't connected their calendars`}
+                      {names} {unsynced.length === 1 ? 'hasn\'t' : 'haven\'t'} connected {unsynced.length === 1 ? 'a' : 'their'} calendar yet
                     </h4>
                     <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-                      {allUnsynced
-                        ? "Everyone needs to connect a calendar so Slotted can find times that work. Share a reminder!"
-                        : `Once ${names} connect${unsynced.length === 1 ? 's' : ''}, Slotted will find times everyone is free.`}
+                      That doesn't mean they're not free! Send them a reminder to sync, or just pick a time and ask if it works.
                     </p>
-                    {unsynced.some(p => p.userId === participants[0]?.userId) && (
-                      <a href="/settings" className="mt-4 inline-flex rounded-lg bg-gradient-to-r from-purple-500 to-fuchsia-500 px-4 py-2 text-xs font-semibold text-white shadow-sm">
-                        Connect my calendar
-                      </a>
-                    )}
+                    <button
+                      onClick={async () => {
+                        try {
+                          for (const p of unsynced) {
+                            await api.post('/notifications/nudge-calendar', { friendId: p.userId });
+                          }
+                          alert(`Sent ${names} a reminder to connect!`);
+                        } catch { /* silent */ }
+                      }}
+                      className="mt-4 inline-flex rounded-lg border border-purple-200 bg-purple-50 px-4 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition-all"
+                    >
+                      Send {unsynced.length === 1 ? 'a' : ''} reminder{unsynced.length > 1 ? 's' : ''}
+                    </button>
                   </>
                 );
               }
