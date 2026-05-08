@@ -615,7 +615,6 @@ export default function DashboardPage() {
                 )}
               </div>
               <p className="text-xs text-gray-500 mb-3">Tap a friend to find times together</p>
-              </div>
 
               {selectMode && (
                 <p className="text-xs font-medium text-gray-500 mb-2">

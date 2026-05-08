@@ -280,9 +280,14 @@ export default function EventSearchModal({
 
           {/* Empty hint */}
           {!loading && !error && (
-            <p className="text-center text-xs text-gray-500 pt-2">
-              We'll find showtimes and check everyone's calendars ✨
-            </p>
+            <div className="text-center pt-2 space-y-2">
+              <p className="text-xs text-gray-500">
+                We'll find showtimes and check everyone's calendars ✨
+              </p>
+              <p className="text-[11px] text-gray-400">
+                Want to invite someone who isn't on Slotted yet? Pick your event first — you can share it with anyone after
+              </p>
+            </div>
           )}
         </div>
       </div>

@@ -24,9 +24,6 @@ export function createRateLimiter(maxHits: number, windowMs: number) {
 
 const EXPENSIVE_PATHS = new Set([
   "/calendar/sync",
-  "/suggestions",
-  "/events/suggest",
-  "/events/discover",
   "/events/match",
   "/availability/multi-friend-overlap",
   "/availability/group-overlap",
