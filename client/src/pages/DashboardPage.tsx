@@ -393,10 +393,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleText = () => {
-    trackFriendInvited('sms');
-    window.open(`sms:?&body=${encodeURIComponent(message)}`, '_blank');
-  };
 
   const lastSeenLabel = (f: FriendRecord) => {
     const days = f.daysSinceLastHangout;
