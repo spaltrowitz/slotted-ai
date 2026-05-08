@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { RefObject } from 'react';
+import type { Ref } from 'react';
 import api from '../lib/api';
 
 export interface AutocompleteEvent {
@@ -11,7 +11,7 @@ export interface AutocompleteEvent {
 
 interface EventAutocompleteProps {
   onSelect: (event: AutocompleteEvent) => void;
-  inputRef?: RefObject<HTMLInputElement | null>;
+  inputRef?: Ref<HTMLInputElement>;
 }
 
 export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompleteProps) {

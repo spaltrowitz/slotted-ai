@@ -55,14 +55,16 @@ export default function EventShowtimesPoll({
     setSubmitting(true);
     setSubmitError(null);
     try {
+      const selectedIndexList = Array.from(selectedIndices).sort((a, b) => a - b);
+      const eventUrl = selectedIndexList.map((index) => showtimes[index]?.ticketUrl).find(Boolean);
       const { data } = await api.post<{ scheduleId: string }>('/events/poll', {
         eventTitle: event.title,
         eventVenue: event.venue,
         eventImageUrl: event.imageUrl,
-        eventUrl: showtimes.find((s) => s.ticketUrl)?.ticketUrl,
+        eventUrl,
         showtimes,
         friendIds,
-        selectedIndices: Array.from(selectedIndices).sort((a, b) => a - b),
+        selectedIndices: selectedIndexList,
       });
       setScheduleId(data.scheduleId);
       setSubmitted(true);
@@ -142,13 +144,14 @@ export default function EventShowtimesPoll({
         </p>
       )}
 
-      {/* Invite friend */}
-      <InviteFriendButton event={event} eventScheduleId={scheduleId} />
-
       {submitError && (
         <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2">
           <p className="text-xs font-medium text-red-700">{submitError}</p>
         </div>
+      )}
+
+      {submitted && scheduleId && (
+        <InviteFriendButton event={event} eventScheduleId={scheduleId} />
       )}
 
       {/* Showtime cards */}
