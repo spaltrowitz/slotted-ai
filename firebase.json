@@ -22,6 +22,14 @@
         }
       },
       {
+        "source": "/slotted.vcf",
+        "destination": "/slotted.vcf"
+      },
+      {
+        "source": "/add-contact.html",
+        "destination": "/add-contact.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
@@ -33,6 +41,19 @@
           {
             "key": "Cache-Control",
             "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/slotted.vcf",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "text/vcard"
+          },
+          {
+            "key": "Content-Disposition",
+            "value": "attachment; filename=\"slotted.vcf\""
           }
         ]
       },

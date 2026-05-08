@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4f46e5"/>
+      <stop offset="50%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#a855f7"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <text x="600" y="170" text-anchor="middle" font-size="64" fill="white">📅</text>
+  <text x="600" y="260" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="800" fill="white" letter-spacing="-2">Slotted.ai</text>
+  <text x="600" y="330" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="30" font-weight="500" fill="white" opacity="0.95">Stop texting back and forth. Just hang out.</text>
+  <text x="600" y="390" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="400" fill="white" opacity="0.7">Syncs calendars · Finds free times · Makes plans happen</text>
+</svg>

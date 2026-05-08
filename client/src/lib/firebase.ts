@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getMessaging, isSupported as isMessagingSupported } from 'firebase/messaging';
+import { getPerformance } from 'firebase/performance';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,6 +15,15 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+
+// Firebase Performance Monitoring (auto-tracks web vitals, network requests)
+if (typeof window !== 'undefined' && import.meta.env.PROD) {
+  try {
+    getPerformance(app);
+  } catch {
+    // Performance monitoring not available
+  }
+}
 
 // Firebase Cloud Messaging (lazy init)
 let messagingInstance: ReturnType<typeof getMessaging> | null = null;

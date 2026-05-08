@@ -105,7 +105,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f8f7f4] font-sans">
+    <div className="flex min-h-screen flex-col bg-page-warm font-sans">
       {/* Subtle background washes */}
       <div className="fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute -top-40 right-0 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-amber-100/30 via-orange-100/20 to-transparent blur-3xl" />
@@ -135,7 +135,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                    className={`relative flex items-center gap-2 rounded-lg px-3 py-2.5 min-h-[44px] text-sm font-medium transition-all ${
                       isActive
                         ? 'bg-slotted-50 text-slotted-700'
                         : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
@@ -156,7 +156,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
                 aria-label="Notifications"
-                className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                className="relative rounded-lg p-3 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />

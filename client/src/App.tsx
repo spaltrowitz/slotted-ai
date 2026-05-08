@@ -2,7 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Component, Suspense, lazy, type ReactNode } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
+import { CalendarProvider } from './contexts/CalendarContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import { trackEvent } from './lib/analytics';
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   importer: () => Promise<{ default: T }>,
@@ -58,7 +60,10 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('App crash:', error, info.componentStack);
-    // Also log to a visible place so users can report it
+    trackEvent('slotted_react_crash', {
+      message: error.message,
+      component: info.componentStack?.split('\n')[1]?.trim() || 'unknown',
+    });
     try {
       const existing = sessionStorage.getItem('slotted_crash_log') || '';
       sessionStorage.setItem('slotted_crash_log', existing + '\n' + error.message + '\n' + error.stack);
@@ -93,7 +98,7 @@ const queryClient = new QueryClient({
 
 function RouteLoadingFallback() {
   return (
-    <div className="flex h-screen items-center justify-center bg-[#faf9f7]">
+    <div className="flex h-screen items-center justify-center bg-page-light">
       <div className="w-full max-w-md px-6 space-y-5 animate-pulse">
         <div className="space-y-2">
           <div className="h-6 w-40 rounded-lg bg-gray-200/60" />
@@ -121,6 +126,7 @@ export default function App() {
     <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <CalendarProvider>
         <BrowserRouter>
           <Suspense fallback={<RouteLoadingFallback />}>
             <Routes>
@@ -148,6 +154,7 @@ export default function App() {
             </Routes>
           </Suspense>
         </BrowserRouter>
+        </CalendarProvider>
       </AuthProvider>
     </QueryClientProvider>
     </ErrorBoundary>

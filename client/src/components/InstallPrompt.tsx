@@ -159,14 +159,14 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
                 </button>
                 <button
                   onClick={handleSessionDismiss}
-                  className="rounded-lg px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:text-gray-600"
+                  className="rounded-lg px-3 py-2 text-xs font-medium text-gray-500 transition-colors hover:text-gray-600"
                 >
                   Maybe later
                 </button>
                 {canPermanentlyDismiss && (
                   <button
                     onClick={handlePermanentDismiss}
-                    className="rounded-lg px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:text-gray-500"
+                    className="rounded-lg px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:text-gray-400"
                   >
                     Don't show again
                   </button>
@@ -187,7 +187,7 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
               </h2>
               <button
                 onClick={handleCloseInstructions}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-600"
               >
                 ✕
               </button>

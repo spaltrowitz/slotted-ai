@@ -271,14 +271,14 @@ export default function EventInviteLandingPage() {
               Join & Pick a Time
             </button>
 
-            <p className="text-center text-xs text-gray-400">
+            <p className="text-center text-xs text-gray-500">
               Free · Google sign-in · Takes 30 seconds
             </p>
           </div>
 
           {/* Footer */}
-          <p className="text-center text-[11px] text-gray-400">
-            Powered by <Link to="/" className="underline hover:text-gray-500">Slotted.ai</Link> — find time to hang with friends
+          <p className="text-center text-[11px] text-gray-500">
+            Powered by <Link to="/" className="underline hover:text-gray-400">Slotted.ai</Link> — find time to hang with friends
           </p>
         </div>
       </div>

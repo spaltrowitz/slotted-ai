@@ -13,6 +13,7 @@ CREATE TABLE users (
   email           TEXT UNIQUE NOT NULL,
   display_name    TEXT,
   photo_url       TEXT,
+  phone_number    TEXT,
   timezone        TEXT NOT NULL DEFAULT 'America/New_York',
 
   -- Onboarding answers
@@ -117,6 +118,7 @@ CREATE TABLE friendships (
 
 CREATE INDEX idx_friendships_user_a ON friendships (user_a_id);
 CREATE INDEX idx_friendships_user_b ON friendships (user_b_id);
+CREATE INDEX idx_friendships_status ON friendships (status);
 
 -- ============================================================
 -- AVAILABILITY  (free blocks synced from Google Calendar)
@@ -149,7 +151,7 @@ CREATE TABLE meetups (
   status          TEXT NOT NULL DEFAULT 'proposed'
     CHECK (status IN ('proposed', 'confirmed', 'declined', 'cancelled', 'completed', 'didnt_happen')),
   cancel_reason   TEXT
-    CHECK (cancel_reason IN ('sick', 'cancelled', 'something_came_up', 'too_tired', 'scheduling_conflict', 'other', NULL)),
+    CHECK (cancel_reason IN ('sick', 'changed_plans', 'something_came_up', 'need_rest', 'scheduling_conflict', 'other', NULL)),
   reminder_sent_at TIMESTAMPTZ,
   created_by      UUID NOT NULL REFERENCES users(id),
 
@@ -157,9 +159,8 @@ CREATE TABLE meetups (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ============================================================
--- MEETUP PARTICIPANTS  (many-to-many)
--- ============================================================
+CREATE INDEX idx_meetups_start_time ON meetups (start_time);
+CREATE INDEX idx_meetups_created_at ON meetups (created_at DESC);
 CREATE TABLE meetup_participants (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   meetup_id   UUID NOT NULL REFERENCES meetups(id) ON DELETE CASCADE,
@@ -177,6 +178,8 @@ CREATE INDEX idx_meetup_participants_user ON meetup_participants (user_id);
 
 -- ============================================================
 -- SUGGESTION EVENTS  (AI learning data — logs every suggestion)
+-- Retention: grows unboundedly. Recommend purging entries older than 90 days
+-- or archiving to cold storage monthly.
 -- ============================================================
 CREATE TABLE suggestion_events (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -224,6 +227,12 @@ CREATE TRIGGER trg_meetups_updated_at
 CREATE TRIGGER trg_meetup_participants_updated_at
   BEFORE UPDATE ON meetup_participants FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+CREATE TRIGGER trg_fcm_tokens_updated_at
+  BEFORE UPDATE ON fcm_tokens FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER trg_notifications_updated_at
+  BEFORE UPDATE ON notifications FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
 -- ============================================================
 -- FEEDBACK
 -- ============================================================
@@ -240,6 +249,8 @@ CREATE INDEX idx_feedback_created ON feedback(created_at DESC);
 
 -- ============================================================
 -- MEETUP LOGS (progressive profiling — learning data)
+-- Retention: grows unboundedly. Recommend purging entries older than 6 months
+-- or archiving to cold storage quarterly.
 -- ============================================================
 CREATE TABLE meetup_logs (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -266,6 +277,7 @@ CREATE TABLE meetup_logs (
 
 CREATE INDEX idx_meetup_logs_user ON meetup_logs (user_id, created_at);
 CREATE INDEX idx_meetup_logs_activity ON meetup_logs (user_id, activity_type);
+CREATE INDEX idx_meetup_logs_friend ON meetup_logs (friend_id, created_at DESC);
 
 -- ============================================================
 -- USER PREFERENCES (learned from meetup_logs — cached patterns)
@@ -318,17 +330,20 @@ CREATE TRIGGER trg_user_calendars_updated_at
 CREATE TABLE notifications (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type            TEXT NOT NULL,  -- validated at application level (friend_accepted, friend_request, meetup_request, meetup_confirmed, meetup_reminder, calendar_match, meetup_rsvp_changed, meetup_time_changed, meetup_counter_propose)
+  type            TEXT NOT NULL
+    CHECK (type IN ('friend_accepted', 'friend_request', 'meetup_request', 'meetup_confirmed', 'meetup_declined', 'meetup_reminder', 'calendar_match', 'meetup_rsvp_changed', 'meetup_time_changed', 'meetup_counter_propose', 'meetup_counter_proposed')),
   title           TEXT NOT NULL,
   body            TEXT NOT NULL,
   related_user_id UUID REFERENCES users(id) ON DELETE SET NULL,   -- e.g. the friend who accepted
   related_id      UUID,                                            -- e.g. friendship_id or meetup_id
   read            BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_notifications_user ON notifications (user_id, created_at DESC);
 CREATE INDEX idx_notifications_unread ON notifications (user_id, read) WHERE read = FALSE;
+CREATE INDEX idx_notifications_type ON notifications (type);
 
 -- ============================================================
 -- FRIEND GROUPS (saved groups for recurring group scheduling)
@@ -379,6 +394,8 @@ CREATE INDEX idx_pending_invites_inviter ON pending_invites (inviter_id);
 
 -- ============================================================
 -- ACTIVITY DISMISSALS (track when users dismiss activity feed items)
+-- Retention: grows unboundedly. Recommend purging entries older than 30 days
+-- since dismissed activities are no longer relevant.
 -- ============================================================
 CREATE TABLE activity_dismissals (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -408,6 +425,144 @@ CREATE TABLE manual_busy_blocks (
 CREATE INDEX idx_manual_busy_blocks_user_time ON manual_busy_blocks (user_id, start_time, end_time);
 
 -- ============================================================
+-- SAVED EVENTS (bookmarked events from search results)
+-- ============================================================
+CREATE TABLE saved_events (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+  -- Event data (denormalized from external APIs)
+  external_id     TEXT NOT NULL,
+  source          TEXT NOT NULL CHECK (source IN ('seatgeek', 'ticketmaster')),
+  title           TEXT NOT NULL,
+  event_type      TEXT,
+  venue           TEXT,
+  city            TEXT,
+  datetime_utc    TIMESTAMPTZ NOT NULL,
+  datetime_local  TEXT,
+  url             TEXT NOT NULL,
+  image_url       TEXT,
+  price_min       NUMERIC(10,2),
+  price_max       NUMERIC(10,2),
+  performers      TEXT[],
+
+  -- User interaction
+  status          TEXT NOT NULL DEFAULT 'saved'
+    CHECK (status IN ('saved', 'interested', 'going', 'went', 'dismissed')),
+  notes           TEXT,
+
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  UNIQUE (user_id, external_id, source)
+);
+
+CREATE INDEX idx_saved_events_user ON saved_events (user_id, status);
+CREATE INDEX idx_saved_events_datetime ON saved_events (user_id, datetime_utc);
+
+CREATE TRIGGER trg_saved_events_updated_at
+  BEFORE UPDATE ON saved_events FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ============================================================
+-- EVENT INVITES (invite friends to saved events)
+-- ============================================================
+CREATE TABLE event_invites (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  saved_event_id  UUID NOT NULL REFERENCES saved_events(id) ON DELETE CASCADE,
+  invited_by      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  invited_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rsvp            TEXT NOT NULL DEFAULT 'pending'
+    CHECK (rsvp IN ('pending', 'interested', 'going', 'declined')),
+
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  UNIQUE (saved_event_id, invited_user_id)
+);
+
+CREATE INDEX idx_event_invites_user ON event_invites (invited_user_id, rsvp);
+CREATE INDEX idx_event_invites_event ON event_invites (saved_event_id);
+
+CREATE TRIGGER trg_event_invites_updated_at
+  BEFORE UPDATE ON event_invites FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ============================================================
+-- FRIEND INVITES (event-anchored friend invite links)
+-- ============================================================
+CREATE TABLE friend_invites (
+  id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  token             TEXT UNIQUE NOT NULL,
+  inviter_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_schedule_id TEXT,
+  event_title       TEXT NOT NULL,
+  friend_ids        UUID[] DEFAULT '{}',
+  invited_email     TEXT,
+  invited_phone     TEXT,
+  accepted_by       UUID REFERENCES users(id) ON DELETE SET NULL,
+  accepted_at       TIMESTAMPTZ,
+  expires_at        TIMESTAMPTZ NOT NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX idx_friend_invites_token ON friend_invites (token);
+CREATE INDEX idx_friend_invites_inviter ON friend_invites (inviter_id);
+
+-- ============================================================
+-- BLOCKED USERS (block/mute feature)
+-- ============================================================
+CREATE TABLE blocked_users (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  blocker_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blocked_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT unique_block_pair UNIQUE (blocker_id, blocked_id),
+  CONSTRAINT no_self_block CHECK (blocker_id != blocked_id)
+);
+
+CREATE INDEX idx_blocked_users_blocker ON blocked_users (blocker_id);
+CREATE INDEX idx_blocked_users_blocked ON blocked_users (blocked_id);
+
+-- ============================================================
+-- SYNC LOG (calendar sync outcomes for monitoring)
+-- Retention: grows unboundedly. Recommend purging entries older than 30 days
+-- or aggregating into daily summaries.
+-- ============================================================
+CREATE TABLE sync_log (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider      TEXT NOT NULL CHECK (provider IN ('google', 'apple', 'outlook')),
+  status        TEXT NOT NULL CHECK (status IN ('success', 'error', 'skipped')),
+  slots_synced  INTEGER DEFAULT 0,
+  error_message TEXT,
+  duration_ms   INTEGER,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_sync_log_user_id ON sync_log (user_id);
+CREATE INDEX idx_sync_log_created_at ON sync_log (created_at DESC);
+CREATE INDEX idx_sync_log_status ON sync_log (status) WHERE status = 'error';
+
+-- ============================================================
+-- OAUTH TOKENS (Vault-backed encrypted token storage)
+-- Sensitive values (access/refresh tokens) live in vault.secrets;
+-- this table holds vault secret UUID references plus non-sensitive metadata.
+-- ============================================================
+CREATE TABLE oauth_tokens (
+  user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider         TEXT NOT NULL CHECK (provider IN ('google', 'outlook', 'apple')),
+  secret_id        UUID NOT NULL,
+  token_expires_at TIMESTAMPTZ,
+  caldav_username  TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  PRIMARY KEY (user_id, provider)
+);
+
+CREATE INDEX idx_oauth_tokens_provider ON oauth_tokens (provider);
+
+-- ============================================================
 -- Row Level Security (RLS)
 -- ============================================================
 -- RLS is enabled on all tables. The backend uses the service_role key
@@ -431,3 +586,9 @@ ALTER TABLE friend_group_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pending_invites      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_dismissals  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE manual_busy_blocks   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE saved_events         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_invites        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE friend_invites       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE blocked_users        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sync_log             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE oauth_tokens         ENABLE ROW LEVEL SECURITY;

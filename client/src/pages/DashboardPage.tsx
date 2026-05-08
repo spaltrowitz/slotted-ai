@@ -5,6 +5,7 @@ import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
 import EventScheduleButton from '../components/EventScheduleButton';
 import StarRating from '../components/StarRating';
+import SmartSuggestions from '../components/SmartSuggestions';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 import { getFirstName, getSmartDisplayName, timeAgo, formatMeetupTime } from '../lib/utils';
@@ -42,7 +43,7 @@ function StageNoCalendar() {
 
 function StageNoFriends({ inviteUrl }: { inviteUrl: string }) {
   const [copied, setCopied] = useState(false);
-  const message = `Let's schedule time to hang :) This app syncs our calendars and finds the best time to meet up. ${inviteUrl}`;
+  const message = `Let's hang! This app finds times we're both free — no more back-and-forth 📅`;
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -405,6 +406,9 @@ function StageActiveUser({
         </div>
       )}
 
+      {/* AI-powered suggestions */}
+      <SmartSuggestions />
+
       {/* Invite CTA */}
       <EventScheduleButton variant="compact" />
       <ShareInviteButton inviteUrl={inviteUrl} variant="subtle" />
@@ -424,7 +428,7 @@ function StageActiveUser({
 
 function ShareInviteButton({ inviteUrl, variant }: { inviteUrl: string; variant: 'secondary' | 'subtle' }) {
   const [copied, setCopied] = useState(false);
-  const message = `Let's schedule time to hang :) This app syncs our calendars and finds the best time to meet up. ${inviteUrl}`;
+  const message = `Let's hang! This app finds times we're both free — no more back-and-forth 📅`;
 
   const handleShare = async () => {
     if (navigator.share) {

@@ -8,6 +8,13 @@ import { Client as GraphClient } from "@microsoft/microsoft-graph-client";
 import { createHmac } from "crypto";
 import { getSupabase } from "../supabase";
 
+// Slotted's calendar identity — added as a guest to all meetup events
+export const SLOTTED_CALENDAR_GUEST = {
+  email: "slotted.ai@gmail.com",
+  displayName: "Slotted.ai",
+  responseStatus: "accepted",
+};
+
 // ---------------------------------------------------------------------------
 // OAuth State helpers (CSRF protection for OAuth callbacks)
 // ---------------------------------------------------------------------------
@@ -217,7 +224,8 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
       .map((u: any) => ({ email: u.email, displayName: u.display_name }));
 
     const eventTitle = meetup.title || "Hangout";
-    const eventDescription = meetup.description || `Scheduled via Slotted with ${attendees.map((a: any) => a.displayName).join(", ")}`;
+    const eventDescription = (meetup.description || `Scheduled via Slotted with ${attendees.map((a: any) => a.displayName).join(", ")}`)
+      + "\n\nManaged by Slotted.ai — https://slotted-ai.web.app";
 
     let addedEventId: string | null = null;
 
@@ -241,6 +249,10 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
                 dateTime: meetup.end_time,
                 timeZone: dbUser.timezone || "America/New_York",
               },
+              attendees: [
+                ...attendees,
+                { email: SLOTTED_CALENDAR_GUEST.email, displayName: SLOTTED_CALENDAR_GUEST.displayName, responseStatus: "accepted" },
+              ],
               reminders: {
                 useDefault: false,
                 overrides: [
@@ -278,6 +290,8 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
           `SUMMARY:${eventTitle}`,
           `DESCRIPTION:${eventDescription}`,
           meetup.location ? `LOCATION:${meetup.location}` : "",
+          ...attendees.map((a: any) => `ATTENDEE;CN=${a.displayName}:mailto:${a.email}`),
+          `ATTENDEE;CN=Slotted.ai;RSVP=FALSE:mailto:${SLOTTED_CALENDAR_GUEST.email}`,
           "BEGIN:VALARM",
           "TRIGGER:-PT60M",
           "ACTION:DISPLAY",
@@ -332,6 +346,10 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
               timeZone: dbUser.timezone || "America/New_York",
             },
             location: meetup.location ? { displayName: meetup.location } : undefined,
+            attendees: [
+              ...attendees.map((a: any) => ({ emailAddress: { address: a.email, name: a.displayName }, type: "required" })),
+              { emailAddress: { address: SLOTTED_CALENDAR_GUEST.email, name: SLOTTED_CALENDAR_GUEST.displayName }, type: "required" },
+            ],
             reminderMinutesBeforeStart: 15,
             isReminderOn: true,
           });
@@ -2289,5 +2307,16 @@ export async function fetchAppleBusyBlocks(
   }
 
   return allBusyBlocks;
+}
+
+export async function scheduleEmailFallback(
+  _userId: string,
+  _notificationId: string,
+  _title: string,
+  _body: string,
+): Promise<void> {
+  // No-op placeholder — the sendEmailFallbacks scheduled function
+  // handles checking for unread notifications older than 24 hours.
+  // Plug in SendGrid/SES here when ready.
 }
 

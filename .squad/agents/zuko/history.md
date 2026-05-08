@@ -157,3 +157,11 @@ Zuko completed 10+ sessions: critical security audit fixes (admin secret, token 
 - **Reused:** `fetchAppleBusyBlocks()` (existing CalDAV helper), `getOutlookGraphClient()` (existing MSAL helper), `user_calendars` table with `source` + `is_selected` filtering.
 - Build verified ✅, deployed to `https://api-xwsmuazwmq-uc.a.run.app`.
 
+### Event Autocomplete API + URL Fallback
+- **New endpoint:** `GET /events/autocomplete?q={query}` — lightweight typeahead returning `[{ id, title, venue, type }]`. Queries ≥2 chars. Waterfall: Ticketmaster keyword search (size=8) first, SeatGeek fallback. No availability checking — optimized for <500ms response.
+- **New endpoint:** `POST /events/from-url` — accepts Ticketmaster or SeatGeek URL, extracts event ID from URL pattern, fetches full event details + all showtimes via attraction-based search (TM) or title-based search (SG). Returns same shape as `/events/schedule` expects: `{ event, showtimes, totalShowtimes }`.
+- **URL patterns handled:** Ticketmaster `/event/{ID}` path extraction, SeatGeek slug-to-search-query conversion.
+- **Fallback for unknown URLs:** Fetches page HTML and extracts `<title>` tag as event name. Returns warning that only title was recovered.
+- **Existing `/events/suggest` untouched** — autocomplete is a parallel endpoint with simpler response format for the new frontend input flow.
+- Build verified ✅, deployed to `https://api-xwsmuazwmq-uc.a.run.app`.
+

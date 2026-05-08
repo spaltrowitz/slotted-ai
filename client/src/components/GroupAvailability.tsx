@@ -55,8 +55,9 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
       setSuggestions(data.suggestions || []);
       setOverlaps(data.overlaps || []);
       setParticipants(data.participants || []);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to find group availability');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
+      setError(axiosErr.response?.data?.error || axiosErr.message || 'Failed to find group availability');
     } finally {
       setLoading(false);
     }
@@ -109,9 +110,10 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
       });
       setBooked(slot.start);
       onBook?.(slot);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setBookingSlot(null);
-      setBookError(err.response?.data?.error || 'Failed to book — please try again');
+      const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
+      setBookError(axiosErr.response?.data?.error || axiosErr.message || 'Failed to book — please try again');
       setTimeout(() => setBookError(null), 4000);
     }
   };
@@ -125,7 +127,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
           <h3 className="font-display text-sm font-bold text-gray-900 truncate">
             Group Availability ({friendNames.length + 1} people)
           </h3>
-          <p className="mt-0.5 text-[11px] text-gray-400">
+          <p className="mt-0.5 text-[11px] text-gray-500">
             Finding times that work for {friendNames.join(', ')} &amp; you
           </p>
         </div>
@@ -173,30 +175,30 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
             </div>
             <h3 className="font-display text-lg font-bold text-gray-900">Request Sent!</h3>
             <p className="mt-1 text-sm text-gray-500">{bookedLabel.title}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{bookedLabel.day} · {bookedLabel.time}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{bookedLabel.day} · {bookedLabel.time}</p>
 
             <div className="mt-5 w-full max-w-xs space-y-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400">What happens next</h4>
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">What happens next</h4>
               <div className="space-y-2.5 text-left">
                 <div className="flex items-start gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs">1</span>
                   <div>
                     <p className="text-sm font-medium text-gray-800">{friendNames.join(' & ')} get notified</p>
-                    <p className="text-[11px] text-gray-400">They'll see the invite in their Slotted.ai notifications</p>
+                    <p className="text-[11px] text-gray-500">They'll see the invite in their Slotted.ai notifications</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs">2</span>
                   <div>
                     <p className="text-sm font-medium text-gray-800">Everyone accepts or declines</p>
-                    <p className="text-[11px] text-gray-400">Each person will see accept/decline on their Dashboard</p>
+                    <p className="text-[11px] text-gray-500">Each person will see accept/decline on their Dashboard</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs">3</span>
                   <div>
                     <p className="text-sm font-medium text-gray-800">Once confirmed, add to calendar</p>
-                    <p className="text-[11px] text-gray-400">When everyone says yes, you'll all be prompted to add it to your calendars</p>
+                    <p className="text-[11px] text-gray-500">When everyone says yes, you'll all be prompted to add it to your calendars</p>
                   </div>
                 </div>
               </div>
@@ -227,7 +229,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <span className="text-4xl">—</span>
             <h4 className="mt-3 text-sm font-semibold text-gray-800">No common free times found</h4>
-            <p className="mt-1.5 max-w-sm text-xs text-gray-400 leading-relaxed">
+            <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
               All {friendNames.length + 1} people are busy for the next 2 weeks.
               Try reducing the group size or checking back later.
             </p>
@@ -282,7 +284,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
               </div>
             ))}
 
-            <p className="pt-2 text-center text-[11px] text-gray-400">
+            <p className="pt-2 text-center text-[11px] text-gray-500">
               {overlaps.length} overlapping windows · Showing top {suggestions.length} for all {friendNames.length + 1} people
             </p>
           </div>
@@ -294,7 +296,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
         {bookError ? (
           <p className="text-[11px] text-red-500 font-medium">{bookError}</p>
         ) : (
-          <p className="text-[11px] text-gray-400">Based on the next 2 weeks of all calendars</p>
+          <p className="text-[11px] text-gray-500">Based on the next 2 weeks of all calendars</p>
         )}
         <button
           onClick={fetchGroupOverlaps}

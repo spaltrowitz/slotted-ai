@@ -48,8 +48,9 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
         .sort()
         .join('|');
       hasLoadedRef.current = true;
-    } catch (err: any) {
-      const errCode = err.response?.data?.error;
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
+      const errCode = axiosErr.response?.data?.error;
       if (errCode === 'calendar_reconnect_required' || errCode === 'Calendar not connected') {
         setNeedsReconnect(true);
         setError('Your Google Calendar connection has expired. Please reconnect below.');
@@ -99,8 +100,9 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
       onSaved?.();
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save calendar selection');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
+      setError(axiosErr.response?.data?.error || axiosErr.message || 'Failed to save calendar selection');
     } finally {
       setSaving(false);
     }
@@ -133,8 +135,9 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
         .then(() => {
           lastSavedSelectionRef.current = selectedKey;
         })
-        .catch((err: any) => {
-          console.error('Failed to save calendar selection on close:', err?.response?.data?.error || err?.message || err);
+        .catch((err: unknown) => {
+          const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
+          console.error('Failed to save calendar selection on close:', axiosErr?.response?.data?.error || axiosErr?.message || err);
         });
     };
   }, [source]);
@@ -169,7 +172,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
           {cal.calendar_name}
         </p>
       </div>
-      <span className="text-xs font-medium text-gray-400 flex-shrink-0 capitalize">
+      <span className="text-xs font-medium text-gray-500 flex-shrink-0 capitalize">
         {cal.access_role === 'owner' ? '' : cal.access_role}
       </span>
     </label>
@@ -193,14 +196,14 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
           <div>
             <h3 className="text-sm font-semibold text-gray-900">Choose Calendars</h3>
-            <p className="mt-0.5 text-[11px] text-gray-400">
+            <p className="mt-0.5 text-[11px] text-gray-500">
               Select which calendars Slotted.ai should read for availability
             </p>
           </div>
           {onClose && (
             <button
               onClick={onClose}
-              className="rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-all"
+              className="rounded-lg border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-50 hover:text-gray-600 transition-all"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -242,7 +245,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
       <div className={compact ? 'space-y-3' : 'px-5 py-4 space-y-4'}>
         {/* Quick actions */}
         <div className="flex items-center justify-between">
-          <p className="text-[11px] text-gray-400">
+          <p className="text-[11px] text-gray-500">
             {selectedCount} of {calendars.length} selected
           </p>
           <div className="flex gap-2">
@@ -250,7 +253,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
               Select all
             </button>
             <span className="text-gray-300">·</span>
-            <button onClick={deselectAll} className="text-[11px] font-medium text-gray-400 hover:text-gray-600">
+            <button onClick={deselectAll} className="text-[11px] font-medium text-gray-500 hover:text-gray-600">
               None
             </button>
           </div>
@@ -259,7 +262,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
         {/* Owned calendars */}
         {ownedCalendars.length > 0 && (
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
               My Calendars
             </p>
             <div className="space-y-0.5">
@@ -271,7 +274,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
         {/* Shared / subscribed calendars */}
         {sharedCalendars.length > 0 && (
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
               Shared with Me
             </p>
             <div className="space-y-0.5">
@@ -281,7 +284,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
         )}
 
         {calendars.length === 0 && !error && (
-          <p className="text-center text-sm text-gray-400 py-4">
+          <p className="text-center text-sm text-gray-500 py-4">
             No calendars found. Make sure your calendar has at least one calendar.
           </p>
         )}

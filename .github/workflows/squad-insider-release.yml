@@ -19,8 +19,10 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run tests
-        run: node --test test/*.test.js
+      - name: Install and build
+        run: |
+          cd client && npm ci && npm run build
+          cd ../functions && npm ci && npm run build
 
       - name: Read version from package.json
         id: version

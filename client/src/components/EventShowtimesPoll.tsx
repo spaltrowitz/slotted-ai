@@ -2,16 +2,20 @@ import { useState } from 'react';
 import EventShowtimeCard from './EventShowtimeCard';
 import EventPollBottomBar from './EventPollBottomBar';
 import InviteFriendButton from './InviteFriendButton';
+import PostSubmitShareSection from './PostSubmitShareSection';
 import type { ScheduleEvent, ScheduleShowtime } from './EventSearchModal';
+import api from '../lib/api';
 
 interface EventShowtimesPollProps {
   event: ScheduleEvent;
   showtimes: ScheduleShowtime[];
+  friendIds?: string[];
 }
 
 export default function EventShowtimesPoll({
   event,
   showtimes,
+  friendIds = [],
 }: EventShowtimesPollProps) {
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [submitted, setSubmitted] = useState(false);
@@ -43,9 +47,24 @@ export default function EventShowtimesPoll({
     });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setSubmitted(true);
-    // TODO: Wire to backend — POST /events/poll with selected datetime indices
+    try {
+      await api.post('/events/poll', {
+        eventTitle: event.title,
+        eventVenue: event.venue,
+        eventImageUrl: event.imageUrl,
+        showtimes: showtimes.map(s => ({
+          datetime: s.datetime,
+          ticketUrl: s.ticketUrl,
+          price: s.price,
+        })),
+        friendIds,
+        selectedIndices: Array.from(selectedIndices),
+      });
+    } catch (err: unknown) {
+      console.error('Poll submission failed:', err instanceof Error ? err.message : err);
+    }
   };
 
   if (sorted.length === 0) {
@@ -87,35 +106,29 @@ export default function EventShowtimesPoll({
       </div>
 
       {submitted ? (
-        <div className="rounded-xl bg-violet-50 border border-violet-200 p-3">
-          <p className="text-sm font-medium text-violet-800">
-            ✅ You submitted {selectedIndices.size} date{selectedIndices.size !== 1 ? 's' : ''}
-          </p>
-          <p className="mt-1 text-xs text-violet-600">
-            Waiting for {pendingFriends.join(', ')}…
-          </p>
-        </div>
+        <PostSubmitShareSection event={event} pendingFriends={pendingFriends} />
       ) : (
-        <p className="text-xs text-gray-500">
-          Check all the dates that work for you
-          {sorted[0]?.ticketUrl && (
-            <>
-              {' · '}
-              <a
-                href={sorted[0].ticketUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-0.5 font-medium text-violet-600 hover:text-violet-800"
-              >
-                🎟️ Tickets
-              </a>
-            </>
-          )}
-        </p>
+        <>
+          <p className="text-xs text-gray-500">
+            Check all the dates that work for you
+            {sorted[0]?.ticketUrl && (
+              <>
+                {' · '}
+                <a
+                  href={sorted[0].ticketUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 font-medium text-violet-600 hover:text-violet-800"
+                >
+                  🎟️ Tickets
+                </a>
+              </>
+            )}
+          </p>
+          {/* Invite friend */}
+          <InviteFriendButton event={event} />
+        </>
       )}
-
-      {/* Invite friend */}
-      <InviteFriendButton event={event} />
 
       {/* Showtime cards */}
       <div className="space-y-2.5">
@@ -135,6 +148,7 @@ export default function EventShowtimesPoll({
         selectedCount={selectedIndices.size}
         submitted={submitted}
         pendingFriends={pendingFriends}
+        event={event}
         onSubmit={handleSubmit}
       />
     </div>

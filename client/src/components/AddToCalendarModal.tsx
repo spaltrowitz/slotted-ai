@@ -115,7 +115,7 @@ export default function AddToCalendarModal({
             </div>
             <button
               onClick={onClose}
-              className="rounded-lg border border-gray-200 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all"
+              className="rounded-lg border border-gray-200 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-gray-600 transition-all"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -138,7 +138,7 @@ export default function AddToCalendarModal({
               <p className="mt-2 text-sm font-semibold text-emerald-700">
                 {addedMethod === 'google' ? 'Google Calendar opened!' : 'File downloaded!'}
               </p>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-gray-500">
                 {addedMethod === 'google'
                   ? 'Save the event in the tab that just opened'
                   : 'Open the .ics file to add it to your calendar'}
@@ -161,7 +161,7 @@ export default function AddToCalendarModal({
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-gray-900">Google Calendar</p>
-                  <p className="text-[11px] text-gray-400">Opens in a new tab with event pre-filled</p>
+                  <p className="text-[11px] text-gray-500">Opens in a new tab with event pre-filled</p>
                 </div>
                 <svg className="ml-auto h-4 w-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -178,7 +178,7 @@ export default function AddToCalendarModal({
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-gray-900">Download .ics file</p>
-                  <p className="text-[11px] text-gray-400">Works with Apple Calendar, Outlook, or any calendar app</p>
+                  <p className="text-[11px] text-gray-500">Works with Apple Calendar, Outlook, or any calendar app</p>
                 </div>
               </button>
             </div>

@@ -121,22 +121,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sync Firebase user to Supabase DB (upsert on every sign-in)
   const syncUserToDb = async (firebaseUser: User) => {
     try {
-      const token = await firebaseUser.getIdToken();
-      await fetch('/api/users/me', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          photoUrl: firebaseUser.photoURL,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        }),
+      await api.post('/users/me', {
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        photoUrl: firebaseUser.photoURL,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
     } catch (err) {
-      console.error('User sync failed:', err);
+      console.error('User sync failed:', err instanceof Error ? err.message : err);
     }
   };
 
@@ -154,17 +146,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      const token = await firebaseUser.getIdToken();
-      await fetch('/api/friends/connect-referral', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(referrerUid ? { referrerUid } : { referrerEmail }),
-      });
+      await api.post('/friends/connect-referral', referrerUid ? { referrerUid } : { referrerEmail });
     } catch (err) {
-      console.error('Referral connect failed:', err);
+      console.error('Referral connect failed:', err instanceof Error ? err.message : err);
     } finally {
       localStorage.removeItem('slotted_referrer');
       localStorage.removeItem('slotted_referrer_email');
@@ -191,9 +175,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await syncUserToDb(result.user);
         await connectReferral(result.user);
       }
-    } catch (err: any) {
-      console.error('Auth error:', err);
-      const code = err.code || '';
+    } catch (err: unknown) {
+      const firebaseErr = err as { code?: string; message?: string };
+      console.error('Auth error:', firebaseErr.message || err);
+      const code = firebaseErr.code || '';
       if (code === 'auth/unauthorized-domain') {
         setAuthError(
           `This domain isn't authorized in Firebase. Go to Firebase Console → Authentication → Settings → Authorized domains and add: ${window.location.hostname}`
@@ -204,11 +189,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Fallback to redirect-based sign-in
         try {
           await signInWithRedirect(auth, googleProvider);
-        } catch (redirectErr: any) {
+        } catch {
           setAuthError('Sign-in failed. Please try again.');
         }
       } else {
-        setAuthError(`Sign-in failed: ${err.message || code}`);
+        setAuthError(`Sign-in failed: ${firebaseErr.message || code}`);
       }
     } finally {
       setIsSigningIn(false);
@@ -258,9 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const connectAppleCalendar = useCallback(async (username: string, password: string) => {
     try {
-      console.log('Connecting Apple Calendar for:', username);
       const { data } = await api.post('/calendar/apple/connect', { username, password });
-      console.log('Apple Calendar connection response:', data);
       if (data?.success) {
         setAppleCalendarConnected(true);
         setCalendarConnected(true);
@@ -270,14 +253,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: true, calendarsFound: data.calendarsFound };
       }
       return { success: false, error: 'Unknown error' };
-    } catch (err: any) {
-      console.error('Apple Calendar connection error - full details:');
-      console.error('Error object:', err);
-      console.error('Response data:', err.response?.data);
-      console.error('Response status:', err.response?.status);
-      console.error('Response headers:', err.response?.headers);
-      const errorMessage = err.response?.data?.error || err.message || 'Failed to connect Apple Calendar';
-      console.error('Using error message:', errorMessage);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
+      const errorMessage = axiosErr.response?.data?.error || axiosErr.message || 'Failed to connect Apple Calendar';
       return { success: false, error: errorMessage };
     }
   }, []);
@@ -359,8 +337,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         localStorage.removeItem('slotted_outlook_calendar_connected');
       }
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.warn('Calendar status check failed:', err instanceof Error ? err.message : err);
     }
   }, []);
 
@@ -375,8 +353,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else if (data?.google) {
         setGoogleCalendarStale(false);
       }
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.warn('Calendar health check failed:', err instanceof Error ? err.message : err);
     }
   }, []);
 

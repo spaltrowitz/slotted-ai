@@ -5,10 +5,11 @@ import CalendarPicker from '../components/CalendarPicker';
 import PushNotificationPrompt from '../components/PushNotificationPrompt';
 import InstallPrompt from '../components/InstallPrompt';
 import SocialBattery from '../components/SocialBattery';
+import CoupleMode from '../components/CoupleMode';
 import { useAuth } from '../contexts/AuthContext';
 import { trackSettingsSaved } from '../lib/analytics';
 import api from '../lib/api';
-import { fetchUserSettings, fetchMeetups, queryKeys } from '../lib/queries';
+import { fetchUserSettings, fetchMeetups, fetchFriends, queryKeys } from '../lib/queries';
 
 export default function SettingsPage() {
   const { user, onboardingComplete, googleCalendarConnected, googleCalendarStale, completeOnboarding, connectCalendar, disconnectCalendar, appleCalendarConnected, connectAppleCalendar, disconnectAppleCalendar, outlookCalendarConnected, connectOutlookCalendar, disconnectOutlookCalendar, verifyCalendarHealth, signInWithGoogle, signOut } = useAuth();
@@ -48,6 +49,12 @@ export default function SettingsPage() {
   const { data: meetupsData = [] } = useQuery({
     queryKey: queryKeys.meetups,
     queryFn: fetchMeetups,
+    enabled: !!user,
+  });
+
+  const { data: friendsData = [] } = useQuery({
+    queryKey: queryKeys.friends,
+    queryFn: fetchFriends,
     enabled: !!user,
   });
 
@@ -660,6 +667,9 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+
+          {/* Couple Mode */}
+          <CoupleMode friends={friendsData} />
 
           {/* Legal */}
           <div className="rounded-2xl border border-gray-200/80 bg-white/60 p-5">

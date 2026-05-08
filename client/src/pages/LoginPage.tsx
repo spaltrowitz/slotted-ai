@@ -6,7 +6,7 @@ export default function LoginPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#faf9f7]">
+      <div className="flex h-screen items-center justify-center bg-page-light">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
       </div>
     );
@@ -17,7 +17,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#f8f7f4]">
+    <div className="relative min-h-screen overflow-hidden bg-page-warm">
       {/* Warm gradient mesh — colorful but sophisticated */}
       <div className="absolute -top-32 -right-32 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-amber-200/50 via-orange-200/30 to-transparent blur-3xl" />
       <div className="absolute top-1/2 -left-40 h-[500px] w-[500px] rounded-full bg-gradient-to-tr from-teal-200/40 via-cyan-100/30 to-transparent blur-3xl" />
@@ -68,7 +68,7 @@ export default function LoginPage() {
               <button
                 onClick={signInWithGoogle}
                 disabled={isSigningIn}
-                className="text-sm text-gray-400 hover:text-gray-600 transition-colors underline underline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-sm text-gray-500 hover:text-gray-600 transition-colors underline underline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Already have an account? Log in
               </button>
@@ -85,7 +85,7 @@ export default function LoginPage() {
 
       {/* How it works */}
       <section className="relative z-10 mx-auto max-w-4xl px-6 pb-6 sm:pb-10">
-        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4 sm:mb-6">
+        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-500 mb-4 sm:mb-6">
           How it works
         </h2>
         {/* Mobile: equal-width row that always fits */}
@@ -151,7 +151,7 @@ export default function LoginPage() {
 
       {/* Why it matters */}
       <section className="relative z-10 mx-auto max-w-lg px-6 pb-6 sm:pb-10">
-        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3 sm:mb-6">
+        <h2 className="font-display text-center text-xs font-semibold uppercase tracking-widest text-gray-500 mb-3 sm:mb-6">
           Why it matters
         </h2>
         {/* Mobile: compact list */}
@@ -210,12 +210,12 @@ export default function LoginPage() {
 
       {/* Footer */}
       <footer className="relative z-10 pb-8 text-center">
-        <p className="text-xs text-gray-400">Built for busy people who'd rather hang out than plan to hang out.</p>
-        <Link to="/privacy" className="mt-2 inline-block text-xs text-gray-300 hover:text-gray-500 transition-colors">
+        <p className="text-xs text-gray-500">Built for busy people who'd rather hang out than plan to hang out.</p>
+        <Link to="/privacy" className="mt-2 inline-block text-xs text-gray-300 hover:text-gray-400 transition-colors">
           Privacy Policy
         </Link>
         <span className="mx-1.5 mt-2 inline-block text-xs text-gray-200">·</span>
-        <Link to="/terms" className="mt-2 inline-block text-xs text-gray-300 hover:text-gray-500 transition-colors">
+        <Link to="/terms" className="mt-2 inline-block text-xs text-gray-300 hover:text-gray-400 transition-colors">
           Terms of Service
         </Link>
       </footer>

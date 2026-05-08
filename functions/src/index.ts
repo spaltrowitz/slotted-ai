@@ -24,6 +24,9 @@ import eventsRouter from "./routes/events";
 import calendarRouter from "./routes/calendar";
 import miscRouter from "./routes/misc";
 import adminRouter from "./routes/admin";
+import smsRouter from "./routes/sms";
+import couplesRouter from "./routes/couples";
+import recurringRouter from "./routes/recurring";
 
 // ---------------------------------------------------------------------------
 // Firebase & global config
@@ -118,6 +121,9 @@ app.use(eventsRouter);
 app.use(calendarRouter);
 app.use(miscRouter);
 app.use(adminRouter);
+app.use(smsRouter);
+app.use(couplesRouter);
+app.use(recurringRouter);
 
 // Global error handler
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
@@ -632,6 +638,510 @@ export const findCalendarMatches = onSchedule("every day 09:00", async (event) =
     console.log("Proactive weekend calendar matching complete");
   } catch (calMatchErr) {
     console.error("Error in proactive calendar matching:", calMatchErr);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Smart weekly nudge — texts users about their most overdue friend (max 1/week)
+// ---------------------------------------------------------------------------
+export const sendWeeklyNudges = onSchedule("every monday 10:00", async () => {
+  const sb = getSupabase();
+  const now = new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 86400000);
+
+  // Get users with phone numbers who haven't opted out
+  const { data: users } = await sb
+    .from("users")
+    .select("id, display_name, phone_number, social_battery, timezone")
+    .not("phone_number", "is", null)
+    .eq("onboarded", true);
+
+  if (!users || users.length === 0) return;
+
+  // Get opted-out phone numbers
+  const { data: optOuts } = await sb.from("sms_opt_outs").select("phone_number");
+  const optOutSet = new Set((optOuts || []).map((o: any) => o.phone_number));
+
+  for (const user of users) {
+    try {
+      if (!user.phone_number || optOutSet.has(user.phone_number)) continue;
+      if (user.social_battery === "recharging") continue;
+
+      // Skip if user already has an upcoming meetup
+      const { data: upcoming } = await sb
+        .from("meetup_participants")
+        .select("meetup_id, meetup:meetups(start_time, status)")
+        .eq("user_id", user.id)
+        .eq("rsvp", "accepted");
+
+      const hasUpcoming = (upcoming || []).some((p: any) =>
+        p.meetup?.status === "confirmed" && new Date(p.meetup.start_time) > now
+      );
+      if (hasUpcoming) continue;
+
+      // Skip if we already nudged this user in the last 7 days
+      const { data: recentNudge } = await sb
+        .from("sms_pending_actions")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("action_type", "nudge")
+        .gte("created_at", oneWeekAgo.toISOString())
+        .limit(1);
+
+      if (recentNudge && recentNudge.length > 0) continue;
+
+      // Find the most overdue friend (longest since last hangout relative to cadence)
+      const { data: friendships } = await sb
+        .from("friendships")
+        .select("id, user_a_id, user_b_id")
+        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+        .eq("status", "accepted");
+
+      if (!friendships || friendships.length === 0) continue;
+
+      let mostOverdueFriend: { id: string; name: string; weeks: number } | null = null;
+
+      for (const f of friendships) {
+        const friendId = f.user_a_id === user.id ? f.user_b_id : f.user_a_id;
+
+        // Get last hangout with this friend
+        const { data: lastMeetup } = await sb
+          .from("meetup_participants")
+          .select("meetup_id, meetup:meetups(start_time, status)")
+          .eq("user_id", user.id)
+          .eq("rsvp", "accepted")
+          .order("created_at", { ascending: false })
+          .limit(20);
+
+        // Find meetups where both users participated
+        const { data: friendParts } = await sb
+          .from("meetup_participants")
+          .select("meetup_id")
+          .eq("user_id", friendId)
+          .eq("rsvp", "accepted");
+
+        const friendMeetupIds = new Set((friendParts || []).map((p: any) => p.meetup_id));
+        const sharedMeetups = (lastMeetup || []).filter((p: any) =>
+          friendMeetupIds.has(p.meetup_id) &&
+          p.meetup?.status !== "cancelled" &&
+          new Date(p.meetup?.start_time) < now
+        );
+
+        let weeksSince = 4; // default if never hung out
+        if (sharedMeetups.length > 0) {
+          const latest = sharedMeetups[0];
+          const daysSince = Math.floor((now.getTime() - new Date(latest.meetup.start_time).getTime()) / 86400000);
+          weeksSince = Math.floor(daysSince / 7);
+        }
+
+        if (weeksSince < 2) continue; // Not overdue enough
+
+        // Check 30-day cooldown — don't re-nudge about same friend
+        const { data: recentFriendNudge } = await sb
+          .from("sms_pending_actions")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("action_type", "nudge")
+          .contains("action_data", { friendId })
+          .gte("created_at", new Date(now.getTime() - 30 * 86400000).toISOString())
+          .limit(1);
+
+        if (recentFriendNudge && recentFriendNudge.length > 0) continue;
+
+        const { data: friendUser } = await sb
+          .from("users")
+          .select("display_name")
+          .eq("id", friendId)
+          .maybeSingle();
+
+        const friendName = friendUser?.display_name?.split(" ")[0] || "your friend";
+
+        if (!mostOverdueFriend || weeksSince > mostOverdueFriend.weeks) {
+          mostOverdueFriend = { id: friendId, name: friendName, weeks: weeksSince };
+        }
+      }
+
+      if (!mostOverdueFriend) continue;
+
+      // Send the nudge
+      const { sendSMS, createSMSAction, SMS_TEMPLATES } = await import("./utils/sms");
+      await sendSMS(
+        user.phone_number,
+        SMS_TEMPLATES.nudge(mostOverdueFriend.name, mostOverdueFriend.weeks),
+      );
+      await createSMSAction(user.phone_number, user.id, "nudge", {
+        friendId: mostOverdueFriend.id,
+        friendName: mostOverdueFriend.name,
+      });
+
+      console.log(`[NUDGE] Sent to ${user.display_name}: "${mostOverdueFriend.name}" (${mostOverdueFriend.weeks} weeks)`);
+    } catch (err) {
+      console.error(`[NUDGE] Error for user ${user.id}:`, err);
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Email fallback — digest unread critical notifications older than 24h
+// ---------------------------------------------------------------------------
+export const sendEmailFallbacks = onSchedule("every 6 hours", async () => {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: unreadNotifications } = await getSupabase()
+    .from("notifications")
+    .select("id, user_id, type, title, body, created_at")
+    .eq("read", false)
+    .lt("created_at", cutoff)
+    .in("type", ["meetup_request", "friend_request", "meetup_counter_propose"])
+    .limit(100);
+
+  if (!unreadNotifications || unreadNotifications.length === 0) return;
+
+  const byUser = new Map<string, typeof unreadNotifications>();
+  for (const n of unreadNotifications) {
+    const existing = byUser.get(n.user_id) || [];
+    existing.push(n);
+    byUser.set(n.user_id, existing);
+  }
+
+  for (const [userId, notifications] of byUser) {
+    const { data: user } = await getSupabase()
+      .from("users")
+      .select("email, display_name")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!user?.email) continue;
+
+    // TODO: Replace with actual email sending (SendGrid/SES)
+    console.log(
+      `[EMAIL_FALLBACK] Would send digest to ${user.email}: ${notifications.length} unread notification(s) — ` +
+      notifications.map(n => `${n.type}: "${n.title}"`).join(", ")
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Recurring meetup checker — runs daily to find availability for standing hangouts
+// ---------------------------------------------------------------------------
+export const checkRecurringMeetups = onSchedule("every day 08:00", async () => {
+  const sb = getSupabase();
+  const now = new Date();
+
+  const { data: recurring } = await sb
+    .from("recurring_meetups")
+    .select("*")
+    .eq("is_active", true)
+    .lte("next_check_at", now.toISOString());
+
+  if (!recurring || recurring.length === 0) return;
+
+  for (const rec of recurring) {
+    try {
+      const allParticipants: string[] = [rec.created_by, ...rec.participant_ids];
+
+      // Check if there's already an upcoming meetup with the same title and participants
+      const nextWeek = new Date(now.getTime() + 7 * 86400000).toISOString();
+      const { data: existingMeetups } = await sb
+        .from("meetups")
+        .select("id")
+        .eq("created_by", rec.created_by)
+        .eq("title", rec.title)
+        .gte("start_time", now.toISOString())
+        .lte("start_time", nextWeek)
+        .in("status", ["proposed", "confirmed"])
+        .limit(1);
+
+      if (existingMeetups && existingMeetups.length > 0) {
+        // Already have an upcoming meetup — skip and advance next_check_at
+        const intervalDays = rec.frequency === "weekly" ? 7 : rec.frequency === "biweekly" ? 14 : 30;
+        await sb.from("recurring_meetups").update({
+          next_check_at: new Date(now.getTime() + intervalDays * 86400000).toISOString(),
+        }).eq("id", rec.id);
+        continue;
+      }
+
+      // Fetch free slots for all participants
+      const slotsByUser = await Promise.all(
+        allParticipants.map((uid) =>
+          sb
+            .from("availability")
+            .select("start_time, end_time")
+            .eq("user_id", uid)
+            .eq("status", "free")
+            .gte("end_time", now.toISOString())
+            .order("start_time")
+            .then((r) => r.data || []),
+        ),
+      );
+
+      // N-way overlap intersection
+      let currentOverlaps: { start: string; end: string }[] = slotsByUser[0].map(
+        (s) => ({ start: s.start_time, end: s.end_time }),
+      );
+
+      for (let i = 1; i < slotsByUser.length; i++) {
+        const nextSlots = slotsByUser[i];
+        const newOverlaps: { start: string; end: string }[] = [];
+        for (const a of currentOverlaps) {
+          for (const b of nextSlots) {
+            const start = a.start > b.start_time ? a.start : b.start_time;
+            const end = a.end < b.end_time ? a.end : b.end_time;
+            if (start < end) {
+              const durMin = (new Date(end).getTime() - new Date(start).getTime()) / 60000;
+              if (durMin >= (rec.duration_min || 60)) {
+                newOverlaps.push({ start, end });
+              }
+            }
+          }
+        }
+        currentOverlaps = newOverlaps;
+      }
+
+      // Filter to preferred day/time if specified
+      if (rec.preferred_day !== null && rec.preferred_day !== undefined) {
+        currentOverlaps = currentOverlaps.filter((o) => new Date(o.start).getDay() === rec.preferred_day);
+      }
+      if (rec.preferred_time) {
+        currentOverlaps = currentOverlaps.filter((o) => {
+          const hour = new Date(o.start).getHours();
+          if (rec.preferred_time === "morning") return hour >= 6 && hour < 12;
+          if (rec.preferred_time === "afternoon") return hour >= 12 && hour < 17;
+          if (rec.preferred_time === "evening") return hour >= 17 && hour < 22;
+          return true;
+        });
+      }
+
+      // If we found overlaps, notify the creator about the best slot
+      if (currentOverlaps.length > 0) {
+        const best = currentOverlaps[0];
+        const startDt = new Date(best.start);
+        const timeStr = startDt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
+          " at " + startDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+        await createNotification({
+          userId: rec.created_by,
+          type: "recurring_meetup",
+          title: `🔄 Time found for "${rec.title}"`,
+          body: `Everyone's free ${timeStr} — want to lock it in?`,
+          relatedId: rec.id,
+        });
+      }
+
+      // Update next_check_at based on frequency
+      const intervalDays = rec.frequency === "weekly" ? 7 : rec.frequency === "biweekly" ? 14 : 30;
+      await sb.from("recurring_meetups").update({
+        next_check_at: new Date(now.getTime() + intervalDays * 86400000).toISOString(),
+        last_scheduled_at: now.toISOString(),
+      }).eq("id", rec.id);
+
+    } catch (err) {
+      console.error(`Recurring meetup ${rec.id} check failed:`, err);
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SMS Lifecycle Drip Messages (every 2 hours)
+// ---------------------------------------------------------------------------
+export const sendLifecycleMessages = onSchedule("every 2 hours", async () => {
+  const sb = getSupabase();
+  const { sendEngagementSMS } = await import("./utils/smsEngagement");
+
+  const { data: users } = await sb
+    .from("users")
+    .select("id, display_name, phone_number, timezone, onboarded, created_at, invite_code")
+    .not("phone_number", "is", null);
+
+  if (!users || users.length === 0) return;
+
+  const now = new Date();
+
+  for (const user of users) {
+    try {
+      if (!user.phone_number) continue;
+      const ageHours = (now.getTime() - new Date(user.created_at).getTime()) / 3600000;
+      const firstName = user.display_name?.split(" ")[0] || "there";
+      const inviteUrl = user.invite_code
+        ? `https://slotted-ai.web.app/invite/${user.invite_code}`
+        : `https://slotted-ai.web.app?ref=${user.id}`;
+
+      // Day 0: Welcome (signed up in last 6 hours)
+      if (ageHours < 6) {
+        await sendEngagementSMS(
+          user.id, user.phone_number, user.timezone || "America/New_York",
+          "welcome",
+          `📅 Welcome to Slotted, ${firstName}! I'll help you and your friends actually make plans. Connect your calendar: slotted-ai.web.app`,
+        );
+        continue;
+      }
+
+      // Day 0.5: Enable push notifications (12-24 hours, no FCM token)
+      if (ageHours >= 12 && ageHours < 24) {
+        const { data: fcmTokens } = await sb
+          .from("fcm_tokens")
+          .select("id")
+          .eq("user_id", user.id)
+          .limit(1);
+
+        if (!fcmTokens || fcmTokens.length === 0) {
+          await sendEngagementSMS(
+            user.id, user.phone_number, user.timezone || "America/New_York",
+            "enable_push",
+            `🔔 ${firstName}, turn on notifications so you don't miss when friends want to hang! Open Slotted and tap "Allow": slotted-ai.web.app/settings`,
+          );
+          continue;
+        }
+      }
+
+      // Day 1: Invite a friend (24-48 hours, no friends yet)
+      if (ageHours >= 24 && ageHours < 48) {
+        const { data: friendships } = await sb
+          .from("friendships")
+          .select("id")
+          .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+          .eq("status", "accepted")
+          .limit(1);
+
+        if (!friendships || friendships.length === 0) {
+          await sendEngagementSMS(
+            user.id, user.phone_number, user.timezone || "America/New_York",
+            "invite_friend",
+            `👋 Hey ${firstName}! Slotted works best with friends. Share your link and we'll find times to hang: ${inviteUrl}`,
+          );
+          continue;
+        }
+      }
+
+      // Day 3: First meetup nudge (72-120 hours, has friends, no meetups)
+      if (ageHours >= 72 && ageHours < 120) {
+        const { data: friendships } = await sb
+          .from("friendships")
+          .select("id, user_a_id, user_b_id")
+          .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+          .eq("status", "accepted")
+          .limit(1);
+
+        if (friendships && friendships.length > 0) {
+          const { data: meetups } = await sb
+            .from("meetup_participants")
+            .select("id")
+            .eq("user_id", user.id)
+            .limit(1);
+
+          if (!meetups || meetups.length === 0) {
+            const friendId = friendships[0].user_a_id === user.id ? friendships[0].user_b_id : friendships[0].user_a_id;
+            const { data: friend } = await sb.from("users").select("display_name").eq("id", friendId).maybeSingle();
+            const friendName = friend?.display_name?.split(" ")[0] || "your friend";
+
+            await sendEngagementSMS(
+              user.id, user.phone_number, user.timezone || "America/New_York",
+              "first_meetup",
+              `📅 You and ${friendName} are on Slotted! Want to find a time to hang? Reply 1`,
+              "nudge",
+              { friendId, friendName },
+            );
+            continue;
+          }
+        }
+      }
+
+      // Day 7: Reactivation (168-240 hours, no recent activity)
+      if (ageHours >= 168 && ageHours < 240) {
+        const { data: recentMeetups } = await sb
+          .from("meetup_participants")
+          .select("meetup_id")
+          .eq("user_id", user.id)
+          .eq("rsvp", "accepted");
+
+        const { data: recentNotifs } = await sb
+          .from("notifications")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("read", true)
+          .gte("created_at", new Date(now.getTime() - 7 * 86400000).toISOString())
+          .limit(1);
+
+        if ((!recentMeetups || recentMeetups.length === 0) && (!recentNotifs || recentNotifs.length === 0)) {
+          const { data: friendships } = await sb
+            .from("friendships")
+            .select("id, user_a_id, user_b_id")
+            .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+            .eq("status", "accepted")
+            .limit(1);
+
+          if (friendships && friendships.length > 0) {
+            const friendId = friendships[0].user_a_id === user.id ? friendships[0].user_b_id : friendships[0].user_a_id;
+            const { data: friend } = await sb.from("users").select("display_name").eq("id", friendId).maybeSingle();
+            const friendName = friend?.display_name?.split(" ")[0] || "your friend";
+
+            await sendEngagementSMS(
+              user.id, user.phone_number, user.timezone || "America/New_York",
+              "reactivation",
+              `👀 ${friendName} connected their calendar on Slotted! Find a time to hang: Reply 1`,
+              "nudge",
+              { friendId, friendName },
+            );
+          }
+        }
+      }
+
+    } catch (err) {
+      console.error(`[LIFECYCLE] Error for user ${user.id}:`, err);
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Monthly Recap SMS (1st of each month at 10am)
+// ---------------------------------------------------------------------------
+export const sendMonthlyRecap = onSchedule("1 of month 10:00", async () => {
+  const sb = getSupabase();
+
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setMonth(monthStart.getMonth() - 1);
+  const monthEnd = new Date();
+  monthEnd.setDate(0);
+
+  const monthName = monthStart.toLocaleDateString("en-US", { month: "long" });
+
+  const { data: users } = await sb
+    .from("users")
+    .select("id, display_name, invite_code")
+    .eq("onboarded", true);
+
+  if (!users || users.length === 0) return;
+
+  for (const user of users) {
+    try {
+      const { data: parts } = await sb
+        .from("meetup_participants")
+        .select("meetup_id, meetup:meetups(start_time, status)")
+        .eq("user_id", user.id)
+        .eq("rsvp", "accepted");
+
+      const hangouts = (parts || []).filter((p: any) => {
+        const start = new Date(p.meetup?.start_time);
+        return start >= monthStart && start <= monthEnd &&
+          (p.meetup?.status === "confirmed" || p.meetup?.status === "completed");
+      }).length;
+
+      if (hangouts === 0) continue;
+
+      const firstName = user.display_name?.split(" ")[0] || "there";
+
+      await createNotification({
+        userId: user.id,
+        type: "calendar_match",
+        title: `📊 Your ${monthName} recap`,
+        body: `Nice work, ${firstName}! You hung out ${hangouts} time${hangouts > 1 ? "s" : ""} last month. Keep the momentum going — tap a friend to make plans!`,
+      });
+
+      console.log(`[RECAP] Sent notification to ${firstName}: ${hangouts} hangouts in ${monthName}`);
+    } catch (err) {
+      console.error(`[RECAP] Error for ${user.id}:`, err);
+    }
   }
 });
 

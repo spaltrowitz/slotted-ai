@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 
 export default function TermsOfServicePage() {
   return (
-    <div className="min-h-screen bg-[#f8f7f4]">
+    <div className="min-h-screen bg-page-warm">
       {/* Nav */}
       <nav className="flex items-center justify-between px-4 sm:px-8 py-5">
         <Link to="/" className="flex items-center gap-2">
@@ -20,7 +20,7 @@ export default function TermsOfServicePage() {
         <h1 className="font-display text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">
           Terms of Service
         </h1>
-        <p className="mt-2 text-sm text-gray-400">Effective date: February 1, 2026</p>
+        <p className="mt-2 text-sm text-gray-500">Effective date: February 1, 2026</p>
 
         <div className="mt-8 space-y-8 text-sm leading-relaxed text-gray-600">
           <section>

@@ -61,25 +61,32 @@ export default function SocialBattery({
   }
 
   return (
-    <div className="inline-flex gap-1 rounded-xl bg-gray-100/80 p-1 backdrop-blur-sm">
-      {levels.map((l) => {
-        const config = batteryConfig[l];
-        const isActive = level === l;
-        return (
-          <button
-            key={l}
-            onClick={() => onChange?.(l)}
-            className={`flex items-center gap-2 rounded-lg ${sizeClasses[size]} font-medium transition-all ${
-              isActive
-                ? `${config.activeBg} ${config.activeText} shadow-sm ring-1 ring-inset ring-black/5`
-                : `text-gray-400 ${config.hoverBg}`
-            }`}
-          >
-            <span className={`h-2 w-2 rounded-full ${config.dot} ${!isActive && 'opacity-40'}`} />
-            {config.label}
-          </button>
-        );
-      })}
+    <div className="space-y-2">
+      <div className="inline-flex gap-1 rounded-xl bg-gray-100/80 p-1 backdrop-blur-sm">
+        {levels.map((l) => {
+          const config = batteryConfig[l];
+          const isActive = level === l;
+          return (
+            <button
+              key={l}
+              onClick={() => onChange?.(l)}
+              className={`flex items-center gap-2 rounded-lg ${sizeClasses[size]} font-medium transition-all ${
+                isActive
+                  ? `${config.activeBg} ${config.activeText} shadow-sm ring-1 ring-inset ring-black/5`
+                  : `text-gray-500 ${config.hoverBg}`
+              }`}
+            >
+              <span className={`h-2 w-2 rounded-full ${config.dot} ${!isActive && 'opacity-40'}`} />
+              {config.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-gray-500 leading-relaxed">
+        {level === 'open' && '🟢 You\'re up for plans — friends can suggest hangouts anytime.'}
+        {level === 'ask_me' && '🟡 Check your mood first — Slotted will still suggest times but you choose.'}
+        {level === 'recharging' && '🔴 Taking a break — your free time won\'t be suggested to friends.'}
+      </p>
     </div>
   );
 }

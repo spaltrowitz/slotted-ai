@@ -476,6 +476,59 @@ router.delete("/users/me/fcm-token", authWithRateLimit, async (req: AuthRequest,
 });
 
 // ---------------------------------------------------------------------------
+// Data Export (GDPR compliance)
+// ---------------------------------------------------------------------------
+
+/** GET /users/me/export — download all user data as JSON */
+router.get("/users/me/export", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    const userId = dbUser.id;
+    const supabase = getSupabase();
+
+    const [friendships, meetups, meetupLogs, notifications, suggestions, calendars, availability, savedEvents, feedback] = await Promise.all([
+      supabase.from("friendships").select("*").or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`),
+      supabase.from("meetup_participants").select("*, meetup:meetups(*)").eq("user_id", userId),
+      supabase.from("meetup_logs").select("*").eq("user_id", userId),
+      supabase.from("notifications").select("*").eq("user_id", userId),
+      supabase.from("suggestion_events").select("*").eq("user_id", userId),
+      supabase.from("user_calendars").select("calendar_id, calendar_color, is_selected, source").eq("user_id", userId),
+      supabase.from("availability_slots").select("*").eq("user_id", userId),
+      supabase.from("saved_events").select("*").eq("user_id", userId),
+      supabase.from("feedback").select("message, created_at").eq("user_id", userId),
+    ]);
+
+    const safeProfile = stripSensitive(dbUser);
+    delete safeProfile.firebase_uid;
+
+    const exportData = {
+      exported_at: new Date().toISOString(),
+      profile: safeProfile,
+      friendships: friendships.data || [],
+      meetups: (meetups.data || []).map((mp: any) => mp.meetup),
+      meetup_logs: meetupLogs.data || [],
+      notifications: notifications.data || [],
+      suggestions: suggestions.data || [],
+      calendars: calendars.data || [],
+      availability: availability.data || [],
+      saved_events: savedEvents.data || [],
+      feedback: feedback.data || [],
+    };
+
+    res.setHeader("Content-Disposition", `attachment; filename="slotted-data-export-${new Date().toISOString().split("T")[0]}.json"`);
+    res.setHeader("Content-Type", "application/json");
+    res.json(exportData);
+  } catch (err: any) {
+    console.error("Data export error:", err);
+    res.status(500).json({ error: "Failed to export data" });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Account Deletion (GDPR / App Store compliance)
 // ---------------------------------------------------------------------------
 

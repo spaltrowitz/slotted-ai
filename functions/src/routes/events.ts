@@ -1389,6 +1389,22 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
     // Group events by normalized title to identify the primary event
     const primaryTitle = normalizeTitle(events[0].title);
     const matchingEvents = events.filter((e) => titlesMatch(normalizeTitle(e.title), primaryTitle));
+
+    // Only check availability for the next 12 upcoming showtimes (avoid overwhelming UI + API calls)
+    const now = new Date();
+    const upcomingEvents = matchingEvents
+      .filter((e) => {
+        const dt = e.datetimeLocal || e.datetime;
+        return dt && new Date(dt) > now;
+      })
+      .sort((a, b) => new Date(a.datetimeLocal || a.datetime).getTime() - new Date(b.datetimeLocal || b.datetime).getTime())
+      .slice(0, 12);
+
+    if (upcomingEvents.length === 0) {
+      res.json({ event: null, showtimes: [], message: "No upcoming showtimes found." });
+      return;
+    }
+
     const eventInfo = {
       title: matchingEvents[0].title,
       venue: matchingEvents[0].venue,
@@ -1452,7 +1468,7 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
 
     const showtimes: any[] = [];
 
-    for (const ev of matchingEvents) {
+    for (const ev of upcomingEvents) {
       const dtValue = ev.datetimeLocal || ev.datetime;
       if (!dtValue) continue; // skip events with no datetime
 
@@ -1630,6 +1646,7 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
       event: eventInfo,
       showtimes,
       totalShowtimes: matchingEvents.length,
+      showingCount: upcomingEvents.length,
       participants: participantNames,
     });
   } catch (err: any) {
@@ -2762,6 +2779,79 @@ router.get("/event-invite-meta/:token", async (req: Request, res: Response) => {
 </html>`);
   } catch {
     res.redirect(`/invite/${req.params.token}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Flow B — Date-first event discovery ("What's happening?")
+// After friends find a mutual free slot, show events during that window.
+// ---------------------------------------------------------------------------
+
+router.get("/events/whats-happening", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const { date, startTime, endTime } = req.query as Record<string, string>;
+    if (!date) {
+      res.status(400).json({ error: "date is required (YYYY-MM-DD)" });
+      return;
+    }
+
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const userCity = dbUser.event_city
+      || (dbUser.neighborhood ? dbUser.neighborhood.split(",").pop()?.trim() : undefined)
+      || undefined;
+
+    const searchParams = {
+      q: userCity || "events",
+      city: userCity,
+      dateFrom: date,
+      dateTo: date,
+      perPage: 30,
+    };
+
+    const [ticketedEvents, ebEvents, muEvents, nycEvents] = await Promise.all([
+      searchTicketedEvents(searchParams),
+      searchEventbrite(searchParams),
+      searchMeetup(searchParams),
+      searchNYCOpenData(searchParams),
+    ]);
+
+    let allEvents = [...ticketedEvents, ...ebEvents, ...muEvents, ...nycEvents];
+
+    if (startTime && endTime) {
+      const windowStart = new Date(`${date}T${startTime}`);
+      const windowEnd = new Date(`${date}T${endTime}`);
+      allEvents = allEvents.filter((ev) => {
+        const evTime = new Date(ev.datetimeLocal || ev.datetime);
+        return evTime >= windowStart && evTime <= windowEnd;
+      });
+    }
+
+    const uniqueEvents = deduplicateEvents(allEvents);
+
+    const typeOrder: Record<string, number> = {
+      theater: 1, comedy: 2, concert: 3, sports: 4, festival: 5,
+    };
+    uniqueEvents.sort((a, b) => {
+      const aOrder = typeOrder[a.type?.toLowerCase()] || 10;
+      const bOrder = typeOrder[b.type?.toLowerCase()] || 10;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return new Date(a.datetime).getTime() - new Date(b.datetime).getTime();
+    });
+
+    res.json({
+      date,
+      city: userCity || "unknown",
+      events: uniqueEvents.slice(0, 20),
+      totalFound: uniqueEvents.length,
+    });
+  } catch (err: any) {
+    console.error("What's happening error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 

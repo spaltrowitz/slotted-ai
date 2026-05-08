@@ -173,8 +173,8 @@ export default function EventSharePage() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-[11px] text-gray-400">
-          Powered by <a href="https://slotted-ai.web.app" className="underline hover:text-gray-500">Slotted.ai</a>
+        <p className="text-center text-[11px] text-gray-500">
+          Powered by <a href="https://slotted-ai.web.app" className="underline hover:text-gray-400">Slotted.ai</a>
         </p>
       </div>
     </div>

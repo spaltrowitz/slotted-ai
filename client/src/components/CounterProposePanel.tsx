@@ -41,8 +41,9 @@ export default function CounterProposePanel({
     try {
       const { data } = await api.get(`/availability/overlap/${friendId}?mode=in_person`);
       setSuggestions(data.suggestions || []);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to find alternative times');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
+      setError(axiosErr.response?.data?.error || axiosErr.message || 'Failed to find alternative times');
     } finally {
       setLoading(false);
     }
@@ -104,7 +105,7 @@ export default function CounterProposePanel({
         </div>
         <button
           onClick={onCancel}
-          className="rounded-lg border border-gray-200 p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-all"
+          className="rounded-lg border border-gray-200 p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-600 transition-all"
         >
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -162,12 +163,12 @@ export default function CounterProposePanel({
 
       {/* Footer — just decline option */}
       <div className="border-t border-gray-100 px-4 py-2.5 flex items-center justify-between bg-gray-50/50">
-        <p className="text-[11px] text-gray-400">
+        <p className="text-[11px] text-gray-500">
           Or skip suggesting a time
         </p>
         <button
           onClick={onJustDecline}
-          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all"
+          className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 min-h-[44px] text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all"
         >
           Just decline
         </button>

@@ -133,7 +133,7 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
             Get instant alerts when friends want to hang out, new matches are found, or someone accepts your invite.
           </p>
           {!isStandalone && isMobile && (
-            <p className="mt-1.5 text-xs text-gray-400">
+            <p className="mt-1.5 text-xs text-gray-500">
               For the best experience, install Slotted.ai as an app first (see above), then enable notifications.
             </p>
           )}

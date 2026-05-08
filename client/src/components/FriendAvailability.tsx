@@ -1,26 +1,27 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
 import { trackMeetupScheduled } from '../lib/analytics';
 import { getFirstName, getSmartDisplayName } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import AddToCalendarModal from './AddToCalendarModal';
+import ActivityPicker from './ActivityPicker';
 
-type HangoutMode = 'in_person' | 'phone' | 'video';
-type VideoPlatform = 'facetime' | 'zoom' | 'google_meet' | 'teams' | 'whatsapp' | 'duo' | '';
+type HangoutMode = 'in_person' | 'call';
+type VideoPlatform = 'phone' | 'facetime' | 'zoom' | 'google_meet' | 'teams' | 'whatsapp' | '';
 
 const MODE_CONFIG: Record<HangoutMode, { label: string; shortLabel: string }> = {
   in_person: { label: 'In person', shortLabel: 'Meet up' },
-  phone: { label: 'Phone call', shortLabel: 'Call' },
-  video: { label: 'Video call', shortLabel: 'Video call' },
+  call: { label: 'Call', shortLabel: 'Call' },
 };
 
-const VIDEO_PLATFORMS: { value: VideoPlatform; label: string }[] = [
+const CALL_PLATFORMS: { value: VideoPlatform; label: string }[] = [
+  { value: 'phone', label: '📞 Phone' },
   { value: 'facetime', label: 'FaceTime' },
   { value: 'zoom', label: 'Zoom' },
   { value: 'google_meet', label: 'Google Meet' },
   { value: 'teams', label: 'Teams' },
   { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'duo', label: 'Google Meet (Duo)' },
 ];
 
 
@@ -52,46 +53,38 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
   const myFirstName = getFirstName(user?.displayName) || 'Me';
   const friendFirst = getSmartDisplayName(friendName, allFriendNames);
   const isFirstTime = completedHangouts === 0;
-  const [loading, setLoading] = useState(true);
-  const [suggestions, setSuggestions] = useState<ScoredSlot[]>([]);
-  const [overlaps, setOverlaps] = useState<{ start: string; end: string }[]>([]);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [bookingSlot, setBookingSlot] = useState<string | null>(null);
-  const [booked, setBooked] = useState<string | null>(null);
-  const [bookedLabel, setBookedLabel] = useState<{ day: string; time: string; title: string } | null>(null);
   const [hangoutMode, setHangoutMode] = useState<HangoutMode>('in_person');
   const [videoPlatform, setVideoPlatform] = useState<VideoPlatform>('');
   const [showOtherTimes, setShowOtherTimes] = useState(false);
   const [bookError, setBookError] = useState<string | null>(null);
+  const [bookingSlot, setBookingSlot] = useState<string | null>(null);
+  const [booked, setBooked] = useState<string | null>(null);
+  const [bookedLabel, setBookedLabel] = useState<{ day: string; time: string; title: string } | null>(null);
   const [calendarModal, setCalendarModal] = useState<{
     meetupId: string;
     title: string;
     startTime: string;
     endTime: string;
   } | null>(null);
+  const [pendingSlot, setPendingSlot] = useState<ScoredSlot | null>(null);
 
-  const fetchOverlaps = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
+  const { data: overlapData, isLoading: loading, error: fetchError, refetch: fetchOverlaps } = useQuery({
+    queryKey: ['availability-overlap', friendId, hangoutMode],
+    queryFn: async () => {
       const { data } = await api.get(`/availability/overlap/${friendId}?mode=${hangoutMode}`);
-      setSuggestions(data.suggestions || []);
-      setOverlaps(data.overlaps || []);
-      setSyncStatus(data.syncStatus || null);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to find availability');
-    } finally {
-      setLoading(false);
-    }
-  }, [friendId, hangoutMode]);
+      return data;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
 
-  useEffect(() => {
-    fetchOverlaps();
-  }, [fetchOverlaps]);
+  const suggestions: ScoredSlot[] = overlapData?.suggestions || [];
+  const overlaps = overlapData?.overlaps || [];
+  const syncStatus: SyncStatus | null = overlapData?.syncStatus || null;
+  const error = fetchError
+    ? ((fetchError as any)?.response?.data?.error || (fetchError as Error).message || 'Failed to find availability')
+    : null;
 
-  const handleBook = async (slot: ScoredSlot) => {
-    // Validate: don't allow booking past times
+  const handleBook = async (slot: ScoredSlot, titleOverride?: string) => {
     if (new Date(slot.start) <= new Date()) {
       setBookError("Pick a time that hasn't happened yet 😊");
       setTimeout(() => setBookError(null), 4000);
@@ -103,11 +96,10 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
       return;
     }
     setBookingSlot(slot.start);
-    const bookingTitle = hangoutMode === 'in_person'
-      ? `${myFirstName} & ${friendFirst} hangout`
-      : hangoutMode === 'phone'
-        ? `${myFirstName} & ${friendFirst} phone call`
-        : `${myFirstName} & ${friendFirst} video call`;
+    const bookingTitle = titleOverride
+      || (hangoutMode === 'in_person'
+        ? `${myFirstName} & ${friendFirst} hangout`
+        : `${myFirstName} & ${friendFirst} call`);
     try {
       const { data } = await api.post('/meetups', {
         title: bookingTitle,
@@ -149,7 +141,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
           <h3 className="font-display text-sm font-bold text-gray-900 truncate">
             Suggestions with {getSmartDisplayName(friendName, allFriendNames)}
           </h3>
-          <p className="mt-0.5 text-[11px] text-gray-400">
+          <p className="mt-0.5 text-[11px] text-gray-500">
             Best times to meet based on both your calendars &amp; preferences
           </p>
         </div>
@@ -165,7 +157,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
 
       {/* Hangout mode toggle */}
       <div className="flex items-center gap-1.5 px-4 sm:px-5 py-2.5 border-b border-gray-100 bg-gray-50/50">
-        {(['in_person', 'phone', 'video'] as HangoutMode[]).map((mode) => {
+        {(['in_person', 'call'] as HangoutMode[]).map((mode) => {
           const cfg = MODE_CONFIG[mode];
           const isActive = hangoutMode === mode;
           return (
@@ -184,15 +176,15 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
         })}
       </div>
 
-      {/* Video platform picker — only show when video mode is selected */}
-      {hangoutMode === 'video' && (
-        <div className="flex items-center gap-1.5 px-4 sm:px-5 py-2 border-b border-gray-100 bg-gray-50/30">
-          <span className="text-xs text-gray-400 mr-1">Platform:</span>
-          {VIDEO_PLATFORMS.map((p) => (
+      {/* Call platform picker — show when call mode is selected */}
+      {hangoutMode === 'call' && (
+        <div className="flex items-center gap-1.5 px-4 sm:px-5 py-2 border-b border-gray-100 bg-gray-50/30 overflow-x-auto">
+          <span className="text-xs text-gray-500 mr-1 shrink-0">Via:</span>
+          {CALL_PLATFORMS.map((p) => (
             <button
               key={p.value}
               onClick={() => setVideoPlatform(videoPlatform === p.value ? '' : p.value)}
-              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all whitespace-nowrap ${
                 videoPlatform === p.value
                   ? 'bg-slotted-50 text-slotted-700 border border-slotted-200 shadow-sm'
                   : 'text-gray-500 hover:text-gray-700 hover:bg-white border border-transparent'
@@ -223,30 +215,30 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
             </div>
             <h3 className="font-display text-lg font-bold text-gray-900">Request Sent!</h3>
             <p className="mt-1 text-sm text-gray-500">{bookedLabel.title}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{bookedLabel.day} · {bookedLabel.time}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{bookedLabel.day} · {bookedLabel.time}</p>
 
             <div className="mt-5 w-full max-w-xs space-y-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400">What happens next</h4>
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">What happens next</h4>
               <div className="space-y-2.5 text-left">
                 <div className="flex items-start gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs">1</span>
                   <div>
                     <p className="text-sm font-medium text-gray-800">{getSmartDisplayName(friendName, allFriendNames)} gets notified</p>
-                    <p className="text-[11px] text-gray-400">They'll see the invite in their Slotted.ai notifications</p>
+                    <p className="text-[11px] text-gray-500">They'll see the invite in their Slotted.ai notifications</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs">2</span>
                   <div>
                     <p className="text-sm font-medium text-gray-800">They accept or decline</p>
-                    <p className="text-[11px] text-gray-400">They'll see accept/decline buttons on their Dashboard</p>
+                    <p className="text-[11px] text-gray-500">They'll see accept/decline buttons on their Dashboard</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs">3</span>
                   <div>
                     <p className="text-sm font-medium text-gray-800">Once confirmed, add to calendar</p>
-                    <p className="text-[11px] text-gray-400">When they say yes, you'll both be prompted to add it to your calendars</p>
+                    <p className="text-[11px] text-gray-500">When they say yes, you'll both be prompted to add it to your calendars</p>
                   </div>
                 </div>
               </div>
@@ -277,7 +269,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <span className="text-4xl">—</span>
             <h4 className="mt-3 text-sm font-semibold text-gray-800">No overlapping free times found</h4>
-            <p className="mt-1.5 max-w-sm text-xs text-gray-400 leading-relaxed">
+            <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
               {!syncStatus?.me.synced
                 ? "Connect your Google Calendar in Settings to let Slotted.ai find available times."
                 : "Both calendars are packed for the next 2 weeks. Try adjusting your schedules or check back later."}
@@ -294,7 +286,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                 {friendFirst} is free. You're free.
               </p>
               <button
-                onClick={() => handleBook(suggestions[0])}
+                onClick={() => setPendingSlot(suggestions[0])}
                 disabled={bookingSlot === suggestions[0].start}
                 className="mt-5 rounded-xl gradient-btn px-8 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50"
               >
@@ -332,7 +324,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                           <p className="text-xs text-gray-500">{slot.timeLabel}</p>
                         </div>
                         <button
-                          onClick={() => handleBook(slot)}
+                          onClick={() => setPendingSlot(slot)}
                           disabled={bookingSlot === slot.start}
                           className="rounded-xl gradient-btn px-3 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50"
                         >
@@ -381,7 +373,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                 {/* Book button */}
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => handleBook(slot)}
+                    onClick={() => setPendingSlot(slot)}
                     disabled={bookingSlot === slot.start}
                     className={`rounded-xl px-3 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 ${
                       booked === slot.start
@@ -395,19 +387,38 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
               </div>
             ))}
 
-            <p className="pt-2 text-center text-[11px] text-gray-400">
+            <p className="pt-2 text-center text-[11px] text-gray-500">
               {overlaps.length} overlapping windows found · Showing top {suggestions.length} suggestions
             </p>
           </div>
         )}
       </div>
 
+      {/* Activity picker — shown after selecting a slot, before booking */}
+      {pendingSlot && !booked && (
+        <div className="px-5 pb-4">
+          <ActivityPicker
+            date={pendingSlot.start}
+            startTime={new Date(pendingSlot.start).toTimeString().slice(0, 5)}
+            endTime={new Date(pendingSlot.end).toTimeString().slice(0, 5)}
+            onSelectFreestyle={() => {
+              handleBook(pendingSlot);
+              setPendingSlot(null);
+            }}
+            onSelectEvent={(event) => {
+              handleBook(pendingSlot, event.title);
+              setPendingSlot(null);
+            }}
+          />
+        </div>
+      )}
+
       {/* Refresh button */}
       <div className="border-t border-gray-100 px-5 py-3 flex justify-between items-center">
         {bookError ? (
           <p className="text-[11px] text-red-500 font-medium">{bookError}</p>
         ) : (
-          <p className="text-[11px] text-gray-400">Based on the next 2 weeks of both calendars</p>
+          <p className="text-[11px] text-gray-500">Based on the next 2 weeks of both calendars</p>
         )}
         <button
           onClick={fetchOverlaps}

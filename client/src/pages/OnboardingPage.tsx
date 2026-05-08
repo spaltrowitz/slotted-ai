@@ -45,6 +45,11 @@ export default function OnboardingPage() {
       <div className="absolute -bottom-1/4 -left-1/4 h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-blue-50/50 via-indigo-50/30 to-transparent blur-3xl" />
 
       <div className="relative w-full max-w-lg rounded-2xl bg-white p-8 shadow-xl border border-gray-200/60">
+        {/* Progress indicator */}
+        <div className="flex items-center justify-center gap-2 mb-6">
+          <div className={`h-2 w-8 rounded-full ${calendarConnected ? 'bg-emerald-400' : 'bg-slotted-500'} transition-colors`} />
+          <div className={`h-2 w-8 rounded-full ${calendarConnected ? 'bg-emerald-400' : 'bg-gray-200'} transition-colors`} />
+        </div>
         <div className="space-y-5">
           <div>
             <h2 className="font-display text-xl font-bold text-gray-900">
@@ -104,7 +109,7 @@ export default function OnboardingPage() {
         <div className="mt-8 flex items-center justify-end gap-3">
           <button
             onClick={handleSkip}
-            className="rounded-xl px-4 py-2.5 text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors"
+            className="rounded-xl px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-gray-600 transition-colors"
           >
             Skip for now
           </button>

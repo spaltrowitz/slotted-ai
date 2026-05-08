@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { getSmartDisplayName } from '../lib/utils';
+import { getSmartDisplayName, timeAgo } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchFriends, fetchMeetups, fetchNotifications, queryKeys, type Notification } from '../lib/queries';
 import AddToCalendarModal from './AddToCalendarModal';
@@ -267,23 +267,6 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
     }
   };
 
-  const timeAgo = (dateStr: string) => {
-    // Ensure UTC interpretation if server omits timezone suffix
-    const normalized = dateStr.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(dateStr)
-      ? dateStr
-      : dateStr + 'Z';
-    const date = new Date(normalized);
-    const diff = Date.now() - date.getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
   const typeConfig: Record<string, { emoji: string; bg: string; border: string }> = {
     friend_accepted: { emoji: '', bg: 'bg-emerald-50', border: 'border-emerald-100' },
     friend_request: { emoji: '', bg: 'bg-violet-50', border: 'border-violet-100' },
@@ -336,7 +319,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
             )}
             <button
               onClick={onClose}
-              className="rounded-lg p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              className="rounded-lg p-1 text-gray-500 hover:text-gray-600 hover:bg-gray-100 transition-colors"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -356,7 +339,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
             <div className="flex flex-col items-center justify-center px-6 py-12">
               <div className="text-3xl mb-1"></div>
               <h3 className="font-display text-sm font-bold text-gray-900">No notifications yet</h3>
-              <p className="mt-1 text-xs text-gray-400 text-center max-w-xs">
+              <p className="mt-1 text-xs text-gray-500 text-center max-w-xs">
                 Notifications will appear here when friends accept invites, suggest meetups, or when Slotted finds a great time.
               </p>
             </div>
@@ -417,10 +400,10 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                           })()}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-xs text-gray-400">{timeAgo(notification.created_at)}</span>
+                          <span className="text-xs text-gray-500">{timeAgo(notification.created_at)}</span>
                           <button
                             onClick={(e) => { e.stopPropagation(); dismissNotification(notification.id); }}
-                            className="rounded-full p-0.5 text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-all"
+                            className="rounded-full p-0.5 text-gray-300 hover:text-gray-400 hover:bg-gray-100 transition-all"
                           >
                             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

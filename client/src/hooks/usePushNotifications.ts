@@ -52,7 +52,7 @@ export function usePushNotifications() {
       });
 
       if (token) {
-        console.log('FCM Token:', token);
+        if (import.meta.env.DEV) console.log('FCM Token:', token);
         setFcmToken(token);
 
         // Save token to backend
@@ -65,9 +65,10 @@ export function usePushNotifications() {
         setError('No FCM token available');
         return false;
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error requesting notification permission:', err);
-      setError(err.message || 'Failed to enable notifications');
+      const errMsg = err instanceof Error ? err.message : 'Failed to enable notifications';
+      setError(errMsg);
       return false;
     } finally {
       setLoading(false);
@@ -85,7 +86,7 @@ export function usePushNotifications() {
       if (!messaging) return;
 
       unsubscribe = onMessage(messaging, (payload) => {
-        console.log('Foreground message received:', payload);
+        if (import.meta.env.DEV) console.log('Foreground message received:', payload);
 
         // Show notification even when app is open
         if (payload.notification) {

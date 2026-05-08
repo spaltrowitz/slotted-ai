@@ -85,8 +85,8 @@ router.get("/availability", authWithRateLimit, async (req: AuthRequest, res: Res
 /** GET /availability/overlap/:friendId — find mutual free slots with AI scoring */
 router.get("/availability/overlap/:friendId", authWithRateLimit, async (req: AuthRequest, res: Response) => {
   const { friendId } = req.params;
-  const mode = (req.query.mode as string) || "in_person"; // "in_person" | "phone" | "video"
-  const isCallMode = mode === "phone" || mode === "video";
+  const mode = (req.query.mode as string) || "in_person"; // "in_person" | "call" | "phone" | "video"
+  const isCallMode = mode === "call" || mode === "phone" || mode === "video";
   try {
     const me = await getDbUser(req.uid!);
     if (!me) {
@@ -242,9 +242,18 @@ router.get("/availability/overlap/:friendId", authWithRateLimit, async (req: Aut
       }
     }
 
+    // Include friend-specific pattern from AI suggestions
+    let friendPattern = null;
+    try {
+      const { analyzeFriendPatterns } = await import("../utils/aiSuggestions");
+      const patterns = await analyzeFriendPatterns(me.id);
+      friendPattern = patterns.find(p => p.friendId === friendId) || null;
+    } catch { /* non-critical */ }
+
     res.json({
       overlaps,
       suggestions,
+      friendPattern,
       syncStatus: {
         me: { synced: mySync.synced, freeSlots: mySync.slots },
         friend: {

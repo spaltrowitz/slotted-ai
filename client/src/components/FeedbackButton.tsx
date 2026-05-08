@@ -135,7 +135,7 @@ export default function FeedbackButton() {
               <div className="flex flex-col items-center py-8">
                 <span className="text-3xl">✅</span>
                 <p className="mt-3 text-sm font-semibold text-emerald-600">Feedback sent! Thank you</p>
-                <p className="mt-1 text-xs text-gray-400">We'll look into it shortly.</p>
+                <p className="mt-1 text-xs text-gray-500">We'll look into it shortly.</p>
               </div>
             ) : (
               <>
@@ -146,7 +146,7 @@ export default function FeedbackButton() {
                   </h3>
                   <button
                     onClick={closeModal}
-                    className="rounded-lg p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="rounded-lg p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-500 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                     aria-label="Close feedback"
                   >
                     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -209,7 +209,7 @@ export default function FeedbackButton() {
                       {feedbackMutation.isPending ? 'Submitting…' : 'Submit Feedback'}
                     </button>
 
-                    <p className="text-xs text-gray-400 text-center">
+                    <p className="text-xs text-gray-500 text-center">
                       Creates a GitHub issue assigned to Copilot for automatic triage
                     </p>
                   </div>

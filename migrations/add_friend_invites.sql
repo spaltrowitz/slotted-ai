@@ -2,7 +2,7 @@
 -- Run this in the Supabase SQL Editor
 
 -- 1. Create the friend_invites table
-CREATE TABLE friend_invites (
+CREATE TABLE IF NOT EXISTS friend_invites (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   token TEXT UNIQUE NOT NULL,
   inviter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

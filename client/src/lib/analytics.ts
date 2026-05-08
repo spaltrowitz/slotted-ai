@@ -25,7 +25,7 @@ export async function trackEvent(eventName: string, params?: Record<string, stri
     const { logEvent } = await import('firebase/analytics');
     logEvent(analytics, eventName, params);
   } catch {
-    // silently fail — analytics should never break the app
+    if (import.meta.env.DEV) console.warn('Analytics event failed');
   }
 }
 

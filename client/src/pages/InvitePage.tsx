@@ -55,14 +55,14 @@ export default function InvitePage() {
 
   if (loading || authLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#faf9f7]">
+      <div className="flex h-screen items-center justify-center bg-page-light">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-slotted-400 border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#f8f7f4]">
+    <div className="relative min-h-screen overflow-hidden bg-page-warm">
       <div className="absolute -top-32 -right-32 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-amber-200/50 via-orange-200/30 to-transparent blur-3xl" />
       <div className="absolute top-1/2 -left-40 h-[500px] w-[500px] rounded-full bg-gradient-to-tr from-teal-200/40 via-cyan-100/30 to-transparent blur-3xl" />
 
@@ -111,7 +111,7 @@ export default function InvitePage() {
             >
               Sign up & connect with {getFirstName(inviter.displayName)}
             </button>
-            <p className="mt-3 text-xs text-gray-400">Free · Takes 30 seconds · Google sign-in</p>
+            <p className="mt-3 text-xs text-gray-500">Free · Takes 30 seconds · Google sign-in</p>
           </div>
         ) : connected ? (
           <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">

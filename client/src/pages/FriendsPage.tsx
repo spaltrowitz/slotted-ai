@@ -7,6 +7,7 @@ import { trackFriendInvited, trackInviteLinkCopied, trackFriendAdded } from '../
 import FriendAvailability from '../components/FriendAvailability';
 import GroupAvailability from '../components/GroupAvailability';
 import EventScheduleButton from '../components/EventScheduleButton';
+import RecurringMeetupList from '../components/RecurringMeetupList';
 import api from '../lib/api';
 import { getSmartDisplayName } from '../lib/utils';
 import {
@@ -36,7 +37,7 @@ export default function FriendsPage() {
   const [groupFriendIds, setGroupFriendIds] = useState<string[] | null>(null);
 
   const inviteUrl = `https://slotted-ai.web.app?ref=${user?.uid ?? ''}`;
-  const message = `Let's schedule time to hang :) This app syncs our calendars and finds the best time to meet up. ${inviteUrl}`;
+  const message = `Let's hang! This app finds times we're both free — no more back-and-forth 📅`;
 
   const { data: friends = [], isLoading: loading } = useQuery({
     queryKey: queryKeys.friends,
@@ -92,11 +93,16 @@ export default function FriendsPage() {
     setSelectedFriendId(friendId);
     setSelectedFriendName(friendName);
     setGroupFriendIds(null);
+    // Keep the friend's checkbox checked while viewing their availability
+    setSelectedIds(new Set([friendId]));
+    if (!selectMode) setSelectMode(true);
   };
 
   const handleCloseFindTimes = () => {
     setSelectedFriendId(null);
     setSelectedFriendName('');
+    setSelectedIds(new Set());
+    setSelectMode(false);
     startTransition(() => {
       setSearchParams({}, { replace: true });
     });
@@ -199,6 +205,7 @@ export default function FriendsPage() {
 
   const renderFriendRow = (f: FriendRecord, i: number, arr: FriendRecord[]) => {
     const isSelected = selectedIds.has(f.friend.id);
+    const isViewing = selectedFriendId === f.friend.id;
     const seen = lastSeenLabel(f);
     let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -223,7 +230,7 @@ export default function FriendsPage() {
         onKeyDown={(e) => { if (e.key === 'Enter') handleRowClick(f); }}
         className={`flex items-center gap-3 px-3 py-2.5 transition-colors cursor-pointer active:bg-gray-100 ${
           i !== arr.length - 1 ? 'border-b border-gray-100' : ''
-        } ${isSelected ? 'bg-slotted-50/60' : 'hover:bg-gray-50/50'}`}
+        } ${isSelected ? 'bg-slotted-50/60' : isViewing ? 'bg-slotted-50/40 border-l-2 border-l-slotted-400' : 'hover:bg-gray-50/50'}`}
       >
         <div className="flex shrink-0 items-center justify-center" style={{ minWidth: 44, minHeight: 44 }}>
           <input
@@ -291,7 +298,7 @@ export default function FriendsPage() {
       </div>
 
       {selectedFriendId && !groupFriendIds && (
-        <div className="mb-6">
+        <div className="mb-6 scroll-mt-4" ref={(el) => el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>
           <FriendAvailability
             key={selectedFriendId}
             friendId={selectedFriendId}
@@ -399,7 +406,7 @@ export default function FriendsPage() {
         </div>
       )}
 
-      {/* Friend list */}
+      {/* Friend grid */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-slotted-400 border-t-transparent" />
@@ -425,8 +432,58 @@ export default function FriendsPage() {
         </div>
       ) : acceptedFriends.length > 0 && (
         <div className="mb-4">
-          <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-            {acceptedFriends.map((f, i) => renderFriendRow(f, i, acceptedFriends))}
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {acceptedFriends.map((f) => {
+              const isSelected = selectedIds.has(f.friend.id);
+              const isViewing = selectedFriendId === f.friend.id;
+              const seen = lastSeenLabel(f);
+              return (
+                <button
+                  key={f.friendshipId}
+                  onClick={() => handleRowClick(f)}
+                  className={`relative flex flex-col items-center gap-1.5 rounded-xl border p-3 transition-all min-h-[44px] ${
+                    isSelected || isViewing
+                      ? 'border-slotted-300 bg-slotted-50/60 shadow-sm'
+                      : 'border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm'
+                  }`}
+                >
+                  {/* Selection indicator */}
+                  {(isSelected || isViewing) && (
+                    <div className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slotted-500 text-white">
+                      <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  )}
+
+                  {/* Avatar */}
+                  {f.friend.photoUrl ? (
+                    <img src={f.friend.photoUrl} alt="" className="h-11 w-11 rounded-full" loading="lazy" />
+                  ) : (
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white">
+                      {f.friend.displayName?.[0] ?? '?'}
+                    </div>
+                  )}
+
+                  {/* Name */}
+                  <p className="text-xs font-medium text-gray-900 truncate max-w-full">
+                    {getSmartDisplayName(f.friend.displayName, allFriendNames)}
+                  </p>
+
+                  {/* Last seen */}
+                  {seen && (
+                    <p className="text-[10px] text-gray-500 -mt-0.5">{seen}</p>
+                  )}
+
+                  {/* Long-distance badge */}
+                  {f.friendshipType && f.friendshipType !== 'local' && (
+                    <span className="text-[9px] text-gray-400">
+                      {f.friendshipType === 'long_distance' ? '✈️' : '📍'}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -445,6 +502,13 @@ export default function FriendsPage() {
             </span>
             Invite a friend
           </button>
+        </div>
+      )}
+
+      {/* Recurring hangouts */}
+      {acceptedFriends.length > 0 && (
+        <div className="mb-6">
+          <RecurringMeetupList friends={friends} />
         </div>
       )}
 

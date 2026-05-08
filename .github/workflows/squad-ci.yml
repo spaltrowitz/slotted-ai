@@ -11,7 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  client:
+    name: Client — typecheck, lint, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +20,35 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
 
-      - name: Run tests
-        run: node --test test/*.test.js
+      - name: Install dependencies
+        run: cd client && npm ci
+
+      - name: Type check
+        run: cd client && npx tsc --noEmit
+
+      - name: Lint
+        run: cd client && npm run lint
+
+      - name: Build
+        run: cd client && npm run build
+
+  functions:
+    name: Functions — build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install dependencies
+        run: cd functions && npm ci
+
+      - name: Build
+        run: cd functions && npm run build

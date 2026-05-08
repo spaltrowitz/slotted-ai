@@ -5,9 +5,10 @@ import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
 import CounterProposePanel from '../components/CounterProposePanel';
 import api from '../lib/api';
-import { getSmartDisplayName } from '../lib/utils';
+import { getSmartDisplayName, timeAgo } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchFriends, fetchMeetups, fetchNotifications, queryKeys, type Notification } from '../lib/queries';
+import { NOTIFICATION_TYPE_CONFIG, parseSharedEvent, NotificationBody } from '../components/NotificationHelpers';
 
 export default function NotificationsPage() {
   const { user } = useAuth();
@@ -195,8 +196,8 @@ export default function NotificationsPage() {
           // Can't fetch meetup details — skip calendar prompt
         }
       }
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.error('RSVP failed:', err instanceof Error ? err.message : err);
     } finally {
       setRsvpLoading(null);
     }
@@ -213,8 +214,8 @@ export default function NotificationsPage() {
         queryKeys.notifications,
         previousNotifications.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
       );
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.error('Friend request action failed:', err instanceof Error ? err.message : err);
     } finally {
       setFriendRequestLoading(null);
     }
@@ -231,50 +232,14 @@ export default function NotificationsPage() {
         queryKeys.notifications,
         previousNotifications.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
       );
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.error('Counter-propose action failed:', err instanceof Error ? err.message : err);
     } finally {
       setCounterProposeActionLoading(null);
     }
   };
 
-  const timeAgo = (dateStr: string) => {
-    // Ensure UTC interpretation if server omits timezone suffix
-    const normalized = dateStr.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(dateStr)
-      ? dateStr
-      : dateStr + 'Z';
-    const date = new Date(normalized);
-    const diff = Date.now() - date.getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  const typeConfig: Record<string, { emoji: string; bg: string; border: string }> = {
-    friend_accepted: { emoji: '', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-    friend_request: { emoji: '', bg: 'bg-violet-50', border: 'border-violet-100' },
-    meetup_request: { emoji: '', bg: 'bg-amber-50', border: 'border-amber-100' },
-    meetup_confirmed: { emoji: '✅', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-    meetup_reminder: { emoji: '⏳', bg: 'bg-blue-50', border: 'border-blue-100' },
-    calendar_match: { emoji: '', bg: 'bg-amber-50', border: 'border-amber-100' },
-    event_shared: { emoji: '', bg: 'bg-purple-50', border: 'border-purple-100' },
-    meetup_rsvp_changed: { emoji: '', bg: 'bg-sky-50', border: 'border-sky-100' },
-    meetup_time_changed: { emoji: '', bg: 'bg-indigo-50', border: 'border-indigo-100' },
-    meetup_counter_propose: { emoji: '', bg: 'bg-violet-50', border: 'border-violet-100' },
-  };
-
-  /** Parse a shared event from the notification body if it starts with [EVENT_SHARE] */
-  const parseSharedEvent = (body: string) => {
-    if (!body.startsWith('[EVENT_SHARE]')) return null;
-    try {
-      return JSON.parse(body.replace('[EVENT_SHARE]', ''));
-    } catch { return null; }
-  };
+  const typeConfig = NOTIFICATION_TYPE_CONFIG;
 
   const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'requests' | 'reminders'>('all');
 
@@ -379,7 +344,7 @@ export default function NotificationsPage() {
             <h3 className="mt-3 font-display text-lg font-bold text-gray-900">
               {activeTab === 'all' ? 'No notifications yet' : activeTab === 'unread' ? 'All caught up!' : `No ${activeTab}`}
             </h3>
-            <p className="mt-2 max-w-sm text-center text-sm text-gray-400 leading-relaxed">
+            <p className="mt-2 max-w-sm text-center text-sm text-gray-500 leading-relaxed">
               {activeTab === 'all'
                 ? 'Notifications will appear here when a friend accepts your invite, suggests a meetup, or when Slotted.ai finds a great time to hang out.'
                 : activeTab === 'unread'
@@ -458,10 +423,10 @@ export default function NotificationsPage() {
                         );
                       })()}
                     </div>
-                    <span className="shrink-0 text-[10px] text-gray-400">{timeAgo(notification.created_at)}</span>
+                    <span className="shrink-0 text-[10px] text-gray-500">{timeAgo(notification.created_at)}</span>
                     <button
                       onClick={(e) => { e.stopPropagation(); dismissNotification(notification.id); }}
-                      className="shrink-0 rounded-full p-1 text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-all ml-1"
+                      className="shrink-0 rounded-full p-1 text-gray-300 hover:text-gray-400 hover:bg-gray-100 transition-all ml-1"
                       title="Dismiss"
                     >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -703,52 +668,3 @@ export default function NotificationsPage() {
   );
 }
 
-/** Renders notification body text with clickable links for known routes */
-function NotificationBody({ text }: { text: string }) {
-  const linkMap: [RegExp, string][] = [
-    [/Friends tab/gi, '/friends'],
-    [/Settings/gi, '/settings'],
-    [/Events tab/gi, '/events'],
-    [/Dashboard/gi, '/'],
-  ];
-
-  const parts: (string | React.ReactElement)[] = [];
-  let remaining = text;
-  let key = 0;
-
-  while (remaining.length > 0) {
-    let earliest: { index: number; length: number; to: string; match: string } | null = null;
-
-    for (const [regex, to] of linkMap) {
-      regex.lastIndex = 0;
-      const m = regex.exec(remaining);
-      if (m && (!earliest || m.index < earliest.index)) {
-        earliest = { index: m.index, length: m[0].length, to, match: m[0] };
-      }
-    }
-
-    if (!earliest) {
-      parts.push(remaining);
-      break;
-    }
-
-    if (earliest.index > 0) {
-      parts.push(remaining.slice(0, earliest.index));
-    }
-
-    parts.push(
-      <Link
-        key={key++}
-        to={earliest.to}
-        className="font-semibold text-slotted-600 underline underline-offset-2 hover:text-slotted-700"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {earliest.match}
-      </Link>
-    );
-
-    remaining = remaining.slice(earliest.index + earliest.length);
-  }
-
-  return <>{parts}</>;
-}

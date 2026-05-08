@@ -16,6 +16,7 @@ import {
   getAcceptedFriendIdSet,
   isBlocked,
   fetchAppleCalendars,
+  SLOTTED_CALENDAR_GUEST,
 } from "../utils/helpers";
 import { getSupabase } from "../supabase";
 import { google } from "googleapis";
@@ -774,7 +775,8 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
     }));
 
     const eventTitle = meetup.title || "Hangout";
-    const eventDescription = meetup.description || `Scheduled via Slotted with ${attendees.map((a: any) => a.displayName).join(", ")}`;
+    const eventDescription = (meetup.description || `Scheduled via Slotted with ${attendees.map((a: any) => a.displayName).join(", ")}`)
+      + "\n\nManaged by Slotted.ai — https://slotted-ai.web.app";
 
     // ─── Google Calendar ───
     if (source === "google") {
@@ -807,7 +809,10 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
             dateTime: meetup.end_time,
             timeZone: me.timezone || "America/New_York",
           },
-          attendees: attendees.filter((a: any) => a.email !== me.email),
+          attendees: [
+            ...attendees.filter((a: any) => a.email !== me.email),
+            { email: SLOTTED_CALENDAR_GUEST.email, displayName: SLOTTED_CALENDAR_GUEST.displayName, responseStatus: "accepted" },
+          ],
           reminders: {
             useDefault: false,
             overrides: [
@@ -865,6 +870,8 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
         `SUMMARY:${eventTitle}`,
         `DESCRIPTION:${eventDescription}`,
         meetup.location ? `LOCATION:${meetup.location}` : "",
+        ...attendees.map((a: any) => `ATTENDEE;CN=${a.displayName}:mailto:${a.email}`),
+        `ATTENDEE;CN=Slotted.ai;RSVP=FALSE:mailto:${SLOTTED_CALENDAR_GUEST.email}`,
         "BEGIN:VALARM",
         "TRIGGER:-PT60M",
         "ACTION:DISPLAY",
@@ -929,6 +936,7 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
       `DESCRIPTION:${eventDescription}`,
       meetup.location ? `LOCATION:${meetup.location}` : "",
       ...attendees.map((a: any) => `ATTENDEE;CN=${a.displayName}:mailto:${a.email}`),
+      `ATTENDEE;CN=Slotted.ai;RSVP=FALSE:mailto:${SLOTTED_CALENDAR_GUEST.email}`,
       "BEGIN:VALARM",
       "TRIGGER:-PT60M",
       "ACTION:DISPLAY",
@@ -1151,6 +1159,7 @@ router.get("/meetups/shared/:code/ics", async (req: Request, res: Response) => {
       `SUMMARY:${(meetup.title || "Hangout").replace(/[,;\\]/g, " ")}`,
       `DESCRIPTION:${description}`,
       ...(meetup.location ? [`LOCATION:${meetup.location.replace(/[,;\\]/g, " ")}`] : []),
+      `ATTENDEE;CN=Slotted.ai;RSVP=FALSE:mailto:${SLOTTED_CALENDAR_GUEST.email}`,
       "BEGIN:VALARM",
       "TRIGGER:-PT60M",
       "ACTION:DISPLAY",
@@ -1170,6 +1179,96 @@ router.get("/meetups/shared/:code/ics", async (req: Request, res: Response) => {
     res.send(ics);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /meetups/:meetupId/accept-counter-propose — accept a counter-proposed time */
+router.post("/meetups/:meetupId/accept-counter-propose", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const { meetupId } = req.params;
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const { data: meetup, error: meetupErr } = await getSupabase()
+      .from("meetups")
+      .select("*")
+      .eq("id", meetupId)
+      .maybeSingle();
+
+    if (meetupErr || !meetup) {
+      res.status(404).json({ error: "Meetup not found" });
+      return;
+    }
+
+    if (meetup.created_by !== dbUser.id) {
+      res.status(403).json({ error: "Only the meetup creator can accept counter-proposals" });
+      return;
+    }
+
+    const { data: counterNotif } = await getSupabase()
+      .from("notifications")
+      .select("*")
+      .eq("related_id", meetupId)
+      .eq("user_id", dbUser.id)
+      .eq("type", "meetup_counter_propose")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!counterNotif) {
+      res.status(404).json({ error: "No counter-proposal found for this meetup" });
+      return;
+    }
+
+    const { newStartTime, newEndTime } = req.body;
+    if (!newStartTime || !newEndTime) {
+      res.status(400).json({ error: "newStartTime and newEndTime are required" });
+      return;
+    }
+
+    const { error: updateErr } = await getSupabase()
+      .from("meetups")
+      .update({
+        start_time: newStartTime,
+        end_time: newEndTime,
+        status: "confirmed",
+      })
+      .eq("id", meetupId);
+
+    if (updateErr) {
+      res.status(500).json({ error: updateErr.message });
+      return;
+    }
+
+    await getSupabase()
+      .from("meetup_participants")
+      .update({ rsvp: "accepted" })
+      .eq("meetup_id", meetupId);
+
+    const { data: participants } = await getSupabase()
+      .from("meetup_participants")
+      .select("user_id")
+      .eq("meetup_id", meetupId)
+      .neq("user_id", dbUser.id);
+
+    for (const p of (participants || [])) {
+      await createNotification({
+        userId: p.user_id,
+        type: "meetup_confirmed",
+        title: `${dbUser.display_name} accepted your suggested time!`,
+        body: `Your meetup "${meetup.title}" has been confirmed with the new time.`,
+        relatedUserId: dbUser.id,
+        relatedId: meetupId,
+      });
+    }
+
+    res.json({ success: true, meetup: { ...meetup, start_time: newStartTime, end_time: newEndTime, status: "confirmed" } });
+  } catch (err: any) {
+    console.error("Accept counter-propose error:", err);
+    res.status(500).json({ error: "Failed to accept counter-proposal" });
   }
 });
 

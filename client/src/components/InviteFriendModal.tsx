@@ -110,7 +110,7 @@ export default function InviteFriendModal({ event, eventScheduleId, onClose }: I
           <h2 className="text-base font-semibold text-gray-900">🔗 Invite a friend</h2>
           <button
             onClick={onClose}
-            className="text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-sm font-medium text-gray-500 hover:text-gray-600 transition-colors"
             aria-label="Close"
           >
             ✕
@@ -206,6 +206,10 @@ export default function InviteFriendModal({ event, eventScheduleId, onClose }: I
                   </button>
                 </div>
               </div>
+
+              <p className="mt-3 text-xs text-gray-500 text-center">
+                📱 SMS invites for friends without Slotted — coming soon
+              </p>
 
               <button
                 onClick={onClose}

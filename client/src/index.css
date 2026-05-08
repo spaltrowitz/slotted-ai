@@ -36,6 +36,10 @@
 
   /* Accent teal — for positive actions */
   --color-accent: #06b6d4;
+
+  /* Page backgrounds */
+  --color-page-warm: #f8f7f4;
+  --color-page-light: #faf9f7;
 }
 
 /* Mobile: remove tap highlight and 300ms tap delay */

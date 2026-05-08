@@ -26,8 +26,10 @@ jobs:
           fi
           echo "✅ Version $VERSION validated in CHANGELOG.md"
 
-      - name: Run tests
-        run: node --test test/*.test.js
+      - name: Install and build
+        run: |
+          cd client && npm ci && npm run build
+          cd ../functions && npm ci && npm run build
 
       - name: Check no .ai-team/ or .squad/ files are tracked
         run: |

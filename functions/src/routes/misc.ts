@@ -10,6 +10,7 @@ import {
 } from "../utils/helpers";
 import { getSupabase } from "../supabase";
 import * as admin from "firebase-admin";
+import { generateSmartSuggestions, analyzeFriendPatterns, updateUserPreferences } from "../utils/aiSuggestions";
 
 const router = express.Router();
 
@@ -87,6 +88,30 @@ router.post("/suggestions/:suggestionId/act", authWithRateLimit, async (req: Aut
     }
     res.json(data);
   } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Smart AI-powered suggestions based on meetup history
+// ---------------------------------------------------------------------------
+router.get("/suggestions/smart", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) { res.status(404).json({ error: "User not found" }); return; }
+
+    const [suggestions, patterns] = await Promise.all([
+      generateSmartSuggestions(dbUser.id),
+      analyzeFriendPatterns(dbUser.id),
+    ]);
+
+    res.json({
+      suggestions,
+      patterns: patterns.slice(0, 10),
+      hasEnoughData: patterns.some(p => p.totalHangouts >= 3),
+    });
+  } catch (err: any) {
+    console.error("Smart suggestions error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -636,7 +661,7 @@ router.post("/meetup-logs", authWithRateLimit, async (req: AuthRequest, res: Res
     if (error) throw error;
 
     // Recompute learned preferences after each log
-    await recomputePreferences(dbUser.id);
+    await updateUserPreferences(dbUser.id);
 
     console.log("📝 Meetup logged:", data.id);
     res.status(201).json(data);
@@ -696,58 +721,5 @@ router.get("/preferences/learned", authWithRateLimit, async (req: AuthRequest, r
     res.status(500).json({ error: "Failed to fetch preferences" });
   }
 });
-
-/** Recompute learned preferences from meetup_logs */
-async function recomputePreferences(userId: string) {
-  const supabase = getSupabase();
-
-  const { data: logs } = await supabase
-    .from("meetup_logs")
-    .select("*")
-    .eq("user_id", userId);
-
-  if (!logs || logs.length === 0) return;
-
-  // Count activity types
-  const activityCounts: Record<string, number> = {};
-  let totalDuration = 0;
-  let durationCount = 0;
-  const timeCounts: Record<string, number> = {};
-  const dayCounts: Record<number, number> = {};
-  let spontaneousCount = 0;
-
-  for (const log of logs) {
-    activityCounts[log.activity_type] = (activityCounts[log.activity_type] || 0) + 1;
-    if (log.duration_min) {
-      totalDuration += log.duration_min;
-      durationCount++;
-    }
-    timeCounts[log.time_of_day] = (timeCounts[log.time_of_day] || 0) + 1;
-    dayCounts[log.day_of_week] = (dayCounts[log.day_of_week] || 0) + 1;
-    if (log.was_spontaneous) spontaneousCount++;
-  }
-
-  const topActivity = Object.entries(activityCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
-  const avgDuration = durationCount > 0 ? Math.round(totalDuration / durationCount) : null;
-  const topTime = Object.entries(timeCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
-  const topDay = Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
-  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-  const spontaneousRatio = spontaneousCount / logs.length;
-  const planningStyle = spontaneousRatio > 0.6 ? "spontaneous" : spontaneousRatio < 0.3 ? "planner" : "mixed";
-
-  await supabase
-    .from("user_preferences")
-    .upsert({
-      user_id: userId,
-      preferred_activity: topActivity || null,
-      avg_duration_min: avgDuration,
-      preferred_time: topTime || null,
-      preferred_day: topDay !== undefined ? dayNames[Number(topDay)] : null,
-      planning_style: planningStyle,
-      total_meetups_logged: logs.length,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id" });
-}
 
 export default router;
