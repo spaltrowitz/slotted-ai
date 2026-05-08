@@ -45,9 +45,6 @@ export default function EventSearchModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<ScheduleResponse | null>(null);
-  const [showLinkInput, setShowLinkInput] = useState(false);
-  const [linkUrl, setLinkUrl] = useState('');
-  const [linkLoading, setLinkLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   useBodyScrollLock(true);
 
@@ -95,13 +92,9 @@ export default function EventSearchModal({
     }
   };
 
-  const handleLinkSubmit = async () => {
-    if (!linkUrl.trim()) return;
-    setLinkLoading(true);
     setError(null);
     try {
       const { data } = await api.post<ScheduleResponse>('/events/from-url', {
-        url: linkUrl.trim(),
         friendIds: Array.from(selectedFriendIds),
       });
       setResults(data);
@@ -110,7 +103,6 @@ export default function EventSearchModal({
         err instanceof Error ? err.message : 'Could not extract event from that link';
       setError(message);
     } finally {
-      setLinkLoading(false);
     }
   };
 
