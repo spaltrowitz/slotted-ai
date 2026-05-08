@@ -45,6 +45,13 @@ export default function ActivityPicker({ date, startTime, endTime, onSelectEvent
     staleTime: 1000 * 60 * 5,
   });
 
+  // Build restaurant deep links with date/time/party size
+  const partySize = 2; // default for a hangout
+  const resyDate = new Date(date).toISOString().split('T')[0];
+  const openTableDateTime = `${resyDate}T${startTime}`;
+  const resyUrl = `https://resy.com/cities/ny?date=${resyDate}&seats=${partySize}`;
+  const openTableUrl = `https://www.opentable.com/s?covers=${partySize}&dateTime=${openTableDateTime}`;
+
   if (mode === 'choose') {
     return (
       <div className="mt-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm animate-in fade-in slide-in-from-bottom-2">
@@ -65,6 +72,12 @@ export default function ActivityPicker({ date, startTime, endTime, onSelectEvent
             <p className="text-xs font-medium text-gray-700 mt-1">Find an event</p>
           </button>
         </div>
+        <p className="text-[11px] text-gray-400 text-center mt-3">
+          Need a dinner spot? Book on{' '}
+          <a href={resyUrl} target="_blank" rel="noopener noreferrer" className="text-slotted-600 underline">Resy</a>
+          {' '}or{' '}
+          <a href={openTableUrl} target="_blank" rel="noopener noreferrer" className="text-slotted-600 underline">OpenTable</a>
+        </p>
       </div>
     );
   }
