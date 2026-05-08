@@ -228,7 +228,7 @@ export default function EventSearchModal({
                 We'll find showtimes and check everyone's calendars ✨
               </p>
               <p className="text-[11px] text-gray-400">
-                Friends not on Slotted? You can invite them after picking an event
+                Friends not on Slotted yet 😉? You can invite them after picking an event
               </p>
             </div>
           )}
