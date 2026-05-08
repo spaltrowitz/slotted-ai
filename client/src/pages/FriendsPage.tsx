@@ -6,8 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { trackFriendInvited, trackInviteLinkCopied, trackFriendAdded } from '../lib/analytics';
 import FriendAvailability from '../components/FriendAvailability';
 import GroupAvailability from '../components/GroupAvailability';
-import EventScheduleButton from '../components/EventScheduleButton';
-import RecurringMeetupList from '../components/RecurringMeetupList';
 import api from '../lib/api';
 import { getSmartDisplayName } from '../lib/utils';
 import {
@@ -422,37 +420,36 @@ export default function FriendsPage() {
         </div>
       )}
 
-      {/* Recurring hangouts */}
-      {acceptedFriends.length > 0 && (
+      {/* Recurring hangouts — hidden for now, V2 feature */}
+      {/* {acceptedFriends.length > 0 && (
         <div className="mb-6">
           <RecurringMeetupList friends={friends} />
         </div>
-      )}
+      )} */}
 
       {/* Multi-select bottom bar */}
       {selectMode && selectedIds.size >= 1 && (
-        <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center gap-2 px-4 pb-[env(safe-area-inset-bottom)]">
-          {selectedIds.size >= 2 && (
-            <button
-              onClick={() => {
+        <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center px-4 pb-[env(safe-area-inset-bottom)]">
+          <button
+            onClick={() => {
+              if (selectedIds.size >= 2) {
                 setGroupFriendIds(Array.from(selectedIds));
                 setSelectedFriendId(null);
                 setSelectedFriendName('');
                 startTransition(() => {
                   setSearchParams({}, { replace: true });
                 });
-                exitSelectMode();
-              }}
-              className="rounded-xl gradient-btn px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl"
-            >
-              📅 Find a time for {selectedIds.size} friends →
-            </button>
-          )}
-          <EventScheduleButton
-            friends={friends}
-            preselectedFriendIds={Array.from(selectedIds)}
-            variant="compact"
-          />
+              } else {
+                const friendId = Array.from(selectedIds)[0];
+                const friend = acceptedFriends.find(f => f.friend.id === friendId);
+                if (friend) handleFindTimes(friend.friend.id, friend.friend.displayName);
+              }
+              exitSelectMode();
+            }}
+            className="rounded-xl gradient-btn px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl"
+          >
+            Let's hang out{selectedIds.size > 1 ? ` (${selectedIds.size} friends)` : ''} →
+          </button>
         </div>
       )}
 
