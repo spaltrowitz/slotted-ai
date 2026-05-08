@@ -9,6 +9,7 @@ import SmartSuggestions from '../components/SmartSuggestions';
 import FriendAvailability from '../components/FriendAvailability';
 import GroupAvailability from '../components/GroupAvailability';
 import { useAuth } from '../contexts/AuthContext';
+import { trackFriendAdded, trackInviteLinkCopied } from '../lib/analytics';
 import api from '../lib/api';
 import { getFirstName, getSmartDisplayName, formatMeetupTime } from '../lib/utils';
 import { getUserStage, type UserStage } from '../lib/userStage';
