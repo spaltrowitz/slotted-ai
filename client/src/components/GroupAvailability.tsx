@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import { trackMeetupScheduled } from '../lib/analytics';
 import { getSmartDisplayName } from '../lib/utils';
@@ -14,8 +15,10 @@ interface ScoredSlot {
 }
 
 interface ParticipantSync {
-  userId: string;
-  displayName: string;
+  id?: string;
+  userId?: string;
+  name?: string;
+  displayName?: string;
   synced: boolean;
   calendarConnected: boolean;
 }
@@ -54,7 +57,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
       });
       setSuggestions(data.suggestions || []);
       setOverlaps(data.overlaps || []);
-      setParticipants(data.participants || []);
+      setParticipants(data.syncStatus?.participants || data.participants || []);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
       setError(axiosErr.response?.data?.error || axiosErr.message || 'Failed to find group availability');
@@ -146,7 +149,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
         <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap gap-2">
           {participants.map(p => (
             <span
-              key={p.userId}
+              key={p.userId || p.id}
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border ${
                 p.synced
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
@@ -158,7 +161,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
               <span className={`h-1.5 w-1.5 rounded-full ${
                 p.synced ? 'bg-emerald-500' : p.calendarConnected ? 'bg-amber-400' : 'bg-gray-300'
               }`} />
-              {getSmartDisplayName(p.displayName, allFriendNames.length > 0 ? allFriendNames : friendNames)}
+              {getSmartDisplayName(p.displayName || p.name || "Friend", allFriendNames.length > 0 ? allFriendNames : friendNames)}
               {p.synced ? '' : p.calendarConnected ? ' (syncing…)' : ' (no cal)'}
             </span>
           ))}
@@ -230,7 +233,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
             {(() => {
               const unsynced = participants.filter(p => !p.calendarConnected);
               if (unsynced.length > 0) {
-                const names = unsynced.map(p => p.displayName.split(' ')[0]).join(' & ');
+                const names = unsynced.map(p => ((p.displayName || p.name || "Friend" || p.name || "Friend")).split(' ')[0]).join(' & ');
                 return (
                   <>
                     <span className="text-3xl">📅</span>
@@ -244,7 +247,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                       onClick={async () => {
                         try {
                           for (const p of unsynced) {
-                            await api.post('/notifications/nudge-calendar', { friendId: p.userId });
+                            await api.post('/notifications/nudge-calendar', { friendId: p.userId || p.id });
                           }
                           alert(`Sent ${names} a reminder to connect!`);
                         } catch { /* silent */ }
@@ -253,6 +256,9 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                     >
                       Send {unsynced.length === 1 ? 'a' : ''} reminder{unsynced.length > 1 ? 's' : ''}
                     </button>
+                    <p className="mt-3 text-[11px] text-gray-400">
+                      Or <Link to="/" className="text-slotted-600 underline">find an event</Link> to go to together — no calendar needed
+                    </p>
                   </>
                 );
               }
