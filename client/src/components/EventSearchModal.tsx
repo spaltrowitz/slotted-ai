@@ -92,20 +92,6 @@ export default function EventSearchModal({
     }
   };
 
-    setError(null);
-    try {
-      const { data } = await api.post<ScheduleResponse>('/events/from-url', {
-        friendIds: Array.from(selectedFriendIds),
-      });
-      setResults(data);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Could not extract event from that link';
-      setError(message);
-    } finally {
-    }
-  };
-
   if (results) {
     return (
       <div
