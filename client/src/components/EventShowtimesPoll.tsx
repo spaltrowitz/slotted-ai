@@ -55,8 +55,11 @@ export default function EventShowtimesPoll({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const selectedIndexList = Array.from(selectedIndices).sort((a, b) => a - b);
-      const eventUrl = selectedIndexList.map((index) => showtimes[index]?.ticketUrl).find(Boolean);
+      const selectedIndexList = Array.from(selectedIndices)
+        .filter((index) => index >= 0 && index < showtimes.length)
+        .sort((a, b) => a - b);
+      if (selectedIndexList.length === 0) return;
+      const eventUrl = selectedIndexList.map((index) => showtimes[index].ticketUrl).find(Boolean);
       const { data } = await api.post<{ scheduleId: string }>('/events/poll', {
         eventTitle: event.title,
         eventVenue: event.venue,

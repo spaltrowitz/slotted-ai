@@ -29,7 +29,7 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
     }
 
     const controller = new AbortController();
-    const timeout = window.setTimeout(async () => {
+    const fetchSuggestions = async () => {
       setLoading(true);
       try {
         const { data } = await api.get<AutocompleteEvent[]>('/events/autocomplete', {
@@ -48,6 +48,9 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
           setLoading(false);
         }
       }
+    };
+    const timeout = window.setTimeout(() => {
+      void fetchSuggestions();
     }, 250);
 
     return () => {
