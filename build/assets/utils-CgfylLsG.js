@@ -1,1 +1,0 @@
-function u(t){return t?t.split(" ")[0]:""}function a(t,n){if(!t)return"";const s=t.trim().split(/\s+/),e=s[0];if(n.some(r=>!r||r===t?!1:r.trim().split(/\s+/)[0]===e)&&s.length>1){const r=s[s.length-1][0];return`${e} ${r.toUpperCase()}.`}return e}export{u as a,a as g};

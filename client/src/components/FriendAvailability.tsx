@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
 import { trackMeetupScheduled } from '../lib/analytics';
@@ -421,7 +421,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
           <p className="text-[11px] text-gray-500">Based on the next 2 weeks of both calendars</p>
         )}
         <button
-          onClick={fetchOverlaps}
+          onClick={() => fetchOverlaps()}
           disabled={loading}
           className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
         >

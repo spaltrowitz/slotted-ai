@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
 import type { FriendRecord } from '../lib/queries';
-import { queryKeys } from '../lib/queries';
 
 interface CoupleLink {
   id: string;

@@ -36,7 +36,6 @@ export default function FriendsPage() {
   // Group availability state
   const [groupFriendIds, setGroupFriendIds] = useState<string[] | null>(null);
 
-  const inviteUrl = `https://slotted-ai.web.app?ref=${user?.uid ?? ''}`;
   const message = `Let's hang! This app finds times we're both free — no more back-and-forth 📅`;
 
   const { data: friends = [], isLoading: loading } = useQuery({
@@ -160,13 +159,6 @@ export default function FriendsPage() {
     }
   };
 
-  const handleLongPress = (f: FriendRecord) => {
-    if (!selectMode) {
-      setSelectMode(true);
-      setSelectedIds(new Set([f.friend.id]));
-    }
-  };
-
   const exitSelectMode = () => {
     setSelectMode(false);
     setSelectedIds(new Set());
@@ -201,81 +193,6 @@ export default function FriendsPage() {
     if (weeks < 5) return `${weeks}w ago`;
     const months = Math.floor(days / 30);
     return `${months}mo ago`;
-  };
-
-  const renderFriendRow = (f: FriendRecord, i: number, arr: FriendRecord[]) => {
-    const isSelected = selectedIds.has(f.friend.id);
-    const isViewing = selectedFriendId === f.friend.id;
-    const seen = lastSeenLabel(f);
-    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const handleCheckboxClick = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      toggleSelect(f.friend.id);
-      if (!selectedIds.has(f.friend.id)) {
-        setSelectMode(true);
-      }
-    };
-
-    return (
-      <div
-        key={f.friendshipId}
-        role="button"
-        tabIndex={0}
-        onClick={() => handleRowClick(f)}
-        onContextMenu={(e) => { e.preventDefault(); handleLongPress(f); }}
-        onTouchStart={() => { longPressTimer = setTimeout(() => handleLongPress(f), 500); }}
-        onTouchEnd={() => { if (longPressTimer) clearTimeout(longPressTimer); }}
-        onTouchMove={() => { if (longPressTimer) clearTimeout(longPressTimer); }}
-        onKeyDown={(e) => { if (e.key === 'Enter') handleRowClick(f); }}
-        className={`flex items-center gap-3 px-3 py-2.5 transition-colors cursor-pointer active:bg-gray-100 ${
-          i !== arr.length - 1 ? 'border-b border-gray-100' : ''
-        } ${isSelected ? 'bg-slotted-50/60' : isViewing ? 'bg-slotted-50/40 border-l-2 border-l-slotted-400' : 'hover:bg-gray-50/50'}`}
-      >
-        <div className="flex shrink-0 items-center justify-center" style={{ minWidth: 44, minHeight: 44 }}>
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={() => {}}
-            onClick={handleCheckboxClick}
-            className="h-4 w-4 rounded border-gray-300 text-slotted-500 focus:ring-slotted-400 cursor-pointer"
-          />
-        </div>
-
-        <div className="relative shrink-0">
-          {f.friend.photoUrl ? (
-            <img src={f.friend.photoUrl} alt="" className="h-9 w-9 rounded-full" loading="lazy" />
-          ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xs font-semibold text-white">
-              {f.friend.displayName?.[0] ?? '?'}
-            </div>
-          )}
-          {selectMode && isSelected && (
-            <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-slotted-500 text-white">
-              <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-          )}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-gray-900 truncate">
-            {getSmartDisplayName(f.friend.displayName, allFriendNames)}
-            {seen && <span className="ml-1.5 text-xs font-normal text-gray-500"> · {seen}</span>}
-          </p>
-          {f.friendshipType && f.friendshipType !== 'local' && (
-            <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] text-gray-500">
-              {f.friendshipType === 'long_distance' ? '✈️ Long distance' : '📍 Both'}
-            </span>
-          )}
-        </div>
-
-        <svg className="h-4 w-4 shrink-0 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-      </div>
-    );
   };
 
   return (
