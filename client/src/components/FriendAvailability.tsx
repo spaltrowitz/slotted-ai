@@ -304,9 +304,9 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                 return (
                   <>
                     <span className="text-3xl">👋</span>
-                    <h4 className="mt-3 text-sm font-semibold text-gray-800">{displayName} hasn't connected their calendar yet</h4>
+                    <h4 className="mt-3 text-sm font-semibold text-gray-800">{displayName} hasn't synced their calendar</h4>
                     <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-                      We can send them a friendly reminder to sync up. You can still plan something — just pick a time that works for you and we'll ask if they're free!
+                      Send a reminder, or just pick a time and we'll check if they're free.
                     </p>
                     <div className="mt-4 flex gap-2">
                       <button

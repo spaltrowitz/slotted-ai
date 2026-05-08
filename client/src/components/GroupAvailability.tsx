@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import { trackMeetupScheduled } from '../lib/analytics';
 import { getSmartDisplayName } from '../lib/utils';
@@ -241,7 +240,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                       {names} {unsynced.length === 1 ? 'hasn\'t' : 'haven\'t'} connected {unsynced.length === 1 ? 'a' : 'their'} calendar yet
                     </h4>
                     <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-                      That doesn't mean they're not free! Send them a reminder to sync, or just pick a time and ask if it works.
+                      Send a reminder to sync, or just pick a time and ask if it works.
                     </p>
                     <button
                       onClick={async () => {
@@ -256,9 +255,6 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                     >
                       Send {unsynced.length === 1 ? 'a' : ''} reminder{unsynced.length > 1 ? 's' : ''}
                     </button>
-                    <p className="mt-3 text-[11px] text-gray-400">
-                      Or <Link to="/" className="text-slotted-600 underline">find an event</Link> to go to together — no calendar needed
-                    </p>
                   </>
                 );
               }
