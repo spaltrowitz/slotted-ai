@@ -11,7 +11,6 @@ import GroupAvailability from '../components/GroupAvailability';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 import { getFirstName, getSmartDisplayName, formatMeetupTime } from '../lib/utils';
-import { trackFriendInvited, trackFriendAdded } from '../lib/analytics';
 import { getUserStage, type UserStage } from '../lib/userStage';
 import {
   fetchDashboard,
@@ -218,7 +217,6 @@ export default function DashboardPage() {
 
   const userUid = user?.uid;
   const inviteUrl = `https://slotted-ai.web.app?ref=${userUid ?? ''}`;
-  const message = `Let's hang! This app finds times we're both free — no more back-and-forth 📅`;
 
   /* ─── data fetching ─── */
   const { isLoading: dashboardLoading } = useQuery({

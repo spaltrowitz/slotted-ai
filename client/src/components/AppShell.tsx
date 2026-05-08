@@ -81,16 +81,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Top navigation bar */}
       <header className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/80 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-          {/* Left — logo + desktop nav */}
+          {/* Left — logo */}
           <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-btn">
+            <div className="flex items-center gap-2">
+              <a href="/" target="_blank" rel="noopener noreferrer" className="flex h-8 w-8 items-center justify-center rounded-lg gradient-btn hover:opacity-80 transition-opacity">
                 <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-              </div>
-              <span className="font-display text-lg font-bold text-gray-900">Slotted.ai</span>
-            </Link>
+              </a>
+              <Link to="/dashboard" className="font-display text-lg font-bold text-gray-900">Slotted.ai</Link>
+            </div>
 
           </div>
           
