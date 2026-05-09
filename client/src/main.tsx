@@ -23,7 +23,13 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 // Register Workbox service worker (auto-updates on new deploys)
-registerSW({ immediate: true });
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    // Auto-reload when new version is available
+    updateSW(true);
+  },
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
