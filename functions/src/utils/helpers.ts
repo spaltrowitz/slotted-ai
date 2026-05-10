@@ -184,6 +184,7 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
   location?: string;
   start_time: string;
   end_time: string;
+  status?: string;
 }) {
   try {
     const dbUser = await getDbUser(firebaseUid);
@@ -200,6 +201,15 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
       .single();
 
     const existingEventId = existingPart?.google_event_id || null;
+    const { data: meetupStatusRow } = meetup.status ? { data: null } : await sb
+      .from("meetups")
+      .select("status")
+      .eq("id", meetup.id)
+      .maybeSingle();
+    const meetupStatus = meetup.status || meetupStatusRow?.status;
+    const shouldSendInvites = !!existingEventId || meetupStatus === "confirmed";
+    const appleEventId = `slotted-${meetup.id}-${dbUser.id}@slotted-ai.web.app`;
+    const shouldWriteAppleEvent = !existingEventId || existingEventId === appleEventId;
 
     // Get participant info for the event description
     const { data: parts } = await sb
@@ -272,7 +282,8 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
           }
           const gcalEvent = await calendarApi.events.insert({
             calendarId: "primary",
-            requestBody: googleEventBody,
+            sendUpdates: shouldSendInvites ? "all" : undefined,
+            requestBody: shouldSendInvites ? googleInviteBody : googleEventBody,
           });
           addedEventId = gcalEvent.data.id || null;
           console.log(`📅 Auto-added meetup ${meetup.id} to ${dbUser.email}'s Google Calendar`);
@@ -285,13 +296,13 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
     // ─── Try Apple Calendar if Google didn't work ───
     if (
       !addedEventId &&
-      (!existingEventId || existingEventId === `slotted-${meetup.id}-${dbUser.id}@slotted-ai.web.app`) &&
+      shouldWriteAppleEvent &&
       dbUser.apple_calendar_connected &&
       dbUser.apple_caldav_username &&
       dbUser.apple_caldav_password
     ) {
       try {
-        const uid = `slotted-${meetup.id}-${dbUser.id}@slotted-ai.web.app`;
+        const uid = appleEventId;
         const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
         const dtStart = new Date(meetup.start_time).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
         const dtEnd = new Date(meetup.end_time).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
@@ -385,7 +396,7 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
               console.warn(`Outlook event ${existingEventId} missing for ${dbUser.email}; recreating`);
             }
           }
-          const outlookEvent = await graphClient.api("/me/events").post({
+          const outlookCreateBody = {
             subject: eventTitle,
             body: { contentType: "text", content: eventDescription },
             start: {
@@ -399,7 +410,9 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
             location: meetup.location ? { displayName: meetup.location } : undefined,
             reminderMinutesBeforeStart: 15,
             isReminderOn: true,
-          });
+            attendees: shouldSendInvites ? outlookEventBody.attendees : undefined,
+          };
+          const outlookEvent = await graphClient.api("/me/events").post(outlookCreateBody);
           addedEventId = outlookEvent.id;
           console.log(`📅 Auto-added meetup ${meetup.id} to ${dbUser.email}'s Outlook Calendar`);
         }
