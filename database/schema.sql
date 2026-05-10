@@ -166,6 +166,7 @@ CREATE TABLE meetup_participants (
   user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   rsvp        TEXT NOT NULL DEFAULT 'pending'
     CHECK (rsvp IN ('pending', 'accepted', 'declined', 'maybe')),
+  google_event_id TEXT,
 
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
