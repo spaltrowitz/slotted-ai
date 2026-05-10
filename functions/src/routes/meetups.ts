@@ -775,6 +775,13 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
 
     const eventTitle = meetup.title || "Hangout";
     const eventDescription = meetup.description || `Scheduled via Slotted with ${attendees.map((a: any) => a.displayName).join(", ")}`;
+    const { data: existingCalendarPart } = await getSupabase()
+      .from("meetup_participants")
+      .select("google_event_id")
+      .eq("meetup_id", meetupId)
+      .eq("user_id", me.id)
+      .maybeSingle();
+    const existingEventId = existingCalendarPart?.google_event_id || null;
 
     // ─── Google Calendar ───
     if (source === "google") {
@@ -792,38 +799,62 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
       const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
 
       const targetCalendar = calendarId || "primary";
-
-      const gcalEvent = await calendarApi.events.insert({
-        calendarId: targetCalendar,
-        requestBody: {
-          summary: eventTitle,
-          description: eventDescription,
-          location: meetup.location || undefined,
-          start: {
-            dateTime: meetup.start_time,
-            timeZone: me.timezone || "America/New_York",
-          },
-          end: {
-            dateTime: meetup.end_time,
-            timeZone: me.timezone || "America/New_York",
-          },
-          attendees: attendees.filter((a: any) => a.email !== me.email),
-          reminders: {
-            useDefault: false,
-            overrides: [
-              { method: "popup", minutes: 60 },
-              { method: "popup", minutes: 15 },
-            ],
-          },
+      const requestBody = {
+        summary: eventTitle,
+        description: eventDescription,
+        location: meetup.location || undefined,
+        start: {
+          dateTime: meetup.start_time,
+          timeZone: me.timezone || "America/New_York",
         },
-      });
+        end: {
+          dateTime: meetup.end_time,
+          timeZone: me.timezone || "America/New_York",
+        },
+        attendees: attendees.filter((a: any) => a.email !== me.email),
+        reminders: {
+          useDefault: false,
+          overrides: [
+            { method: "popup", minutes: 60 },
+            { method: "popup", minutes: 15 },
+          ],
+        },
+      };
+
+      let eventId = existingEventId;
+      let eventLink: string | null | undefined = null;
+      if (existingEventId) {
+        try {
+          const updatedEvent = await calendarApi.events.patch({
+            calendarId: targetCalendar,
+            eventId: existingEventId,
+            sendUpdates: "all",
+            requestBody,
+          });
+          eventLink = updatedEvent.data.htmlLink;
+        } catch (updateErr: any) {
+          const status = updateErr?.code || updateErr?.response?.status;
+          if (status !== 404 && status !== 410) throw updateErr;
+          eventId = null;
+        }
+      }
+
+      if (!eventId) {
+        const gcalEvent = await calendarApi.events.insert({
+          calendarId: targetCalendar,
+          sendUpdates: "all",
+          requestBody,
+        });
+        eventId = gcalEvent.data.id || null;
+        eventLink = gcalEvent.data.htmlLink;
+      }
 
       // Store the Google event ID on the meetup_participant row for reference
       // (google_event_id column may need migration — see migrations/add_google_event_id.sql)
       try {
         await getSupabase()
           .from("meetup_participants")
-          .update({ google_event_id: gcalEvent.data.id })
+          .update({ google_event_id: eventId })
           .eq("meetup_id", meetupId)
           .eq("user_id", me.id);
       } catch (err) { console.error(err);
@@ -834,8 +865,8 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
         success: true,
         source: "google",
         calendarId: targetCalendar,
-        eventId: gcalEvent.data.id,
-        eventLink: gcalEvent.data.htmlLink,
+        eventId,
+        eventLink,
       });
       return;
     }
@@ -899,6 +930,14 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
           filename: `${uid}.ics`,
           iCalString: icsContent,
         });
+
+        try {
+          await getSupabase()
+            .from("meetup_participants")
+            .update({ google_event_id: uid })
+            .eq("meetup_id", meetupId)
+            .eq("user_id", me.id);
+        } catch (err) { console.error(err); }
 
         res.json({ success: true, source: "apple", eventId: uid });
         return;
