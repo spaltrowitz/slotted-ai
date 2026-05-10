@@ -191,7 +191,7 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
 
     const sb = getSupabase();
 
-    // Check if already added (avoid duplicates)
+    // Check if already added so we can update the existing invite instead of duplicating it.
     const { data: existingPart } = await sb
       .from("meetup_participants")
       .select("google_event_id")
@@ -199,7 +199,7 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
       .eq("user_id", dbUser.id)
       .single();
 
-    if (existingPart?.google_event_id) return; // already on calendar
+    const existingEventId = existingPart?.google_event_id || null;
 
     // Get participant info for the event description
     const { data: parts } = await sb
@@ -218,6 +218,30 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
 
     const eventTitle = meetup.title || "Hangout";
     const eventDescription = meetup.description || `Scheduled via Slotted with ${attendees.map((a: any) => a.displayName).join(", ")}`;
+    const googleEventBody: calendar_v3.Schema$Event = {
+      summary: eventTitle,
+      description: eventDescription,
+      location: meetup.location || undefined,
+      start: {
+        dateTime: meetup.start_time,
+        timeZone: dbUser.timezone || "America/New_York",
+      },
+      end: {
+        dateTime: meetup.end_time,
+        timeZone: dbUser.timezone || "America/New_York",
+      },
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: "popup", minutes: 60 },
+          { method: "popup", minutes: 15 },
+        ],
+      },
+    };
+    const googleInviteBody: calendar_v3.Schema$Event = {
+      ...googleEventBody,
+      attendees,
+    };
 
     let addedEventId: string | null = null;
 
@@ -227,28 +251,28 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
         const oauth2 = await getAuthedCalendarClient(firebaseUid);
         if (oauth2) {
           const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+          if (existingEventId) {
+            try {
+              await calendarApi.events.patch({
+                calendarId: "primary",
+                eventId: existingEventId,
+                sendUpdates: "all",
+                requestBody: googleInviteBody,
+              });
+              console.log(`📅 Updated meetup ${meetup.id} on ${dbUser.email}'s Google Calendar`);
+              return;
+            } catch (updateErr: any) {
+              const status = updateErr?.code || updateErr?.response?.status;
+              if (status !== 404 && status !== 410) {
+                console.error(`Google calendar update failed for ${dbUser.email}:`, updateErr);
+                return;
+              }
+              console.warn(`Google event ${existingEventId} missing for ${dbUser.email}; recreating`);
+            }
+          }
           const gcalEvent = await calendarApi.events.insert({
             calendarId: "primary",
-            requestBody: {
-              summary: eventTitle,
-              description: eventDescription,
-              location: meetup.location || undefined,
-              start: {
-                dateTime: meetup.start_time,
-                timeZone: dbUser.timezone || "America/New_York",
-              },
-              end: {
-                dateTime: meetup.end_time,
-                timeZone: dbUser.timezone || "America/New_York",
-              },
-              reminders: {
-                useDefault: false,
-                overrides: [
-                  { method: "popup", minutes: 60 },
-                  { method: "popup", minutes: 15 },
-                ],
-              },
-            },
+            requestBody: googleEventBody,
           });
           addedEventId = gcalEvent.data.id || null;
           console.log(`📅 Auto-added meetup ${meetup.id} to ${dbUser.email}'s Google Calendar`);
@@ -259,7 +283,13 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
     }
 
     // ─── Try Apple Calendar if Google didn't work ───
-    if (!addedEventId && dbUser.apple_calendar_connected && dbUser.apple_caldav_username && dbUser.apple_caldav_password) {
+    if (
+      !addedEventId &&
+      (!existingEventId || existingEventId === `slotted-${meetup.id}-${dbUser.id}@slotted-ai.web.app`) &&
+      dbUser.apple_calendar_connected &&
+      dbUser.apple_caldav_username &&
+      dbUser.apple_caldav_password
+    ) {
       try {
         const uid = `slotted-${meetup.id}-${dbUser.id}@slotted-ai.web.app`;
         const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
@@ -309,7 +339,8 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
         });
 
         addedEventId = uid;
-        console.log(`🍎 Auto-added meetup ${meetup.id} to ${dbUser.email}'s Apple Calendar`);
+        console.log(`${existingEventId === uid ? "🍎 Updated" : "🍎 Auto-added"} meetup ${meetup.id} ${existingEventId === uid ? "on" : "to"} ${dbUser.email}'s Apple Calendar`);
+        if (existingEventId === uid) return;
       } catch (err) {
         console.error(`Apple auto-add failed for ${dbUser.email}:`, err);
       }
@@ -320,6 +351,38 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
       try {
         const graphClient = await getOutlookGraphClient(firebaseUid);
         if (graphClient) {
+          const outlookEventBody = {
+            subject: eventTitle,
+            body: { contentType: "text", content: eventDescription },
+            start: {
+              dateTime: meetup.start_time,
+              timeZone: dbUser.timezone || "America/New_York",
+            },
+            end: {
+              dateTime: meetup.end_time,
+              timeZone: dbUser.timezone || "America/New_York",
+            },
+            location: meetup.location ? { displayName: meetup.location } : undefined,
+            reminderMinutesBeforeStart: 15,
+            isReminderOn: true,
+            attendees: attendees.map((a: any) => ({
+              emailAddress: { address: a.email, name: a.displayName },
+              type: "required",
+            })),
+          };
+          if (existingEventId) {
+            try {
+              await graphClient.api(`/me/events/${existingEventId}`).patch(outlookEventBody);
+              console.log(`📅 Updated meetup ${meetup.id} on ${dbUser.email}'s Outlook Calendar`);
+              return;
+            } catch (updateErr: any) {
+              if (updateErr?.statusCode !== 404) {
+                console.error(`Outlook calendar update failed for ${dbUser.email}:`, updateErr);
+                return;
+              }
+              console.warn(`Outlook event ${existingEventId} missing for ${dbUser.email}; recreating`);
+            }
+          }
           const outlookEvent = await graphClient.api("/me/events").post({
             subject: eventTitle,
             body: { contentType: "text", content: eventDescription },
@@ -2290,4 +2353,3 @@ export async function fetchAppleBusyBlocks(
 
   return allBusyBlocks;
 }
-
