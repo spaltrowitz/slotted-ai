@@ -378,7 +378,7 @@ router.patch("/meetups/:meetupId/rsvp", authWithRateLimit, async (req: AuthReque
         }
 
         // Auto-add to all participants' Google Calendars (background)
-        const meetupData = { id: meetupId, title: meetup.title, description: meetup.description, location: meetup.location, start_time: meetup.start_time, end_time: meetup.end_time };
+        const meetupData = { id: meetupId, title: meetup.title, description: meetup.description, location: meetup.location, start_time: meetup.start_time, end_time: meetup.end_time, status: "confirmed" };
         for (const p of allParticipants) {
           // Look up firebase_uid for each participant
           const { data: pUser } = await getSupabase().from("users").select("firebase_uid").eq("id", p.user_id).maybeSingle();
@@ -858,7 +858,7 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
           .eq("meetup_id", meetupId)
           .eq("user_id", me.id);
       } catch (err) {
-        console.error("Failed to update Google calendar event ID for meetup participant:", err);
+        console.error("Failed to update calendar event ID for meetup participant (column may not exist yet):", err);
         // Column may not exist yet — safe to ignore
       }
 

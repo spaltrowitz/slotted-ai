@@ -201,16 +201,7 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
       .single();
 
     const existingEventId = existingPart?.google_event_id || null;
-    let meetupStatus = meetup.status;
-    if (!meetupStatus) {
-      const { data: meetupStatusRow } = await sb
-        .from("meetups")
-        .select("status")
-        .eq("id", meetup.id)
-        .maybeSingle();
-      meetupStatus = meetupStatusRow?.status;
-    }
-    const shouldSendInvites = !!existingEventId || meetupStatus === "confirmed";
+    const shouldSendInvites = meetup.status === "confirmed";
     const appleEventId = `slotted-${meetup.id}-${dbUser.id}@slotted-ai.web.app`;
     const shouldWriteAppleEvent = !existingEventId || existingEventId === appleEventId;
 
@@ -269,8 +260,8 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
               await calendarApi.events.patch({
                 calendarId: "primary",
                 eventId: existingEventId,
-                sendUpdates: "all",
-                requestBody: googleInviteBody,
+                sendUpdates: shouldSendInvites ? "all" : undefined,
+                requestBody: shouldSendInvites ? googleInviteBody : googleEventBody,
               });
               console.log(`📅 Updated meetup ${meetup.id} on ${dbUser.email}'s Google Calendar`);
               return;
@@ -352,10 +343,11 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
         });
 
         addedEventId = appleEventId;
-        const appleAction = existingEventId === appleEventId ? "Updated" : "Auto-added";
-        const applePreposition = existingEventId === appleEventId ? "on" : "to";
+        const isAppleUpdate = existingEventId === appleEventId;
+        const appleAction = isAppleUpdate ? "Updated" : "Auto-added";
+        const applePreposition = isAppleUpdate ? "on" : "to";
         console.log(`🍎 ${appleAction} meetup ${meetup.id} ${applePreposition} ${dbUser.email}'s Apple Calendar`);
-        if (existingEventId === appleEventId) return;
+        if (isAppleUpdate) return;
       } catch (err) {
         console.error(`Apple auto-add failed for ${dbUser.email}:`, err);
       }
@@ -388,7 +380,9 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
           const outlookInviteBody = { ...outlookEventBody, attendees: outlookAttendees };
           if (existingEventId) {
             try {
-              await graphClient.api(`/me/events/${existingEventId}`).patch(outlookInviteBody);
+              await graphClient
+                .api(`/me/events/${existingEventId}`)
+                .patch(shouldSendInvites ? outlookInviteBody : outlookEventBody);
               console.log(`📅 Updated meetup ${meetup.id} on ${dbUser.email}'s Outlook Calendar`);
               return;
             } catch (updateErr: any) {
