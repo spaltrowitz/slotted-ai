@@ -857,7 +857,8 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
           .update({ google_event_id: eventId })
           .eq("meetup_id", meetupId)
           .eq("user_id", me.id);
-      } catch (err) { console.error(err);
+      } catch (err) {
+        console.error(err);
         // Column may not exist yet — safe to ignore
       }
 
@@ -937,7 +938,9 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
             .update({ google_event_id: uid })
             .eq("meetup_id", meetupId)
             .eq("user_id", me.id);
-        } catch (err) { console.error(err); }
+        } catch (err) {
+          console.error(err);
+        }
 
         res.json({ success: true, source: "apple", eventId: uid });
         return;

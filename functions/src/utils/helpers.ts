@@ -339,7 +339,9 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
         });
 
         addedEventId = uid;
-        console.log(`${existingEventId === uid ? "🍎 Updated" : "🍎 Auto-added"} meetup ${meetup.id} ${existingEventId === uid ? "on" : "to"} ${dbUser.email}'s Apple Calendar`);
+        const appleAction = existingEventId === uid ? "Updated" : "Auto-added";
+        const applePreposition = existingEventId === uid ? "on" : "to";
+        console.log(`🍎 ${appleAction} meetup ${meetup.id} ${applePreposition} ${dbUser.email}'s Apple Calendar`);
         if (existingEventId === uid) return;
       } catch (err) {
         console.error(`Apple auto-add failed for ${dbUser.email}:`, err);
@@ -414,7 +416,9 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
           .update({ google_event_id: addedEventId })
           .eq("meetup_id", meetup.id)
           .eq("user_id", dbUser.id);
-      } catch (err) { console.error("Column update failed:", err); }
+      } catch (err) {
+        console.error("Column update failed:", err);
+      }
     }
   } catch (err) {
     console.error(`Failed to auto-add meetup to calendar for ${firebaseUid}:`, err);
