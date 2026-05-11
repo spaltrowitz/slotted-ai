@@ -166,7 +166,7 @@ export default function RecurringMeetupList({ friends, preselectedFriendId }: Re
                   onClick={() => toggleFriend(f.friend.id)}
                   className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${selectedFriendIds.has(f.friend.id) ? 'bg-slotted-50' : 'hover:bg-gray-50'}`}
                 >
-                  <span className={`flex h-4 w-4 items-center justify-center rounded border text-[10px] ${selectedFriendIds.has(f.friend.id) ? 'bg-slotted-500 border-slotted-500 text-white' : 'border-gray-300'}`}>
+                  <span className={`flex h-4 w-4 items-center justify-center rounded border text-[10px] ${selectedFriendIds.has(f.friend.id) ? 'bg-slotted-600 border-slotted-500 text-white' : 'border-gray-300'}`}>
                     {selectedFriendIds.has(f.friend.id) ? '✓' : ''}
                   </span>
                   <span className="text-gray-700">{f.friend.displayName}</span>
@@ -179,7 +179,7 @@ export default function RecurringMeetupList({ friends, preselectedFriendId }: Re
             <button
               onClick={() => createMutation.mutate()}
               disabled={!title.trim() || selectedFriendIds.size === 0 || createMutation.isPending}
-              className="flex-1 rounded-lg bg-slotted-500 px-3 py-2 text-xs font-medium text-white hover:bg-slotted-600 transition-colors disabled:opacity-50"
+              className="flex-1 rounded-lg bg-slotted-600 px-3 py-2 text-xs font-medium text-white hover:bg-slotted-600 transition-colors disabled:opacity-50"
             >
               {createMutation.isPending ? 'Creating…' : 'Create recurring hangout'}
             </button>

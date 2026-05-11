@@ -146,7 +146,7 @@ export default function EventSharePage() {
               href={buildGoogleCalendarUrl(event)}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slotted-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slotted-600"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slotted-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slotted-600"
             >
               Add to Google Calendar
             </a>
@@ -166,7 +166,7 @@ export default function EventSharePage() {
           <p className="mb-3 text-xs text-gray-500">Slotted.ai syncs your calendar and finds the best time to meet up with friends.</p>
           <a
             href={inviteUrl}
-            className="inline-block rounded-xl bg-slotted-500 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slotted-600"
+            className="inline-block rounded-xl bg-slotted-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slotted-600"
           >
             Join Slotted.ai — it's free
           </a>

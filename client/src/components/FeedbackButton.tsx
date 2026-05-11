@@ -111,7 +111,7 @@ export default function FeedbackButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-indigo-600 text-lg text-white shadow-lg transition-all hover:shadow-xl hover:scale-105 md:bottom-6"
+        className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-sky-600 text-lg text-white shadow-lg transition-all hover:shadow-xl hover:scale-105 md:bottom-6"
         aria-label="Send feedback"
       >
         💬
@@ -163,7 +163,7 @@ export default function FeedbackButton() {
                       onClick={() => setCategory(cat.key)}
                       className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 min-h-[44px] text-sm font-medium transition-all ${
                         category === cat.key
-                          ? 'bg-slotted-500 text-white shadow-md'
+                          ? 'bg-slotted-600 text-white shadow-md'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                       aria-pressed={category === cat.key}

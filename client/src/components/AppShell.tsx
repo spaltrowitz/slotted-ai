@@ -191,7 +191,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             href="https://venmo.com/shari-paltrowitz?txn=pay&amount=5&note=Slotted%20%F0%9F%93%85"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-sky-500 hover:text-sky-700 transition-colors"
+            className="font-semibold text-sky-700 hover:text-sky-800 transition-colors"
           >
             📅 Enjoying Slotted.ai? Fund my next friend date
           </a>

@@ -37,7 +37,7 @@ export default function HelpPage() {
       <div className="space-y-4">
         {steps.map((s) => (
           <div key={s.number} className="flex gap-3">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-indigo-600 text-xs font-bold text-white">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-sky-600 text-xs font-bold text-white">
               {s.number}
             </span>
             <div>

@@ -265,11 +265,12 @@ export default function DashboardPage() {
   const [savedGroups, setSavedGroups] = useState<SavedFriendGroup[]>([]);
   const [showAllFriends, setShowAllFriends] = useState(false);
   const [copiedPollId, setCopiedPollId] = useState<string | null>(null);
-  const [sharingPollId, setSharingPollId] = useState<string | null>(null);
   const [pollFriendSelections, setPollFriendSelections] = useState<Record<string, string>>({});
   const [expandedPollId, setExpandedPollId] = useState<string | null>(null);
   const [eventPollsMinimized, setEventPollsMinimized] = useState(false);
   const [friendTipDismissed, setFriendTipDismissed] = useState(false);
+  const [nudgedPollIds, setNudgedPollIds] = useState<Set<string>>(new Set());
+  const [nudgingPollId, setNudgingPollId] = useState<string | null>(null);
 
   const userUid = user?.uid;
   const inviteUrl = `https://slotted-ai.web.app?ref=${userUid ?? ''}`;
@@ -320,8 +321,19 @@ export default function DashboardPage() {
     mutationFn: async (scheduleId: string) => {
       await api.post(`/events/schedules/${scheduleId}/nudge`);
     },
-    onSuccess: () => {
+    onMutate: (scheduleId) => {
+      setNudgingPollId(scheduleId);
+    },
+    onSuccess: (_data, scheduleId) => {
+      setNudgedPollIds((prev) => {
+        const next = new Set(prev);
+        next.add(scheduleId);
+        return next;
+      });
       queryClient.invalidateQueries({ queryKey: ['event-polls'] });
+    },
+    onSettled: () => {
+      setNudgingPollId(null);
     },
   });
 
@@ -361,15 +373,10 @@ export default function DashboardPage() {
   }, [queryClient]);
 
   const copyPollInvite = useCallback(async (poll: EventPollSummary) => {
-    setSharingPollId(poll.id);
-    try {
-      const inviteUrl = await getPollInviteUrl(poll);
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopiedPollId(poll.id);
-      setTimeout(() => setCopiedPollId(null), 2000);
-    } finally {
-      setSharingPollId(null);
-    }
+    const inviteUrl = await getPollInviteUrl(poll);
+    await navigator.clipboard.writeText(inviteUrl);
+    setCopiedPollId(poll.id);
+    setTimeout(() => setCopiedPollId(null), 2000);
   }, [getPollInviteUrl]);
 
   /* ─── derived data ─── */
@@ -885,7 +892,11 @@ export default function DashboardPage() {
                               </div>
                               <button
                                 type="button"
-                                onClick={() => closePollInvitesMutation.mutate({ scheduleId: poll.id, closed: true })}
+                                onClick={() => {
+                                  if (window.confirm(`Mark ${poll.eventTitle} invites complete? The share link will stop working for new people. You can't undo this from the app.`)) {
+                                    closePollInvitesMutation.mutate({ scheduleId: poll.id, closed: true });
+                                  }
+                                }}
                                 disabled={closePollInvitesMutation.isPending}
                                 className="min-h-[44px] shrink-0 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md disabled:opacity-50"
                               >
@@ -895,7 +906,7 @@ export default function DashboardPage() {
                           </div>
                         )}
                         {poll.invitesClosed && !isReadyToChoose && (
-                          <p className="px-1 text-[11px] font-medium text-sky-700">
+                          <p className="px-1 text-[11px] font-medium text-slate-600">
                             🔒 Invites closed — link only works for people already in this poll.
                           </p>
                         )}
@@ -917,12 +928,12 @@ export default function DashboardPage() {
                                 <button
                                   type="button"
                                   onClick={() => nudgePollMutation.mutate(poll.id)}
-                                  disabled={nudgePollMutation.isPending}
-                                  className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                                  disabled={nudgingPollId === poll.id}
+                                  className="min-h-[32px] shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
                                 >
-                                  {nudgePollMutation.isPending
+                                  {nudgingPollId === poll.id
                                     ? 'Sending…'
-                                    : nudgePollMutation.isSuccess && nudgePollMutation.variables === poll.id
+                                    : nudgedPollIds.has(poll.id)
                                       ? '✓ Sent'
                                       : '👋 Nudge'}
                                 </button>
@@ -940,7 +951,7 @@ export default function DashboardPage() {
                       <div className={`mt-3 grid gap-2 ${poll.invitesClosed ? 'grid-cols-2' : 'grid-cols-3'}`}>
                         <Link
                           to={`/event-poll/${poll.id}`}
-                          className={`flex min-h-[40px] items-center justify-center rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors ${
+                          className={`flex min-h-[44px] items-center justify-center rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors ${
                             needsMyPicks
                               ? 'bg-gradient-to-r from-cyan-500 to-sky-500 text-white shadow-sm'
                               : isReadyToChoose
@@ -954,8 +965,8 @@ export default function DashboardPage() {
                           <button
                             type="button"
                             onClick={() => copyPollInvite(poll)}
-                            disabled={sharingPollId === poll.id}
-                            className={`min-h-[40px] rounded-xl px-2 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
+                            disabled={copiedPollId === poll.id}
+                            className={`min-h-[44px] rounded-xl px-2 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
                               needsMyPicks
                                 ? 'bg-gradient-to-r from-cyan-500 to-sky-500 text-white shadow-sm'
                                 : isReadyToChoose
@@ -969,7 +980,7 @@ export default function DashboardPage() {
                         <button
                           type="button"
                           onClick={() => setExpandedPollId(isExpanded ? null : poll.id)}
-                          className="min-h-[40px] rounded-xl border border-gray-200 bg-white px-2 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                          className="min-h-[44px] rounded-xl border border-gray-200 bg-white px-2 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
                           aria-expanded={isExpanded}
                         >
                           {isExpanded ? 'Less' : 'More'}
@@ -979,51 +990,52 @@ export default function DashboardPage() {
                       {isExpanded && (
                         <div className="mt-2 space-y-2 rounded-xl border border-gray-100 bg-gray-50/70 p-2">
                           {poll.isOwner && friendsAvailableForPoll.length > 0 && (
-                            <div className="flex items-center gap-2">
-                              <select
-                                value={selectedPollFriendId}
-                                onChange={(event) => setPollFriendSelections((prev) => ({ ...prev, [poll.id]: event.target.value }))}
-                                className="min-h-[36px] min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-700"
-                                aria-label={`Add a friend to ${poll.eventTitle}`}
-                              >
-                                <option value="">Add friend</option>
-                                {friendsAvailableForPoll.map((friend) => (
-                                  <option key={friend.friend.id} value={friend.friend.id}>
-                                    {getSmartDisplayName(friend.friend.displayName, allFriendNames)}
-                                  </option>
-                                ))}
-                              </select>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (selectedPollFriendId) {
-                                    addPollFriendMutation.mutate({ scheduleId: poll.id, friendId: selectedPollFriendId });
-                                  }
-                                }}
-                                disabled={!selectedPollFriendId || addPollFriendMutation.isPending}
-                                className="min-h-[36px] shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-[11px] font-semibold text-sky-700 transition-colors hover:bg-sky-100 disabled:opacity-50"
-                              >
-                                Add to poll
-                              </button>
-                            </div>
+                            <>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={selectedPollFriendId}
+                                  onChange={(event) => setPollFriendSelections((prev) => ({ ...prev, [poll.id]: event.target.value }))}
+                                  className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-700"
+                                  aria-label={`Add a friend to ${poll.eventTitle}`}
+                                >
+                                  <option value="">Add friend</option>
+                                  {friendsAvailableForPoll.map((friend) => (
+                                    <option key={friend.friend.id} value={friend.friend.id}>
+                                      {getSmartDisplayName(friend.friend.displayName, allFriendNames)}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (selectedPollFriendId) {
+                                      addPollFriendMutation.mutate({ scheduleId: poll.id, friendId: selectedPollFriendId });
+                                    }
+                                  }}
+                                  disabled={!selectedPollFriendId || addPollFriendMutation.isPending}
+                                  className="min-h-[44px] shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-[11px] font-semibold text-sky-700 transition-colors hover:bg-sky-100 disabled:opacity-50"
+                                >
+                                  Add to poll
+                                </button>
+                              </div>
+                              <div className="border-t border-gray-200/70" />
+                            </>
                           )}
-                          <div className="border-t border-gray-200/70 pt-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const message = poll.isOwner
-                                  ? `Are you sure you want to delete the ${poll.eventTitle} poll? This removes it for everyone.`
-                                  : `Are you sure you want to remove the ${poll.eventTitle} poll from your dashboard?`;
-                                if (window.confirm(message)) {
-                                  deletePollMutation.mutate(poll.id);
-                                }
-                              }}
-                              disabled={deletePollMutation.isPending}
-                              className="min-h-[36px] w-full rounded-lg border border-red-100 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
-                            >
-                              {poll.isOwner ? 'Delete poll' : 'Leave poll'}
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const message = poll.isOwner
+                                ? `Are you sure you want to delete the ${poll.eventTitle} poll? This removes it for everyone.`
+                                : `Are you sure you want to remove the ${poll.eventTitle} poll from your dashboard?`;
+                              if (window.confirm(message)) {
+                                deletePollMutation.mutate(poll.id);
+                              }
+                            }}
+                            disabled={deletePollMutation.isPending}
+                            className="min-h-[44px] w-full rounded-lg border border-red-100 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                          >
+                            {poll.isOwner ? 'Delete poll' : 'Leave poll'}
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1110,7 +1122,7 @@ export default function DashboardPage() {
                   <button
                     type="button"
                     onClick={dismissFriendTip}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-slotted-500 transition-colors hover:bg-white/70 hover:text-slotted-700"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-slotted-700 transition-colors hover:bg-white/70 hover:text-slotted-800"
                     aria-label="Dismiss friend tip"
                   >
                     ×
@@ -1195,7 +1207,7 @@ export default function DashboardPage() {
                         style={{ borderColor: isSelected ? 'transparent' : '#d1d5db' }}
                       >
                         {isSelected ? (
-                          <div className="flex h-5 w-5 items-center justify-center rounded-md bg-slotted-500">
+                          <div className="flex h-5 w-5 items-center justify-center rounded-md bg-slotted-600">
                             <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                             </svg>

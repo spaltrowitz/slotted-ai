@@ -133,7 +133,7 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
       {!showInstructions && (
         <div className="mb-4 rounded-2xl border border-slotted-200 bg-gradient-to-r from-slotted-50 to-sky-50 p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slotted-500 to-indigo-600 text-lg text-white shadow-sm">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slotted-500 to-sky-600 text-lg text-white shadow-sm">
               
             </div>
             <div className="flex-1 min-w-0">

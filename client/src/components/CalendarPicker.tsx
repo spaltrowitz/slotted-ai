@@ -227,7 +227,7 @@ export default function CalendarPicker({ source = 'google', onClose, onSaved, on
                 setError('Failed to reconnect. Please try again.');
               }
             }}
-            className="w-full rounded-lg bg-slotted-500 px-4 py-2 text-xs font-semibold text-white hover:bg-slotted-600 transition-colors"
+            className="w-full rounded-lg bg-slotted-600 px-4 py-2 text-xs font-semibold text-white hover:bg-slotted-600 transition-colors"
           >
             Reconnect Google Calendar
           </button>

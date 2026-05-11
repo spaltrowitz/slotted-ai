@@ -560,7 +560,7 @@ export default function EventInviteLandingPage() {
   if (phase === 'calendar') {
     return (
       <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-sky-50 via-white to-amber-50">
-        <div className="absolute -top-32 -right-32 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-indigo-200/40 via-pink-100/30 to-transparent blur-3xl" />
+        <div className="absolute -top-32 -right-32 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-cyan-200/40 via-sky-100/30 to-transparent blur-3xl" />
         <div className="absolute bottom-0 -left-32 h-[400px] w-[400px] rounded-full bg-gradient-to-tr from-amber-200/40 via-orange-100/30 to-transparent blur-3xl" />
 
         <div className="relative z-10 mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 py-12">
@@ -610,7 +610,7 @@ export default function EventInviteLandingPage() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-sky-50 via-white to-amber-50">
       {/* Background blobs */}
-      <div className="absolute -top-32 -right-32 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-indigo-200/40 via-pink-100/30 to-transparent blur-3xl" />
+      <div className="absolute -top-32 -right-32 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-cyan-200/40 via-sky-100/30 to-transparent blur-3xl" />
       <div className="absolute bottom-0 -left-32 h-[400px] w-[400px] rounded-full bg-gradient-to-tr from-amber-200/40 via-orange-100/30 to-transparent blur-3xl" />
 
       {/* Nav */}

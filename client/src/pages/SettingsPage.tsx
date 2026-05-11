@@ -282,7 +282,7 @@ export default function SettingsPage() {
         {/* ═══════════════════════════════════════════════ */}
         <section>
           <div className="flex items-center gap-3 mb-3">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-indigo-600 text-xs font-bold text-white shadow-sm">1</span>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-sky-600 text-xs font-bold text-white shadow-sm">1</span>
             <h2 className="text-sm font-bold text-gray-800">Calendar</h2>
           </div>
 
@@ -621,7 +621,7 @@ export default function SettingsPage() {
         {/* ═══════════════════════════════════════════════ */}
         <section>
           <div className="flex items-center gap-3 mb-3">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-indigo-600 text-xs font-bold text-white shadow-sm">3</span>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slotted-500 to-sky-600 text-xs font-bold text-white shadow-sm">3</span>
             <h2 className="text-sm font-bold text-gray-800">Social Battery</h2>
           </div>
 

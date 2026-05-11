@@ -186,7 +186,7 @@ export default function RecurringMeetupCard({ meetup }: RecurringMeetupCardProps
             <button
               onClick={() => updateMutation.mutate()}
               disabled={updateMutation.isPending}
-              className="flex-1 rounded-lg bg-slotted-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-slotted-600 transition-colors disabled:opacity-50"
+              className="flex-1 rounded-lg bg-slotted-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-slotted-600 transition-colors disabled:opacity-50"
             >
               Save
             </button>

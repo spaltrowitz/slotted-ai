@@ -364,7 +364,7 @@ export default function FriendsPage() {
                 >
                   {/* Selection indicator */}
                   {(isSelected || isViewing) && (
-                    <div className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slotted-500 text-white">
+                    <div className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slotted-600 text-white">
                       <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
