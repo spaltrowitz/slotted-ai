@@ -922,6 +922,7 @@ export default function DashboardPage() {
                         )}
                         {poll.pending.length > 0 && !needsMyPicks && (
                           <div className="rounded-xl border border-slate-100 bg-white px-2.5 py-2">
+                            <p className="mb-1.5 text-[11px] font-semibold text-slate-600">⏳ Pending</p>
                             <div className="flex flex-wrap items-center gap-1.5">
                               {poll.isOwner && (
                                 <button
@@ -930,7 +931,11 @@ export default function DashboardPage() {
                                   disabled={nudgePollMutation.isPending}
                                   className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
                                 >
-                                  {nudgePollMutation.isPending ? 'Sending…' : '👋 Nudge'}
+                                  {nudgePollMutation.isPending
+                                    ? 'Sending…'
+                                    : nudgePollMutation.isSuccess && nudgePollMutation.variables === poll.id
+                                      ? '✓ Sent'
+                                      : '👋 Nudge'}
                                 </button>
                               )}
                               {poll.pending.map((person) => (
