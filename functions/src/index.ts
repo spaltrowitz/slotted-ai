@@ -1148,6 +1148,28 @@ export const sendMonthlyRecap = onSchedule("1 of month 10:00", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Purge old suggestion_events (daily at 03:17 UTC)
+// ---------------------------------------------------------------------------
+// Enforces the 90-day retention policy declared in the schema for
+// suggestion_events (which snapshots social_battery at suggestion time).
+// Calls the SQL function `purge_old_suggestion_events()` installed via
+// migrations/privacy_hardening.sql.
+// ---------------------------------------------------------------------------
+export const purgeOldSuggestionEvents = onSchedule(
+  { schedule: "17 3 * * *", timeZone: "UTC" },
+  async () => {
+    const sb = getSupabase();
+    const { data, error } = await sb.rpc("purge_old_suggestion_events");
+    if (error) {
+      console.error("[PURGE] Failed to purge suggestion_events:", error);
+      throw error;
+    }
+    const deleted = Array.isArray(data) && data.length > 0 ? data[0].deleted_count : 0;
+    console.log(`[PURGE] Deleted ${deleted} suggestion_events older than 90 days`);
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Export as Firebase Cloud Function
 // ---------------------------------------------------------------------------
 export const api = onRequest({ memory: "512MiB" }, app);

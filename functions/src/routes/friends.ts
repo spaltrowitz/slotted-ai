@@ -43,47 +43,11 @@ router.get("/friends", authWithRateLimit, async (req: AuthRequest, res: Response
     }
 
     const rows = friendships || [];
-    const friendIds = rows.map((f: any) => (f.user_a_id === me.id ? f.user_b_id : f.user_a_id));
-    const uniqueFriendIds = [...new Set(friendIds)];
-
-    // Strict calendar "connected" signal:
-    // - has at least one selected provider calendar
-    // - has at least one recently-synced busy block in the active sync window
-    // This avoids showing "connected" for stale tokens/reconnect-required states.
-    const selectedCalendarUsers = new Set<string>();
-    const usersWithRecentBusy = new Set<string>();
-    if (uniqueFriendIds.length > 0) {
-      const { data: selectedRows } = await getSupabase()
-        .from("user_calendars")
-        .select("user_id")
-        .in("user_id", uniqueFriendIds)
-        .eq("is_selected", true);
-      for (const row of selectedRows || []) {
-        selectedCalendarUsers.add((row as any).user_id);
-      }
-
-      const nowIso = new Date().toISOString();
-      const windowEndIso = new Date(Date.now() + 14 * 86400000).toISOString();
-      const recentSyncCutoffIso = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
-      const { data: busyRows } = await getSupabase()
-        .from("availability")
-        .select("user_id")
-        .in("user_id", uniqueFriendIds)
-        .eq("status", "busy")
-        .gte("end_time", nowIso)
-        .lte("start_time", windowEndIso)
-        .gte("created_at", recentSyncCutoffIso);
-      for (const row of busyRows || []) {
-        usersWithRecentBusy.add((row as any).user_id);
-      }
-    }
 
     // Flatten: return the *other* user as "friend"
     const friends = rows.map((f: any) => {
       const iAmA = f.user_a.id === me.id;
       const friend = iAmA ? f.user_b : f.user_a;
-      const strictCalendarConnected =
-        selectedCalendarUsers.has(friend.id) && usersWithRecentBusy.has(friend.id);
       // hangoutPref is MY private preference for this friend
       const hangoutPref = iAmA ? (f.user_a_hangout_pref || "both") : (f.user_b_hangout_pref || "both");
       const friendshipType = iAmA ? (f.user_a_friendship_type || "local") : (f.user_b_friendship_type || "local");
@@ -105,7 +69,6 @@ router.get("/friends", authWithRateLimit, async (req: AuthRequest, res: Response
           photoUrl: friend.photo_url,
           neighborhood: friend.neighborhood,
           timezone: friend.timezone,
-          calendarConnected: strictCalendarConnected,
           eventInterests: friend.event_interests || [],
         },
       };

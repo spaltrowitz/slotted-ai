@@ -228,6 +228,7 @@ router.get("/availability/overlap/:friendId", authWithRateLimit, async (req: Aut
         .eq("user_id", friendId)
         .eq("type", "calendar_match")
         .eq("related_user_id", me.id)
+        .ilike("title", "📅 Connect your calendar%")
         .gte("created_at", oneWeekAgo)
         .limit(1);
 
@@ -250,18 +251,15 @@ router.get("/availability/overlap/:friendId", authWithRateLimit, async (req: Aut
       friendPattern = patterns.find(p => p.friendId === friendId) || null;
     } catch { /* non-critical */ }
 
+    // Privacy: friend's calendar sync status / free-slot count is NEVER returned
+    // to other users. Auto-nudge (above) handles the connect-prompt server-side.
+    // Marketing claim: "Friends never see your battery, your free blocks, or your sync status."
     res.json({
       overlaps,
       suggestions,
       friendPattern,
       syncStatus: {
         me: { synced: mySync.synced, freeSlots: mySync.slots },
-        friend: {
-          synced: friendSync.synced,
-          freeSlots: friendSync.slots,
-          name: friendUser?.display_name || "Friend",
-          calendarConnected: friendCalendarConnected,
-        },
       },
     });
   } catch (err: any) {
@@ -378,38 +376,64 @@ async function handleMultiFriendOverlap(req: AuthRequest, res: Response) {
     // AI-score the group overlaps
     const suggestions = await scoreGroupOverlaps(me.id, requestedFriendIds, currentOverlaps, 8);
 
-    // Build sync status for each participant
+    // Build sync status. Privacy: per-friend sync state and free-slot counts
+    // are NEVER returned. We only surface whether ALL calendars are ready so the
+    // UI can show a generic "still finding times" message if not.
     const calConnectedResults = await Promise.all(
       friendUsers.map((fu) => fu?.id ? strictCalendarCheck(fu.id) : Promise.resolve(false)),
     );
-    const participantStatus = friendUsers.map((fu, idx) => {
-      const syncResult = syncResults[idx + 1]; // +1 because index 0 is "me"
-      const synced = syncResult?.status === "fulfilled"
-        ? (syncResult.value as { synced: boolean; slots: number }).synced
-        : false;
-      const freeSlots = syncResult?.status === "fulfilled"
-        ? (syncResult.value as { synced: boolean; slots: number }).slots
-        : 0;
-      return {
-        id: fu?.id || requestedFriendIds[idx],
-        name: fu?.display_name || "Friend",
-        synced,
-        freeSlots,
-        calendarConnected: calConnectedResults[idx],
-      };
-    });
 
     const mySyncResult = syncResults[0];
     const mySync = mySyncResult?.status === "fulfilled"
       ? mySyncResult.value as { synced: boolean; slots: number }
       : { synced: false, slots: 0 };
 
+    const friendsAllSynced = calConnectedResults.every(Boolean) &&
+      syncResults.slice(1).every((r) => r.status === "fulfilled" && (r.value as { synced: boolean }).synced);
+    // Aggregate must reflect requester's own sync too; otherwise the UI can
+    // show "everyone's pretty busy!" when really the user themselves needs
+    // to reconnect.
+    const everyoneSynced = mySync.synced && friendsAllSynced;
+
+    // Group auto-nudge: if 0 suggestions and at least one friend hasn't
+    // connected, send a one-time connect-prompt to each unsynced friend
+    // (max 1/week per pair, per-friend dedupe). Same privacy posture as the
+    // 1:1 endpoint — the requester never sees who got nudged.
+    if (suggestions.length === 0) {
+      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      for (let i = 0; i < friendUsers.length; i++) {
+        const fu = friendUsers[i];
+        if (!fu?.id) continue;
+        if (calConnectedResults[i]) continue; // already connected, skip
+
+        const { data: recentNudge } = await getSupabase()
+          .from("notifications")
+          .select("id")
+          .eq("user_id", fu.id)
+          .eq("type", "calendar_match")
+          .eq("related_user_id", me.id)
+          .ilike("title", "📅 Connect your calendar%")
+          .gte("created_at", oneWeekAgo)
+          .limit(1);
+
+        if (!recentNudge || recentNudge.length === 0) {
+          await createNotification({
+            userId: fu.id,
+            type: "calendar_match",
+            title: "📅 Connect your calendar",
+            body: `${me.display_name || "A friend"} is trying to find a time to hang with a group — connect your calendar so Slotted can help!`,
+            relatedUserId: me.id,
+          });
+        }
+      }
+    }
+
     res.json({
       overlaps: currentOverlaps,
       suggestions,
       syncStatus: {
         me: { synced: mySync.synced, freeSlots: mySync.slots },
-        participants: participantStatus,
+        everyoneSynced,
       },
     });
   } catch (err: any) {

@@ -1,6 +1,6 @@
 # slotted-ai
 
-> An AI-powered scheduling app that syncs with Google Calendar to help busy young professionals actually see their friends.
+> An AI-powered scheduling app that syncs with Google, Apple, and Outlook calendars to help busy young professionals actually see their friends.
 
 ## Architecture
 

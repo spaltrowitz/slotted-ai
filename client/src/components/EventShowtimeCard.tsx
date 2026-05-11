@@ -38,12 +38,16 @@ function formatPrice(price: { min?: number | null; max?: number | null }): strin
 }
 
 function getCalendarHint(showtime: ScheduleShowtime): { icon: string; label: string } | null {
-  if (showtime.available) return { icon: '✅', label: 'Calendar clear' };
-  const hasBusy = showtime.conflicts.some((c) => c.reason === 'busy');
-  if (hasBusy) return { icon: '❌', label: 'Conflict on calendar' };
-  const hasWarning = showtime.conflicts.length > 0;
-  if (hasWarning) return { icon: '⚠️', label: "Couldn't check all calendars" };
-  return null;
+  switch (showtime.availabilityState) {
+    case 'all_clear':
+      return { icon: '✅', label: 'Everyone looks free' };
+    case 'some_busy':
+      return { icon: '❌', label: 'Conflict for someone' };
+    case 'check_incomplete':
+      return { icon: '⚠️', label: "Couldn't check all calendars" };
+    default:
+      return null;
+  }
 }
 
 export default function EventShowtimeCard({
@@ -96,32 +100,12 @@ export default function EventShowtimeCard({
               )}
             </div>
 
-            {/* Calendar hint badge */}
-            {hint && (
-              <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-                {hint.icon} {hint.label}
-              </span>
-            )}
-          </div>
-
-          {/* Availability summary row */}
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {showtime.allFree.map((name) => (
-              <span
-                key={name}
-                className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700"
-              >
-                ✅ {name}
-              </span>
-            ))}
-            {showtime.conflicts.map((c) => (
-              <span
-                key={c.name}
-                className="inline-flex items-center gap-0.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500"
-              >
-                {c.reason === 'busy' ? '❌' : '⚠️'} {c.name}
-              </span>
-            ))}
+          {/* Calendar hint badge — aggregate only; never names a specific friend. */}
+          {hint && (
+            <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+              {hint.icon} {hint.label}
+            </span>
+          )}
           </div>
 
 

@@ -1473,8 +1473,9 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
       const windowStart = new Date(eventStart.getTime() - PRE_BUFFER_MS);
       const windowEnd = new Date(eventStart.getTime() + showDurationMs + POST_BUFFER_MS);
 
-      const allFree: string[] = [];
-      const conflicts: { name: string; reason: string }[] = [];
+      const conflictNames: string[] = [];
+      let busyCount = 0;
+      let checkFailedCount = 0;
 
       for (let i = 0; i < allProfiles.length; i++) {
         const name = participantNames[i];
@@ -1483,7 +1484,8 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
         const calConnected = isMe ? meCalendarConnected : friendCalendarConnected[i - 1];
 
         if (!calConnected) {
-          conflicts.push({ name, reason: "calendar_not_connected" });
+          conflictNames.push(name);
+          checkFailedCount++;
           continue;
         }
 
@@ -1605,19 +1607,37 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
         // Only report "calendar_check_failed" if ALL attempted sources failed.
         // If at least one source succeeded, we have enough data to trust the result.
         if (isBusy) {
-          conflicts.push({ name, reason: "busy" });
+          busyCount++;
         } else if (sourcesAttempted > 0 && sourcesSucceeded === 0) {
-          conflicts.push({ name, reason: "calendar_check_failed" });
-        } else {
-          allFree.push(name);
+          checkFailedCount++;
         }
+        // else: this participant is free — counted implicitly via totalChecked
       }
+
+      // Privacy: never return per-participant free/busy/sync state by name.
+      // The requester sees aggregate availability only. Marketing claim:
+      // "Friends never see your free blocks or your sync status."
+      const totalChecked = allProfiles.length;
+      let availabilityState: "all_clear" | "some_busy" | "check_incomplete";
+      if (busyCount > 0) {
+        availabilityState = "some_busy";
+      } else if (checkFailedCount > 0) {
+        availabilityState = "check_incomplete";
+      } else {
+        availabilityState = "all_clear";
+      }
+
+      // Silence unused-locals lint for now-unused `conflictNames` while keeping
+      // the variable defined for future structured logging.
+      void conflictNames;
 
       showtimes.push({
         datetime: dtValue,
-        available: conflicts.length === 0,
-        allFree,
-        conflicts,
+        available: availabilityState === "all_clear",
+        availabilityState,
+        totalParticipants: totalChecked,
+        busyCount,
+        checkFailedCount,
         ticketUrl: ev.url,
         price: { min: ev.priceMin || null, max: ev.priceMax || null },
       });

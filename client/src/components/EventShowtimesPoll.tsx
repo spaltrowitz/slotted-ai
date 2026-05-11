@@ -10,23 +10,21 @@ interface EventShowtimesPollProps {
   event: ScheduleEvent;
   showtimes: ScheduleShowtime[];
   friendIds?: string[];
+  friendNames?: string[];
 }
 
 export default function EventShowtimesPoll({
   event,
   showtimes,
   friendIds = [],
+  friendNames = [],
 }: EventShowtimesPollProps) {
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [submitted, setSubmitted] = useState(false);
-  const [pendingFriends] = useState<string[]>(() => {
-    const names = new Set<string>();
-    for (const s of showtimes) {
-      for (const name of s.allFree) names.add(name);
-      for (const c of s.conflicts) names.add(c.name);
-    }
-    return Array.from(names);
-  });
+  // Friends to surface on the post-submit share screen. Derived from the
+  // friend list the requester just picked — never from per-showtime
+  // availability (which would leak who is free/busy).
+  const [pendingFriends] = useState<string[]>(() => Array.from(new Set(friendNames)));
 
   const sorted = [...showtimes].sort((a, b) => {
     if (a.available && !b.available) return -1;

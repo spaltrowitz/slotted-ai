@@ -258,15 +258,9 @@ export default function DashboardPage() {
       const accepted = friendsData.filter((f) => f.status === 'accepted');
       // Smart sort: overdue friends first, then by recency, then alphabetical
       return accepted.sort((a, b) => {
-        // Friends with upcoming meetups go to "coming up" (lower priority — already handled)
         // Overdue friends first (days since / avg cadence, higher = more overdue)
         const aOverdue = (a.daysSinceLastHangout ?? 999) / (a.avgCadenceDays || 14);
         const bOverdue = (b.daysSinceLastHangout ?? 999) / (b.avgCadenceDays || 14);
-        // Calendar connected friends before unconnected (actionable first)
-        const aActionable = a.friend.calendarConnected ? 1 : 0;
-        const bActionable = b.friend.calendarConnected ? 1 : 0;
-        if (aActionable !== bActionable) return bActionable - aActionable;
-        // Then by overdue-ness
         if (Math.abs(aOverdue - bOverdue) > 0.3) return bOverdue - aOverdue;
         // Fallback: alphabetical
         return getFirstName(a.friend.displayName).localeCompare(getFirstName(b.friend.displayName));

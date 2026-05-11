@@ -16,8 +16,10 @@ interface EventSearchModalProps {
 export interface ScheduleShowtime {
   datetime: string;
   available: boolean;
-  allFree: string[];
-  conflicts: { name: string; reason: string }[];
+  availabilityState: 'all_clear' | 'some_busy' | 'check_incomplete';
+  totalParticipants: number;
+  busyCount: number;
+  checkFailedCount: number;
   ticketUrl: string;
   price?: { min?: number | null; max?: number | null } | null;
 }
@@ -124,6 +126,9 @@ export default function EventSearchModal({
               event={results.event}
               showtimes={results.showtimes}
               friendIds={Array.from(selectedFriendIds)}
+              friendNames={friends
+                .filter((f) => selectedFriendIds.has(f.friend.id))
+                .map((f) => getSmartDisplayName(f.friend.displayName, friends.map((g) => g.friend.displayName)))}
             />
           </div>
         </div>

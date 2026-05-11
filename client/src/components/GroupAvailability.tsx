@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
 import { trackMeetupScheduled } from '../lib/analytics';
-import { getSmartDisplayName } from '../lib/utils';
 import AddToCalendarModal from './AddToCalendarModal';
 import EventScheduleButton from './EventScheduleButton';
 
@@ -14,15 +13,6 @@ interface ScoredSlot {
   timeLabel: string;
 }
 
-interface ParticipantSync {
-  id?: string;
-  userId?: string;
-  name?: string;
-  displayName?: string;
-  synced: boolean;
-  calendarConnected: boolean;
-}
-
 interface GroupAvailabilityProps {
   friendIds: string[];
   friendNames: string[];
@@ -31,11 +21,11 @@ interface GroupAvailabilityProps {
   onBook?: (slot: ScoredSlot) => void;
 }
 
-export default function GroupAvailability({ friendIds, friendNames, allFriendNames = [], onClose, onBook }: GroupAvailabilityProps) {
+export default function GroupAvailability({ friendIds, friendNames, onClose, onBook }: GroupAvailabilityProps) {
   const [loading, setLoading] = useState(true);
   const [suggestions, setSuggestions] = useState<ScoredSlot[]>([]);
   const [overlaps, setOverlaps] = useState<{ start: string; end: string }[]>([]);
-  const [participants, setParticipants] = useState<ParticipantSync[]>([]);
+  const [everyoneSynced, setEveryoneSynced] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [booked, setBooked] = useState<string | null>(null);
@@ -57,7 +47,9 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
       });
       setSuggestions(data.suggestions || []);
       setOverlaps(data.overlaps || []);
-      setParticipants(data.syncStatus?.participants || data.participants || []);
+      // Privacy: API no longer returns per-friend sync status. Track only
+      // whether everyone is fully synced so we can show a generic empty state.
+      setEveryoneSynced(Boolean(data.syncStatus?.everyoneSynced ?? true));
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
       setError(axiosErr.response?.data?.error || axiosErr.message || 'Failed to find group availability');
@@ -144,29 +136,8 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
         </button>
       </div>
 
-      {/* Participant sync status */}
-      {participants.length > 0 && (
-        <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap gap-2">
-          {participants.map(p => (
-            <span
-              key={p.userId || p.id}
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border ${
-                p.synced
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : p.calendarConnected
-                    ? 'border-amber-200 bg-amber-50 text-amber-700'
-                    : 'border-gray-200 bg-gray-50 text-gray-500'
-              }`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${
-                p.synced ? 'bg-emerald-500' : p.calendarConnected ? 'bg-amber-400' : 'bg-gray-300'
-              }`} />
-              {getSmartDisplayName(p.displayName || p.name || "Friend", allFriendNames.length > 0 ? allFriendNames : friendNames)}
-              {p.synced ? '' : p.calendarConnected ? ' (syncing…)' : ' (no cal)'}
-            </span>
-          ))}
-        </div>
-      )}
+      {/* Privacy: per-friend sync badges removed — Slotted never shows another
+          person's calendar sync state. Server auto-nudges friends to connect. */}
 
       {/* Content */}
       <div className="px-5 py-4">
@@ -230,51 +201,29 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
           </div>
         ) : suggestions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center px-4">
-            {(() => {
-              const unsynced = participants.filter(p => !p.calendarConnected);
-              if (unsynced.length > 0) {
-                const names = unsynced.map(p => (p.displayName || p.name || "Friend").split(' ')[0]).join(' & ');
-                return (
-                  <>
-                    <span className="text-3xl">📅</span>
-                    <h4 className="mt-3 text-sm font-semibold text-gray-800">
-                      {names} {unsynced.length === 1 ? 'hasn\'t' : 'haven\'t'} connected {unsynced.length === 1 ? 'a' : 'their'} calendar yet
-                    </h4>
-                    <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-                      Send a reminder to sync, or just pick a time and ask if it works.
-                    </p>
-                    <button
-                      onClick={async () => {
-                        try {
-                          for (const p of unsynced) {
-                            await api.post('/notifications/nudge-calendar', { friendId: p.userId || p.id });
-                          }
-                          alert(`Sent ${names} a reminder to connect!`);
-                        } catch { /* silent */ }
-                      }}
-                      className="mt-4 inline-flex rounded-lg border border-purple-200 bg-purple-50 px-4 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition-all"
-                    >
-                      Send {unsynced.length === 1 ? 'a' : ''} reminder{unsynced.length > 1 ? 's' : ''}
-                    </button>
-                    <div className="mt-3 w-full">
-                      <EventScheduleButton preselectedFriendIds={friendIds} variant="compact" />
-                    </div>
-                  </>
-                );
-              }
-              return (
-                <>
-                  <span className="text-3xl">😅</span>
-                  <h4 className="mt-3 text-sm font-semibold text-gray-800">Everyone's pretty busy!</h4>
-                  <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-                    No common free times for all {friendNames.length + 1} people in the next 2 weeks. Try a smaller group or check back soon!
-                  </p>
-                  <div className="mt-4 w-full">
-                    <EventScheduleButton preselectedFriendIds={friendIds} variant="compact" />
-                  </div>
-                </>
-              );
-            })()}
+            {!everyoneSynced ? (
+              <>
+                <span className="text-3xl">🔎</span>
+                <h4 className="mt-3 text-sm font-semibold text-gray-800">Still finding times</h4>
+                <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                  We're checking everyone's availability. Hang tight — or pick a time below and we'll confirm with the group.
+                </p>
+                <div className="mt-3 w-full">
+                  <EventScheduleButton preselectedFriendIds={friendIds} variant="compact" />
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="text-3xl">😅</span>
+                <h4 className="mt-3 text-sm font-semibold text-gray-800">Everyone's pretty busy!</h4>
+                <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                  No common free times for all {friendNames.length + 1} people in the next 2 weeks. Try a smaller group or check back soon!
+                </p>
+                <div className="mt-4 w-full">
+                  <EventScheduleButton preselectedFriendIds={friendIds} variant="compact" />
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-2">

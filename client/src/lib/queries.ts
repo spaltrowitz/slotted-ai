@@ -50,10 +50,7 @@ export interface FriendRecord {
   friend: {
     id: string;
     displayName: string;
-    email: string;
     photoUrl?: string;
-    socialBattery?: string;
-    calendarConnected?: boolean;
     eventInterests?: string[];
   };
 }

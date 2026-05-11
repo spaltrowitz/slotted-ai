@@ -47,8 +47,22 @@ export default function LoginPage() {
           <span className="gradient-text">Just hang out.</span>
         </h1>
         <p className="mx-auto mt-3 sm:mt-5 max-w-xl text-sm sm:text-base leading-relaxed text-gray-500">
-          Slotted.ai connects to your calendar, finds when you and your friends are both free, and makes it easy to actually make plans.
+          Slotted picks the best times to see your friends — across Google, Apple, and Outlook. Your calendar stays private.
         </p>
+
+        {/* Provider trio */}
+        <div className="mt-3 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-wider text-gray-400">
+          <span>Works with</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-2.5 py-1 shadow-sm">
+            <span aria-hidden="true">🟦</span>Google
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-2.5 py-1 shadow-sm">
+            <span aria-hidden="true">🍎</span>Apple
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-2.5 py-1 shadow-sm">
+            <span aria-hidden="true">🟪</span>Outlook
+          </span>
+        </div>
 
         {/* CTA */}
         <div className="mt-5 sm:mt-8 flex flex-col items-center gap-3">
@@ -116,7 +130,7 @@ export default function LoginPage() {
             {
               step: '1',
               title: 'Connect calendar',
-              desc: 'Sign in with Google. We only see free or busy, never event titles or details.',
+              desc: 'Sign in with Google, Apple, or Outlook. We only see free or busy, never event titles or details.',
               color: 'from-blue-50 to-cyan-50',
               border: 'border-blue-100',
             },
@@ -163,7 +177,7 @@ export default function LoginPage() {
             "Turn \"let's hang\" into a real plan, no back and forth",
             "Gentle nudge when it's been a while since you hung out",
             "Connect calendars. Slotted finds when everyone's free",
-            'Your calendar stays private. We only see free or busy',
+            'Your calendar stays private. Friends never see your battery or blocks',
           ].map((text, i) => (
             <div key={i} className="flex items-center gap-2.5 rounded-lg bg-white/60 px-3 py-2">
               <p className="text-xs text-gray-600">{text}</p>
@@ -195,7 +209,7 @@ export default function LoginPage() {
             },
             {
               title: 'Your calendar stays private',
-              desc: 'We only see free or busy, never details. You control what friends can see.',
+              desc: 'Friends never see your battery, your free blocks, or your sync status. We only see free or busy — never details.',
               accent: 'border-l-cyan-400',
             },
           ].map((item) => (

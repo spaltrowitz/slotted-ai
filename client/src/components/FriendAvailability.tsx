@@ -36,7 +36,6 @@ interface ScoredSlot {
 
 interface SyncStatus {
   me: { synced: boolean };
-  friend: { synced: boolean; name: string; calendarConnected: boolean };
 }
 
 interface FriendAvailabilityProps {
@@ -269,23 +268,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
           <div className="flex flex-col items-center justify-center py-10 text-center px-4">
             {(() => {
               const meNotSynced = !syncStatus?.me.synced;
-              const friendNotSynced = syncStatus?.friend && !syncStatus.friend.calendarConnected;
-              const displayName = syncStatus?.friend?.name || friendFirst;
 
-              if (meNotSynced && friendNotSynced) {
-                return (
-                  <>
-                    <span className="text-3xl">📅</span>
-                    <h4 className="mt-3 text-sm font-semibold text-gray-800">Neither of you have calendars connected yet!</h4>
-                    <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-                      Connect your calendar in Settings so Slotted can find times you're both free. Ask {displayName} to connect theirs too!
-                    </p>
-                    <a href="/settings" className="mt-4 inline-flex rounded-lg gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm">
-                      Connect my calendar
-                    </a>
-                  </>
-                );
-              }
               if (meNotSynced) {
                 return (
                   <>
@@ -300,34 +283,10 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                   </>
                 );
               }
-              if (friendNotSynced) {
-                return (
-                  <>
-                    <span className="text-3xl">👋</span>
-                    <h4 className="mt-3 text-sm font-semibold text-gray-800">{displayName} hasn't synced their calendar</h4>
-                    <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-                      Send a reminder, or just pick a time and we'll check if they're free.
-                    </p>
-                    <div className="mt-4 flex gap-2">
-                      <button
-                        onClick={async () => {
-                          try {
-                            await api.post('/notifications/nudge-calendar', { friendId });
-                            alert(`Sent ${displayName} a reminder to connect their calendar!`);
-                          } catch { /* silent */ }
-                        }}
-                        className="inline-flex rounded-lg border border-slotted-200 bg-slotted-50 px-4 py-2 text-xs font-semibold text-slotted-700 hover:bg-slotted-100 transition-all"
-                      >
-                        Send a reminder
-                      </button>
-                    </div>
-                  </>
-                );
-              }
               return (
                 <>
-                  <span className="text-3xl">😅</span>
-                  <h4 className="mt-3 text-sm font-semibold text-gray-800">You're both pretty busy!</h4>
+                  <span className="text-3xl">🔎</span>
+                  <h4 className="mt-3 text-sm font-semibold text-gray-800">Still finding times</h4>
                   <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
                     No overlapping free times in the next 2 weeks. Try checking back in a few days — schedules change!
                   </p>
@@ -343,7 +302,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                 How about {suggestions[0].dayLabel} at {suggestions[0].timeLabel}?
               </p>
               <p className="mt-2 text-sm text-gray-500">
-                {friendFirst} is free. You're free.
+                This time looks promising for both of you.
               </p>
               <button
                 onClick={() => setPendingSlot(suggestions[0])}
