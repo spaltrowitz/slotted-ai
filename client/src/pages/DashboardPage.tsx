@@ -922,10 +922,7 @@ export default function DashboardPage() {
                         )}
                         {poll.pending.length > 0 && !needsMyPicks && (
                           <div className="rounded-xl border border-slate-100 bg-white px-2.5 py-2">
-                            <div className="mb-1.5 flex items-center justify-between gap-2">
-                              <p className="min-w-0 truncate text-[11px] font-semibold text-slate-600">
-                                ⏳ Still waiting
-                              </p>
+                            <div className="flex flex-wrap items-center gap-1.5">
                               {poll.isOwner && (
                                 <button
                                   type="button"
@@ -936,8 +933,6 @@ export default function DashboardPage() {
                                   {nudgePollMutation.isPending ? 'Sending…' : '👋 Nudge'}
                                 </button>
                               )}
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
                               {poll.pending.map((person) => (
                                 <PersonChip key={person.userId} person={person} tone="pending" />
                               ))}
@@ -946,7 +941,7 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      <div className="mt-3 grid grid-cols-3 gap-2">
+                      <div className={`mt-3 grid gap-2 ${poll.invitesClosed ? 'grid-cols-2' : 'grid-cols-3'}`}>
                         <Link
                           to={`/event-poll/${poll.id}`}
                           className={`flex min-h-[40px] items-center justify-center rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors ${
@@ -959,22 +954,22 @@ export default function DashboardPage() {
                         >
                           {needsMyPicks ? 'Choose dates' : isReadyToChoose ? 'Pick date' : 'Edit dates'}
                         </Link>
-                        <button
-                          type="button"
-                          onClick={() => copyPollInvite(poll)}
-                          disabled={sharingPollId === poll.id || poll.invitesClosed}
-                          className={`min-h-[40px] rounded-xl px-2 py-2 text-xs font-semibold transition-all disabled:opacity-100 ${
-                            poll.invitesClosed
-                              ? 'cursor-not-allowed border border-gray-200 bg-gray-50 text-gray-400'
-                              : needsMyPicks
+                        {!poll.invitesClosed && (
+                          <button
+                            type="button"
+                            onClick={() => copyPollInvite(poll)}
+                            disabled={sharingPollId === poll.id}
+                            className={`min-h-[40px] rounded-xl px-2 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
+                              needsMyPicks
                                 ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm'
                                 : isReadyToChoose
                                   ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                                   : 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm hover:shadow-md'
-                          }`}
-                        >
-                          {copiedPollId === poll.id ? 'Copied!' : poll.invitesClosed ? '🔒 Link closed' : 'Copy link'}
-                        </button>
+                            }`}
+                          >
+                            {copiedPollId === poll.id ? 'Copied!' : 'Copy link'}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setExpandedPollId(isExpanded ? null : poll.id)}
