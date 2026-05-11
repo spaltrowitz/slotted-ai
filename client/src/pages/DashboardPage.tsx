@@ -372,17 +372,6 @@ export default function DashboardPage() {
     }
   }, [getPollInviteUrl]);
 
-  const textPollInvite = useCallback(async (poll: EventPollSummary) => {
-    setSharingPollId(poll.id);
-    try {
-      const inviteUrl = await getPollInviteUrl(poll);
-      const message = `Pick your dates for ${poll.eventTitle}${poll.eventVenue ? ` at ${poll.eventVenue}` : ''} with me`;
-      window.open(`sms:?&body=${encodeURIComponent(`${message}\n\n${inviteUrl}`)}`, '_self');
-    } finally {
-      setSharingPollId(null);
-    }
-  }, [getPollInviteUrl]);
-
   /* ─── derived data ─── */
   const currentUserId = user?.uid?.replace(/^firebase_/, '') || '';
   const now = useMemo(() => new Date(), []);
@@ -986,16 +975,47 @@ export default function DashboardPage() {
                       </div>
 
                       {isExpanded && (
-                        <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/70 p-2">
-                          <div className="flex flex-wrap items-center gap-2">
+                        <div className="mt-2 space-y-2 rounded-xl border border-gray-100 bg-gray-50/70 p-2">
+                          {poll.isOwner && friendsAvailableForPoll.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={selectedPollFriendId}
+                                onChange={(event) => setPollFriendSelections((prev) => ({ ...prev, [poll.id]: event.target.value }))}
+                                className="min-h-[36px] min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-700"
+                                aria-label={`Add a friend to ${poll.eventTitle}`}
+                              >
+                                <option value="">Add friend</option>
+                                {friendsAvailableForPoll.map((friend) => (
+                                  <option key={friend.friend.id} value={friend.friend.id}>
+                                    {getSmartDisplayName(friend.friend.displayName, allFriendNames)}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (selectedPollFriendId) {
+                                    addPollFriendMutation.mutate({ scheduleId: poll.id, friendId: selectedPollFriendId });
+                                  }
+                                }}
+                                disabled={!selectedPollFriendId || addPollFriendMutation.isPending}
+                                className="min-h-[36px] shrink-0 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+                              >
+                                Add to poll
+                              </button>
+                            </div>
+                          )}
+                          {poll.isOwner && poll.invitesClosed && (
                             <button
                               type="button"
-                              onClick={() => textPollInvite(poll)}
-                              disabled={sharingPollId === poll.id}
-                              className="min-h-[38px] w-auto rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                              onClick={() => closePollInvitesMutation.mutate({ scheduleId: poll.id, closed: !poll.invitesClosed })}
+                              disabled={closePollInvitesMutation.isPending}
+                              className="min-h-[36px] w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
                             >
-                              {sharingPollId === poll.id ? 'Opening...' : 'Text invite link'}
+                              Reopen invites
                             </button>
+                          )}
+                          <div className="border-t border-gray-200/70 pt-2">
                             <button
                               type="button"
                               onClick={() => {
@@ -1007,50 +1027,11 @@ export default function DashboardPage() {
                                 }
                               }}
                               disabled={deletePollMutation.isPending}
-                              className="min-h-[38px] w-auto rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                              className="min-h-[36px] w-full rounded-lg border border-red-100 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
                             >
-                            {poll.isOwner ? 'Delete poll' : 'Leave poll'}
-                          </button>
-                        </div>
-                          {poll.isOwner && poll.invitesClosed && (
-                            <button
-                              type="button"
-                              onClick={() => closePollInvitesMutation.mutate({ scheduleId: poll.id, closed: !poll.invitesClosed })}
-                              disabled={closePollInvitesMutation.isPending}
-                              className="mt-2 min-h-[44px] w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                            >
-                              Reopen invites
+                              {poll.isOwner ? 'Delete poll' : 'Leave poll'}
                             </button>
-                          )}
-                          {poll.isOwner && friendsAvailableForPoll.length > 0 && (
-                            <div className="mt-2 flex items-center gap-2">
-                                <select
-                                  value={selectedPollFriendId}
-                                  onChange={(event) => setPollFriendSelections((prev) => ({ ...prev, [poll.id]: event.target.value }))}
-                                  className="min-h-[36px] min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-700"
-                                  aria-label={`Add a friend to ${poll.eventTitle}`}
-                                >
-                                  <option value="">Add friend</option>
-                                  {friendsAvailableForPoll.map((friend) => (
-                                    <option key={friend.friend.id} value={friend.friend.id}>
-                                      {getSmartDisplayName(friend.friend.displayName, allFriendNames)}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (selectedPollFriendId) {
-                                      addPollFriendMutation.mutate({ scheduleId: poll.id, friendId: selectedPollFriendId });
-                                    }
-                                  }}
-                                  disabled={!selectedPollFriendId || addPollFriendMutation.isPending}
-                                  className="min-h-[36px] shrink-0 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
-                                >
-                                  Add to poll
-                                </button>
-                            </div>
-                            )}
+                          </div>
                         </div>
                       )}
                     </div>
