@@ -1132,14 +1132,14 @@ export default function DashboardPage() {
                 <ShareInviteButton inviteUrl={inviteUrl} variant="inline" />
               </div>
               {!friendTipDismissed && (
-                <div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-slotted-100 bg-slotted-50/70 px-3 py-2.5">
-                  <p className="text-xs leading-relaxed text-slotted-800">
+                <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-slotted-100 bg-slotted-50/70 px-3 py-1.5">
+                  <p className="text-[11px] leading-tight text-slotted-800">
                     Tap a friend, or check multiple for group plans.
                   </p>
                   <button
                     type="button"
                     onClick={dismissFriendTip}
-                    className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-sm font-semibold text-slotted-500 transition-colors hover:bg-white/70 hover:text-slotted-700"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-slotted-500 transition-colors hover:bg-white/70 hover:text-slotted-700"
                     aria-label="Dismiss friend tip"
                   >
                     ×
