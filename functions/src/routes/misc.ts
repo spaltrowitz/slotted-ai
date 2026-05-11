@@ -25,6 +25,31 @@ function authWithRateLimit(req: AuthRequest, res: Response, next: express.NextFu
 // Suggestions routes (AI scoring — placeholder logic for now)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Smart AI-powered suggestions based on meetup history
+// (MUST be registered before /suggestions/:friendId to avoid being shadowed)
+// ---------------------------------------------------------------------------
+router.get("/suggestions/smart", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const dbUser = await getDbUser(req.uid!);
+    if (!dbUser) { res.status(404).json({ error: "User not found" }); return; }
+
+    const [suggestions, patterns] = await Promise.all([
+      generateSmartSuggestions(dbUser.id),
+      analyzeFriendPatterns(dbUser.id),
+    ]);
+
+    res.json({
+      suggestions,
+      patterns: patterns.slice(0, 10),
+      hasEnoughData: patterns.some(p => p.totalHangouts >= 3),
+    });
+  } catch (err: any) {
+    console.error("Smart suggestions error:", err?.stack || err?.message || err);
+    res.status(500).json({ error: err?.message || "Internal error" });
+  }
+});
+
 /** GET /suggestions/:friendId — get suggested meeting times */
 router.get("/suggestions/:friendId", authWithRateLimit, async (req: AuthRequest, res: Response) => {
   const { friendId } = req.params;
@@ -88,30 +113,6 @@ router.post("/suggestions/:suggestionId/act", authWithRateLimit, async (req: Aut
     }
     res.json(data);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Smart AI-powered suggestions based on meetup history
-// ---------------------------------------------------------------------------
-router.get("/suggestions/smart", authWithRateLimit, async (req: AuthRequest, res: Response) => {
-  try {
-    const dbUser = await getDbUser(req.uid!);
-    if (!dbUser) { res.status(404).json({ error: "User not found" }); return; }
-
-    const [suggestions, patterns] = await Promise.all([
-      generateSmartSuggestions(dbUser.id),
-      analyzeFriendPatterns(dbUser.id),
-    ]);
-
-    res.json({
-      suggestions,
-      patterns: patterns.slice(0, 10),
-      hasEnoughData: patterns.some(p => p.totalHangouts >= 3),
-    });
-  } catch (err: any) {
-    console.error("Smart suggestions error:", err);
     res.status(500).json({ error: err.message });
   }
 });
