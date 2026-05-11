@@ -180,12 +180,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Footer */}
       <footer className="border-t border-gray-100 py-4 px-4">
-        <div className="mx-auto max-w-6xl flex items-center justify-center gap-4 text-[11px] text-gray-400">
+        <div className="mx-auto max-w-6xl flex flex-wrap items-center justify-center gap-3 text-[11px] text-gray-400 sm:gap-4">
           <Link to="/privacy" className="hover:text-gray-600 transition-colors">Privacy</Link>
           <span>·</span>
           <Link to="/terms" className="hover:text-gray-600 transition-colors">Terms</Link>
           <span>·</span>
           <Link to="/help" className="hover:text-gray-600 transition-colors">Help</Link>
+          <span>·</span>
+          <a
+            href="https://venmo.com/shari-paltrowitz?txn=pay&amount=5&note=Slotted%20%F0%9F%93%85"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-violet-500 hover:text-violet-700 transition-colors"
+          >
+            📅 Fund my next friend date — $5
+          </a>
         </div>
       </footer>
     </div>
