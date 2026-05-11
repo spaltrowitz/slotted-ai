@@ -826,7 +826,7 @@ export default function DashboardPage() {
               ) : (
               <div className="space-y-2">
                 {sortedEventPolls.slice(0, 3).map((poll) => {
-                  const pendingFirstNames = poll.pending.map((p) => p.name);
+                  // (pending names rendered as chips below; no inline list needed)
                   const knownParticipantCount = poll.voted.length + poll.pending.length;
                   const knownResponsePct = knownParticipantCount ? Math.round((poll.voted.length / knownParticipantCount) * 100) : 0;
                   const needsMyPicks = Boolean(poll.needsMyPicks);
@@ -841,11 +841,6 @@ export default function DashboardPage() {
                       : poll.voted.length === 0
                       ? 'Waiting for responses'
                       : `${poll.voted.length} ${poll.voted.length === 1 ? 'response' : 'responses'}`;
-                  const pendingLabel = poll.pending.length === 1
-                    ? `Waiting on ${pendingFirstNames[0]}`
-                    : poll.pending.length === 2
-                      ? `Waiting on ${pendingFirstNames[0]} + ${pendingFirstNames[1]}`
-                      : `Waiting on ${poll.pending.length} people`;
                   const pollParticipantIds = new Set([
                     ...poll.voted.map((v) => v.userId),
                     ...poll.pending.map((p) => p.userId),
