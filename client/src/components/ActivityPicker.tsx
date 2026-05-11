@@ -127,7 +127,7 @@ export default function ActivityPicker({ date, startTime, endTime, onSelectEvent
                 {ev.imageUrl ? (
                   <img src={ev.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover shrink-0" loading="lazy" />
                 ) : (
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-100 to-pink-100 text-base">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-100 to-pink-100 text-base">
                     {TYPE_EMOJI[ev.type?.toLowerCase()] || '🎟️'}
                   </div>
                 )}

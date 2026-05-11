@@ -197,7 +197,7 @@ export default function EventShowtimesPoll({
                   href={orderedShowtimes[0].ticketUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-0.5 font-medium text-indigo-600 hover:text-indigo-800"
+                  className="inline-flex items-center gap-0.5 font-medium text-sky-600 hover:text-sky-800"
                 >
                   🎟️ Tickets
                 </a>

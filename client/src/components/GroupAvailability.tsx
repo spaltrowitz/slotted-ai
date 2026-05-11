@@ -115,9 +115,9 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
 
 
   return (
-    <div className={`overflow-hidden rounded-2xl border border-indigo-200/60 bg-white ${embedded ? 'shadow-sm' : 'shadow-lg'}`}>
+    <div className={`overflow-hidden rounded-2xl border border-sky-200/60 bg-white ${embedded ? 'shadow-sm' : 'shadow-lg'}`}>
       {/* Header — purple gradient for groups */}
-      <div className={`flex items-center justify-between border-b border-indigo-100 bg-gradient-to-r from-indigo-50/50 to-indigo-50/30 px-4 sm:px-5 ${embedded ? 'py-3' : 'py-4'}`}>
+      <div className={`flex items-center justify-between border-b border-sky-100 bg-gradient-to-r from-sky-50/50 to-sky-50/30 px-4 sm:px-5 ${embedded ? 'py-3' : 'py-4'}`}>
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-sm font-bold text-gray-900 truncate">
             Group Availability ({friendNames.length + 1} people)
@@ -198,7 +198,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
           </div>
         ) : loading ? (
           <div className="flex flex-col items-center justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-3 border-indigo-400 border-t-transparent" />
+            <div className="h-8 w-8 animate-spin rounded-full border-3 border-sky-400 border-t-transparent" />
             <p className="mt-3 text-xs text-gray-400">Syncing {friendNames.length + 1} calendars &amp; finding overlaps…</p>
           </div>
         ) : error ? (
@@ -245,7 +245,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                 key={slot.start}
                 className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
                   idx === 0
-                    ? 'border-indigo-200 bg-gradient-to-r from-indigo-50/60 to-indigo-50/40 shadow-sm'
+                    ? 'border-sky-200 bg-gradient-to-r from-sky-50/60 to-sky-50/40 shadow-sm'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
                 }`}
               >
@@ -254,7 +254,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-gray-900">{slot.dayLabel}</p>
                     {idx === 0 && (
-                      <span className="rounded-full bg-gradient-to-r from-cyan-500 to-indigo-500 px-2 py-0.5 text-xs font-bold text-white">
+                      <span className="rounded-full bg-gradient-to-r from-cyan-500 to-sky-500 px-2 py-0.5 text-xs font-bold text-white">
                         Best match
                       </span>
                     )}
@@ -279,7 +279,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                     className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 ${
                       booked === slot.start
                         ? 'bg-emerald-500 text-white'
-                        : 'bg-gradient-to-r from-cyan-500 to-indigo-500 text-white'
+                        : 'bg-gradient-to-r from-cyan-500 to-sky-500 text-white'
                     }`}
                   >
                     {bookingSlot === slot.start ? '...' : booked === slot.start ? 'Sent! ✓' : 'Book it'}

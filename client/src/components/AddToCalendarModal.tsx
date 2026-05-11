@@ -111,7 +111,7 @@ export default function AddToCalendarModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="border-b border-gray-100 bg-gradient-to-r from-slotted-50/50 to-indigo-50/50 px-4 py-4 sm:px-6">
+        <div className="border-b border-gray-100 bg-gradient-to-r from-slotted-50/50 to-sky-50/50 px-4 py-4 sm:px-6">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-display text-base font-bold text-gray-900">Add to Calendar</h3>

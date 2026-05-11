@@ -327,7 +327,7 @@ export default function FriendsPage() {
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-slotted-400 border-t-transparent" />
         </div>
       ) : acceptedFriends.length === 0 && incomingInvites.length === 0 && outgoingInvites.length === 0 ? (
-        <div className="rounded-xl border border-slotted-200/60 bg-gradient-to-br from-slotted-50/60 to-indigo-50/40 overflow-hidden">
+        <div className="rounded-xl border border-slotted-200/60 bg-gradient-to-br from-slotted-50/60 to-sky-50/40 overflow-hidden">
           <div className="flex flex-col items-center justify-center px-6 py-16">
             <h3 className="font-display text-lg font-bold text-gray-900">
               Ready to connect?
@@ -375,7 +375,7 @@ export default function FriendsPage() {
                   {f.friend.photoUrl ? (
                     <img src={f.friend.photoUrl} alt="" className="h-11 w-11 rounded-full" loading="lazy" />
                   ) : (
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-indigo-500 text-sm font-semibold text-white">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-sky-500 text-sm font-semibold text-white">
                       {f.friend.displayName?.[0] ?? '?'}
                     </div>
                   )}

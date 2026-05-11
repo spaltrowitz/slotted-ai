@@ -26,16 +26,16 @@ export default function EventPollBottomBar({
   if (submitted) {
     return (
       <>
-        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-indigo-200 bg-indigo-50/95 backdrop-blur-sm px-4 py-3 safe-bottom">
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-sky-200 bg-sky-50/95 backdrop-blur-sm px-4 py-3 safe-bottom">
           <div className="mx-auto max-w-lg flex items-center justify-between gap-3">
-            <span className="text-xs text-indigo-600">
+            <span className="text-xs text-sky-600">
               ⏳ Waiting for {pendingFriends.length > 2
                 ? `${pendingFriends[0]}, ${pendingFriends[1]} +${pendingFriends.length - 2}`
                 : pendingFriends.join(', ')}…
             </span>
             <button
               onClick={() => setShowModal(true)}
-              className="rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+              className="rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
             >
               🔗 Invite friends
             </button>
@@ -65,7 +65,7 @@ export default function EventPollBottomBar({
           disabled={selectedCount === 0 || submitting}
           className={`rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all ${
             selectedCount > 0 && !submitting
-              ? 'bg-gradient-to-r from-cyan-500 to-indigo-500 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0'
+              ? 'bg-gradient-to-r from-cyan-500 to-sky-500 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0'
               : 'bg-gray-300 cursor-not-allowed'
           }`}
         >

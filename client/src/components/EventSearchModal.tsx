@@ -353,7 +353,7 @@ export default function EventSearchModal({
                   }}
                   className={`min-h-[44px] rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
                     selected
-                      ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
+                      ? 'bg-sky-100 text-sky-700 ring-1 ring-sky-300'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
@@ -393,7 +393,7 @@ export default function EventSearchModal({
                     setDateWindows([]);
                     clearBrowseResults();
                   }}
-                  className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                  className="text-[11px] font-semibold text-sky-600 hover:text-sky-800"
                 >
                   Search all dates
                 </button>
@@ -411,7 +411,7 @@ export default function EventSearchModal({
                           setDateWindows((prev) => prev.filter((_, i) => i !== index));
                           clearBrowseResults();
                         }}
-                        className="min-h-[36px] rounded-full bg-indigo-50 px-3 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200"
+                        className="min-h-[36px] rounded-full bg-sky-50 px-3 text-xs font-semibold text-sky-700 ring-1 ring-sky-200"
                       >
                         {window.start}–{window.end} ✕
                       </button>
@@ -430,7 +430,7 @@ export default function EventSearchModal({
                       if (dateTo && e.target.value > dateTo) setDateTo('');
                       clearBrowseResults();
                     }}
-                    className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 focus:border-indigo-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 focus:border-sky-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-100"
                   />
                 </label>
                 <label className="block">
@@ -443,14 +443,14 @@ export default function EventSearchModal({
                       setDateTo(e.target.value);
                       clearBrowseResults();
                     }}
-                    className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 focus:border-indigo-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 focus:border-sky-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-100"
                   />
                 </label>
                 </div>
                 <button
                   type="button"
                   onClick={addDateWindow}
-                  className="min-h-[44px] w-full rounded-xl bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-200 transition-colors hover:bg-indigo-100"
+                  className="min-h-[44px] w-full rounded-xl bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 ring-1 ring-sky-200 transition-colors hover:bg-sky-100"
                 >
                   Add another date window
                 </button>
@@ -466,7 +466,7 @@ export default function EventSearchModal({
                     setTimeframeMode('specific');
                     clearBrowseResults();
                   }}
-                  className="mt-2 min-h-[44px] w-full rounded-xl bg-white px-3 py-2 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-200 transition-colors hover:bg-indigo-50"
+                  className="mt-2 min-h-[44px] w-full rounded-xl bg-white px-3 py-2 text-sm font-semibold text-sky-700 ring-1 ring-sky-200 transition-colors hover:bg-sky-50"
                 >
                   Add specific dates
                 </button>
@@ -497,7 +497,7 @@ export default function EventSearchModal({
                       }}
                       className={`min-h-[44px] shrink-0 rounded-full px-3 text-xs font-semibold transition-all ${
                         category === option.value
-                          ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
+                          ? 'bg-sky-100 text-sky-700 ring-1 ring-sky-300'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
@@ -510,7 +510,7 @@ export default function EventSearchModal({
                 type="button"
                 onClick={browseEvents}
                 disabled={browseLoading}
-                className="min-h-[44px] w-full rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+                className="min-h-[44px] w-full rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700 disabled:opacity-50"
               >
                 {browseLoading ? 'Finding events…' : 'Browse events'}
               </button>
@@ -527,12 +527,12 @@ export default function EventSearchModal({
                       key={event.id}
                       type="button"
                       onClick={() => searchEvent(event.title)}
-                      className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-2.5 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                      className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-2.5 text-left transition-all hover:border-sky-200 hover:bg-sky-50/40"
                     >
                       {event.imageUrl ? (
                         <img src={event.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover" loading="lazy" />
                       ) : (
-                        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-lg">🎟️</span>
+                        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-lg">🎟️</span>
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-gray-900">{event.title}</p>
@@ -565,7 +565,7 @@ export default function EventSearchModal({
                       onClick={() => toggleFriend(f.friend.id)}
                       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
                         isSelected
-                          ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
+                          ? 'bg-sky-100 text-sky-700 ring-1 ring-sky-300'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
@@ -577,12 +577,12 @@ export default function EventSearchModal({
                           loading="lazy"
                         />
                       ) : (
-                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-indigo-500 text-[11px] font-bold text-white">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-sky-500 text-[11px] font-bold text-white">
                           {f.friend.displayName?.[0]}
                         </span>
                       )}
                       {getSmartDisplayName(f.friend.displayName, allFriendNames)}
-                      {isSelected && <span className="text-indigo-500">✓</span>}
+                      {isSelected && <span className="text-sky-500">✓</span>}
                     </button>
                   );
                 })}
@@ -595,7 +595,7 @@ export default function EventSearchModal({
               type="button"
               onClick={findShowtimes}
               disabled={loading || eventQuery.trim().length < 2}
-              className="min-h-[44px] w-full rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+              className="min-h-[44px] w-full rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700 disabled:opacity-50"
             >
               {loading ? 'Finding showtimes…' : 'Continue to showtimes'}
             </button>
@@ -604,7 +604,7 @@ export default function EventSearchModal({
           {/* Loading state */}
           {loading && (
             <div className="flex flex-col items-center justify-center py-8 gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-400 border-t-transparent" />
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-sky-400 border-t-transparent" />
               <p className="text-sm text-gray-500">
                 Finding showtimes & checking calendars…
               </p>

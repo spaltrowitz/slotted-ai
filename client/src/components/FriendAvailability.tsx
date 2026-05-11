@@ -136,7 +136,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
   return (
     <div className={`mx-auto max-w-sm overflow-hidden rounded-2xl border border-gray-200/60 bg-white ${embedded ? 'shadow-sm' : 'shadow-lg'}`}>
       {/* Header */}
-      <div className={`flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-slotted-50/30 to-indigo-50/30 px-3 sm:px-4 ${embedded ? 'py-2.5' : 'py-3'}`}>
+      <div className={`flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-slotted-50/30 to-sky-50/30 px-3 sm:px-4 ${embedded ? 'py-2.5' : 'py-3'}`}>
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-sm font-bold text-gray-900 truncate">
             Suggestions with {getSmartDisplayName(friendName, allFriendNames)}
@@ -367,7 +367,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                 key={slot.start}
                 className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
                   idx === 0
-                    ? 'border-slotted-200 bg-gradient-to-r from-slotted-50/60 to-indigo-50/40 shadow-sm'
+                    ? 'border-slotted-200 bg-gradient-to-r from-slotted-50/60 to-sky-50/40 shadow-sm'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
                 }`}
               >
@@ -376,7 +376,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-gray-900">{slot.dayLabel}</p>
                     {idx === 0 && (
-                      <span className="rounded-full bg-gradient-to-r from-slotted-500 to-indigo-500 px-2 py-0.5 text-xs font-bold text-white">
+                      <span className="rounded-full bg-gradient-to-r from-slotted-500 to-sky-500 px-2 py-0.5 text-xs font-bold text-white">
                         Best match
                       </span>
                     )}

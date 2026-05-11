@@ -24,7 +24,7 @@ export default function EventScheduleButton({
       <>
         <button
           onClick={() => setShowModal(true)}
-          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-indigo-200 bg-gradient-to-r from-cyan-50 to-indigo-50 px-4 py-2.5 text-center text-sm font-semibold text-indigo-700 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-indigo-300"
+          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-sky-200 bg-gradient-to-r from-cyan-50 to-sky-50 px-4 py-2.5 text-center text-sm font-semibold text-sky-700 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-sky-300"
         >
           <span>{label ?? 'Find an event instead'}</span>
         </button>
@@ -44,7 +44,7 @@ export default function EventScheduleButton({
     <>
       <button
         onClick={() => setShowModal(true)}
-        className="w-full rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 px-5 py-3 text-center text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+        className="w-full rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 px-5 py-3 text-center text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
       >
         {label ?? (initialMode === 'browse' ? '🎟️ Browse event ideas' : '🎟️ Search by event name')}
       </button>
