@@ -193,7 +193,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             rel="noopener noreferrer"
             className="font-semibold text-sky-500 hover:text-sky-700 transition-colors"
           >
-            📅 Fund my next friend date — $5
+            📅 Enjoying Slotted.ai? Fund my next friend date
           </a>
         </div>
       </footer>
