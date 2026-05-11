@@ -14,6 +14,7 @@ import {
   getAuthedCalendarClient,
   getOutlookGraphClient,
   fetchAppleBusyBlocks,
+  autoAddToCalendar,
 } from "../utils/helpers";
 import { getSupabase } from "../supabase";
 import * as admin from "firebase-admin";
@@ -2485,9 +2486,14 @@ router.post("/events/schedules/:scheduleId/vote", authWithRateLimit, async (req:
               allParticipantIds.map((uid: string) => ({
                 meetup_id: meetup.id,
                 user_id: uid,
-                rsvp: uid === schedule.created_by ? "accepted" : "pending",
+                rsvp: "accepted",
               })),
             );
+
+          await getSupabase()
+            .from("meetups")
+            .update({ status: "confirmed" })
+            .eq("id", meetup.id);
 
           await getSupabase()
             .from("event_schedules")
@@ -2504,12 +2510,32 @@ router.post("/events/schedules/:scheduleId/vote", authWithRateLimit, async (req:
             if (uid === me.id) continue;
             await createNotification({
               userId: uid,
-              type: "meetup_request",
+              type: "meetup_confirmed",
               title: `${schedule.event_title} is confirmed! 🎉`,
               body: `Everyone voted — you're going on ${timeStr}`,
               relatedUserId: me.id,
               relatedId: meetup.id,
             });
+          }
+
+          // Auto-add to participants' calendars
+          const meetupData = {
+            id: meetup.id,
+            title: schedule.event_title,
+            location: schedule.event_venue || undefined,
+            start_time: startTime.toISOString(),
+            end_time: endTime.toISOString(),
+            status: "confirmed",
+          };
+          for (const uid of allParticipantIds) {
+            const { data: pUser } = await getSupabase()
+              .from("users")
+              .select("firebase_uid")
+              .eq("id", uid)
+              .maybeSingle();
+            if (pUser?.firebase_uid) {
+              autoAddToCalendar(pUser.firebase_uid, meetupData).catch(() => {});
+            }
           }
         }
       } else {
