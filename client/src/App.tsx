@@ -78,7 +78,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
             <p className="text-sm text-gray-500 mb-4">{this.state.error.message}</p>
             <button
               onClick={() => { this.setState({ error: null }); window.location.reload(); }}
-              className="rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all"
+              className="rounded-xl bg-gradient-to-r from-indigo-500 to-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all"
             >
               Reload
             </button>

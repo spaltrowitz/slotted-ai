@@ -411,7 +411,7 @@ export default function NotificationsPage() {
                                 {sharedEvent.imageUrl ? (
                                   <img src={sharedEvent.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover shrink-0 shadow-sm" loading="lazy" />
                                 ) : (
-                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-purple-100 to-pink-100 text-base">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-100 to-pink-100 text-base">
                                   </div>
                                 )}
                                 <div className="flex-1 min-w-0">
@@ -609,7 +609,7 @@ export default function NotificationsPage() {
                           <button
                             onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'update_time', notification); }}
                             disabled={counterProposeActionLoading === notification.id}
-                            className="rounded-lg bg-violet-500 px-4 py-1.5 text-xs font-semibold text-white transition-all hover:bg-violet-600 shadow-sm disabled:opacity-50"
+                            className="rounded-lg bg-indigo-500 px-4 py-1.5 text-xs font-semibold text-white transition-all hover:bg-indigo-600 shadow-sm disabled:opacity-50"
                           >
                             {counterProposeActionLoading === notification.id ? '...' : 'Update time'}
                           </button>

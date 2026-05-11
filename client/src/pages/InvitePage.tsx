@@ -95,7 +95,7 @@ export default function InvitePage() {
             {inviter.photoUrl ? (
               <img src={inviter.photoUrl} alt="" className="mx-auto h-16 w-16 rounded-full ring-4 ring-slotted-100 shadow-md" loading="lazy" />
             ) : (
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xl font-bold text-white ring-4 ring-slotted-100 shadow-md">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-indigo-500 text-xl font-bold text-white ring-4 ring-slotted-100 shadow-md">
                 {inviter.displayName?.[0] ?? '?'}
               </div>
             )}

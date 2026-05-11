@@ -75,7 +75,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute -top-40 right-0 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-amber-100/30 via-orange-100/20 to-transparent blur-3xl" />
         <div className="absolute top-1/3 -left-32 h-[400px] w-[400px] rounded-full bg-gradient-to-tr from-teal-100/25 via-cyan-50/20 to-transparent blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 h-[350px] w-[350px] rounded-full bg-gradient-to-tl from-violet-100/20 via-fuchsia-50/15 to-transparent blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 h-[350px] w-[350px] rounded-full bg-gradient-to-tl from-cyan-100/20 via-indigo-50/15 to-transparent blur-3xl" />
       </div>
 
       {/* Top navigation bar */}
@@ -191,7 +191,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             href="https://venmo.com/shari-paltrowitz?txn=pay&amount=5&note=Slotted%20%F0%9F%93%85"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-violet-500 hover:text-violet-700 transition-colors"
+            className="font-semibold text-indigo-500 hover:text-indigo-700 transition-colors"
           >
             📅 Fund my next friend date — $5
           </a>

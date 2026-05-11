@@ -34,38 +34,38 @@ export default function PostSubmitShareSection({
 
   return (
     <>
-      <div className="rounded-2xl bg-gradient-to-br from-violet-50 to-fuchsia-50 border border-violet-200 p-5 space-y-4">
+      <div className="rounded-2xl bg-gradient-to-br from-cyan-50 to-indigo-50 border border-indigo-200 p-5 space-y-4">
         {/* Confirmation */}
         <div className="text-center space-y-1">
-          <p className="text-sm font-semibold text-violet-900">
+          <p className="text-sm font-semibold text-indigo-900">
             ✅ Your dates are in!
           </p>
-          <p className="text-sm text-violet-700">
+          <p className="text-sm text-indigo-700">
             Now invite friends to pick theirs
           </p>
         </div>
 
         {/* Share CTA */}
-        <div className="rounded-xl bg-white/80 border border-violet-100 p-4 space-y-3">
+        <div className="rounded-xl bg-white/80 border border-indigo-100 p-4 space-y-3">
           <p className="text-center text-sm font-medium text-gray-800">
             Pick a time for {event.title} with me! 🎭
           </p>
 
           {inviteUrl ? (
             <>
-              <div className="rounded-xl border border-violet-100 bg-white px-3 py-2">
+              <div className="rounded-xl border border-indigo-100 bg-white px-3 py-2">
                 <p className="truncate font-mono text-xs text-gray-600">{inviteUrl}</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={copyInviteUrl}
-                  className="min-h-[44px] rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                  className="min-h-[44px] rounded-xl border border-indigo-200 bg-white px-3 py-2 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-50"
                 >
                   {copied ? 'Copied!' : 'Copy link'}
                 </button>
                 <button
                   onClick={textInviteUrl}
-                  className="min-h-[44px] rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md"
+                  className="min-h-[44px] rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md"
                 >
                   Text link
                 </button>
@@ -77,7 +77,7 @@ export default function PostSubmitShareSection({
           ) : (
             <button
               onClick={() => setShowModal(true)}
-              className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2"
+              className="w-full rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2"
             >
               🔗 Share invite link
             </button>
@@ -86,7 +86,7 @@ export default function PostSubmitShareSection({
 
         {/* Waiting status */}
         {pendingFriends.length > 0 && (
-          <p className="text-center text-xs text-violet-600">
+          <p className="text-center text-xs text-indigo-600">
             ⏳ Waiting for {pendingFriends.join(', ')}…
           </p>
         )}

@@ -154,7 +154,7 @@ export default function InviteFriendModal({ event, eventScheduleId, onClose }: I
               <button
                 onClick={generateLink}
                 disabled={!friendName.trim() || loading}
-                className="w-full rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Generating…' : 'Generate invite link'}
               </button>

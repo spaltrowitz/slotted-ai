@@ -128,7 +128,7 @@ export default function EventAutocomplete({ value, onChange, onSelect, inputRef 
           onFocus={() => { if (results.length > 0) setOpen(true); }}
           onBlur={() => { setTimeout(() => setOpen(false), 200); }}
           placeholder="Search for an event..."
-          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 pr-9 text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100 transition-all"
+          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 pr-9 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
           role="combobox"
           aria-expanded={open}
           aria-autocomplete="list"
@@ -136,7 +136,7 @@ export default function EventAutocomplete({ value, onChange, onSelect, inputRef 
         />
         {loading && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-400 border-t-transparent" />
           </div>
         )}
       </div>
@@ -156,7 +156,7 @@ export default function EventAutocomplete({ value, onChange, onSelect, inputRef 
               onMouseDown={() => selectItem(event)}
               onMouseEnter={() => setActiveIndex(idx)}
               className={`flex items-center gap-3 px-3.5 py-3 min-h-[44px] cursor-pointer transition-colors ${
-                idx === activeIndex ? 'bg-violet-50' : 'hover:bg-gray-50'
+                idx === activeIndex ? 'bg-indigo-50' : 'hover:bg-gray-50'
               }`}
             >
               <span className="shrink-0 text-lg">🎫</span>

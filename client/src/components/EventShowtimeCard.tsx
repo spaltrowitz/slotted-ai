@@ -66,7 +66,7 @@ export default function EventShowtimeCard({
     <div
       className={`w-full rounded-xl border p-3.5 text-left transition-all ${
         selected
-          ? 'ring-2 ring-violet-400 border-violet-300 bg-violet-50/60'
+          ? 'ring-2 ring-indigo-400 border-indigo-300 bg-indigo-50/60'
           : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
       } ${disabled ? 'opacity-60' : ''}`}
     >
@@ -82,7 +82,7 @@ export default function EventShowtimeCard({
           <div
             className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
               selected
-                ? 'border-violet-500 bg-violet-500'
+                ? 'border-indigo-500 bg-indigo-500'
                 : 'border-gray-300 bg-white'
             }`}
           >

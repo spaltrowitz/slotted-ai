@@ -38,7 +38,7 @@ export default function LoginPage() {
       {/* Warm gradient mesh — colorful but sophisticated */}
       <div className="absolute -top-32 -right-32 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-amber-200/50 via-orange-200/30 to-transparent blur-3xl" />
       <div className="absolute top-1/2 -left-40 h-[500px] w-[500px] rounded-full bg-gradient-to-tr from-teal-200/40 via-cyan-100/30 to-transparent blur-3xl" />
-      <div className="absolute -bottom-20 right-1/4 h-[400px] w-[400px] rounded-full bg-gradient-to-tl from-violet-200/30 via-fuchsia-100/20 to-transparent blur-3xl" />
+      <div className="absolute -bottom-20 right-1/4 h-[400px] w-[400px] rounded-full bg-gradient-to-tl from-cyan-200/30 via-indigo-100/20 to-transparent blur-3xl" />
 
       {/* Sticky nav */}
       <nav className="relative z-10 flex items-center justify-between px-4 sm:px-8 py-5">
@@ -115,7 +115,7 @@ export default function LoginPage() {
         <div className="grid grid-cols-3 gap-2 sm:hidden">
           {[
             { step: '1', title: 'Connect calendar', color: 'from-blue-50 to-cyan-50', border: 'border-blue-100' },
-            { step: '2', title: 'Invite friends', color: 'from-violet-50 to-fuchsia-50', border: 'border-violet-100' },
+            { step: '2', title: 'Invite friends', color: 'from-cyan-50 to-indigo-50', border: 'border-indigo-100' },
             { step: '3', title: 'Get suggestions', color: 'from-amber-50 to-orange-50', border: 'border-amber-100' },
           ].map((item) => (
             <div
@@ -145,8 +145,8 @@ export default function LoginPage() {
               step: '2',
               title: 'Invite friends',
               desc: 'Share a link. When they join, we find mutual free time.',
-              color: 'from-violet-50 to-fuchsia-50',
-              border: 'border-violet-100',
+              color: 'from-cyan-50 to-indigo-50',
+              border: 'border-indigo-100',
             },
             {
               step: '3',
@@ -202,7 +202,7 @@ export default function LoginPage() {
             {
               title: 'Skip the group text',
               desc: "Turn \"let's hang\" into a real plan without the back and forth.",
-              accent: 'border-l-violet-400',
+              accent: 'border-l-indigo-400',
             },
             {
               title: 'Stay in the loop',

@@ -72,7 +72,7 @@ export default function EventSharePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slotted-50 via-white to-purple-50">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slotted-50 via-white to-indigo-50">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-slotted-300 border-t-slotted-600" />
       </div>
     );
@@ -80,7 +80,7 @@ export default function EventSharePage() {
 
   if (error || !event) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slotted-50 via-white to-purple-50 p-6">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slotted-50 via-white to-indigo-50 p-6">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-xl">
           <div className="mb-4 text-4xl"></div>
           <h1 className="mb-2 text-lg font-bold text-gray-900">Event Not Found</h1>
@@ -99,7 +99,7 @@ export default function EventSharePage() {
   const icsUrl = `${API_BASE}/meetups/shared/${code}/ics`;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slotted-50 via-white to-purple-50 p-6">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slotted-50 via-white to-indigo-50 p-6">
       <div className="w-full max-w-sm space-y-5">
 
         {/* Sharer info */}

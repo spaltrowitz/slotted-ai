@@ -274,16 +274,16 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
 
   const typeConfig: Record<string, { emoji: string; bg: string; border: string }> = {
     friend_accepted: { emoji: '', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-    friend_request: { emoji: '', bg: 'bg-violet-50', border: 'border-violet-100' },
+    friend_request: { emoji: '', bg: 'bg-indigo-50', border: 'border-indigo-100' },
     meetup_request: { emoji: '', bg: 'bg-amber-50', border: 'border-amber-100' },
     meetup_confirmed: { emoji: '✅', bg: 'bg-emerald-50', border: 'border-emerald-100' },
     meetup_reminder: { emoji: '⏳', bg: 'bg-blue-50', border: 'border-blue-100' },
     calendar_match: { emoji: '', bg: 'bg-amber-50', border: 'border-amber-100' },
-    event_shared: { emoji: '', bg: 'bg-purple-50', border: 'border-purple-100' },
-    event_poll_update: { emoji: '', bg: 'bg-purple-50', border: 'border-purple-100' },
+    event_shared: { emoji: '', bg: 'bg-indigo-50', border: 'border-indigo-100' },
+    event_poll_update: { emoji: '', bg: 'bg-indigo-50', border: 'border-indigo-100' },
     meetup_rsvp_changed: { emoji: '', bg: 'bg-sky-50', border: 'border-sky-100' },
     meetup_time_changed: { emoji: '', bg: 'bg-indigo-50', border: 'border-indigo-100' },
-    meetup_counter_propose: { emoji: '', bg: 'bg-violet-50', border: 'border-violet-100' },
+    meetup_counter_propose: { emoji: '', bg: 'bg-indigo-50', border: 'border-indigo-100' },
   };
 
   const parseSharedEvent = (body: string) => {
@@ -386,7 +386,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                                   {sharedEvent.imageUrl ? (
                                     <img src={sharedEvent.imageUrl} alt="" className="h-8 w-8 rounded object-cover shrink-0" loading="lazy" />
                                   ) : (
-                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-gradient-to-br from-purple-100 to-pink-100 text-sm"></div>
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-gradient-to-br from-indigo-100 to-pink-100 text-sm"></div>
                                   )}
                                   <div className="flex-1 min-w-0">
                                     <p className="text-xs font-semibold text-gray-900 truncate">{sharedEvent.title}</p>
@@ -578,7 +578,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'update_time', notification); }}
                                   disabled={counterProposeActionLoading === notification.id}
-                                  className="rounded-lg bg-violet-500 px-3 py-2 min-h-[44px] text-xs font-semibold text-white hover:bg-violet-600 shadow-sm disabled:opacity-50"
+                                  className="rounded-lg bg-indigo-500 px-3 py-2 min-h-[44px] text-xs font-semibold text-white hover:bg-indigo-600 shadow-sm disabled:opacity-50"
                                 >
                                   {counterProposeActionLoading === notification.id ? '...' : 'Update time'}
                                 </button>

@@ -130,7 +130,7 @@ function StagePendingInvite({
           loading="lazy"
         />
       ) : (
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xl font-semibold text-white shadow-md ring-2 ring-white">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-indigo-500 text-xl font-semibold text-white shadow-md ring-2 ring-white">
           {primary.friend.displayName?.[0] ?? '?'}
         </div>
       )}
@@ -216,7 +216,7 @@ function PersonChip({
       {person.photoUrl ? (
         <img src={person.photoUrl} alt="" className="h-5 w-5 rounded-full ring-1 ring-white" loading="lazy" />
       ) : (
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[10px] font-semibold text-white ring-1 ring-white">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-indigo-500 text-[10px] font-semibold text-white ring-1 ring-white">
           {person.name?.[0] ?? '?'}
         </span>
       )}
@@ -808,7 +808,7 @@ export default function DashboardPage() {
                   <span className="min-w-0 truncate text-xs font-medium text-gray-600">
                     {eventPolls.length} active event poll{eventPolls.length === 1 ? '' : 's'}
                   </span>
-                  <span className="text-[11px] font-semibold text-violet-600">
+                  <span className="text-[11px] font-semibold text-indigo-600">
                     Show
                   </span>
                 </button>
@@ -862,7 +862,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200">
                           <div
-                            className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
+                            className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-indigo-500"
                             style={{ width: `${knownResponsePct}%` }}
                           />
                         </div>
@@ -895,7 +895,7 @@ export default function DashboardPage() {
                           </div>
                         )}
                         {poll.invitesClosed && !isReadyToChoose && (
-                          <p className="px-1 text-[11px] font-medium text-violet-700">
+                          <p className="px-1 text-[11px] font-medium text-indigo-700">
                             🔒 Invites closed — link only works for people already in this poll.
                           </p>
                         )}
@@ -940,7 +940,7 @@ export default function DashboardPage() {
                           to={`/event-poll/${poll.id}`}
                           className={`flex min-h-[40px] items-center justify-center rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors ${
                             needsMyPicks
-                              ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm'
+                              ? 'bg-gradient-to-r from-cyan-500 to-indigo-500 text-white shadow-sm'
                               : isReadyToChoose
                                 ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-sm'
                                 : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
@@ -955,10 +955,10 @@ export default function DashboardPage() {
                             disabled={sharingPollId === poll.id}
                             className={`min-h-[40px] rounded-xl px-2 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
                               needsMyPicks
-                                ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm'
+                                ? 'bg-gradient-to-r from-cyan-500 to-indigo-500 text-white shadow-sm'
                                 : isReadyToChoose
                                   ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                  : 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm hover:shadow-md'
+                                  : 'bg-gradient-to-r from-cyan-500 to-indigo-500 text-white shadow-sm hover:shadow-md'
                             }`}
                           >
                             {copiedPollId === poll.id ? 'Copied!' : 'Copy link'}
@@ -999,7 +999,7 @@ export default function DashboardPage() {
                                   }
                                 }}
                                 disabled={!selectedPollFriendId || addPollFriendMutation.isPending}
-                                className="min-h-[36px] shrink-0 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+                                className="min-h-[36px] shrink-0 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-50"
                               >
                                 Add to poll
                               </button>
@@ -1074,7 +1074,7 @@ export default function DashboardPage() {
                           ) : (
                             <div
                               key={p.userId}
-                              className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[10px] font-semibold text-white ring-2 ring-white"
+                              className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-indigo-500 text-[10px] font-semibold text-white ring-2 ring-white"
                             >
                               {p.displayName?.[0] ?? '?'}
                             </div>
@@ -1133,17 +1133,17 @@ export default function DashboardPage() {
                     {validSavedGroups.map((group) => (
                       <div
                         key={group.id}
-                        className="flex shrink-0 items-center overflow-hidden rounded-full border border-violet-100 bg-violet-50"
+                        className="flex shrink-0 items-center overflow-hidden rounded-full border border-indigo-100 bg-indigo-50"
                       >
                         <button
                           onClick={() => openSavedGroup(group.friendIds)}
-                          className="min-h-[44px] px-3 text-xs font-semibold text-violet-700"
+                          className="min-h-[44px] px-3 text-xs font-semibold text-indigo-700"
                         >
                           {group.name}
                         </button>
                         <button
                           onClick={() => deleteSavedGroup(group.id)}
-                          className="min-h-[44px] px-2 text-xs font-semibold text-violet-400 hover:text-violet-700"
+                          className="min-h-[44px] px-2 text-xs font-semibold text-indigo-400 hover:text-indigo-700"
                           aria-label={`Delete ${group.name}`}
                         >
                           ✕
@@ -1221,7 +1221,7 @@ export default function DashboardPage() {
                         {f.friend.photoUrl ? (
                           <img src={f.friend.photoUrl} alt="" className="h-11 w-11 rounded-full" loading="lazy" />
                         ) : (
-                          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-sm font-semibold text-white">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-indigo-500 text-sm font-semibold text-white">
                             {f.friend.displayName?.[0] ?? '?'}
                           </div>
                         )}
@@ -1279,7 +1279,7 @@ export default function DashboardPage() {
           )}
 
           {/* 5. Events section */}
-          <div className="rounded-2xl border border-violet-100 bg-gradient-to-r from-violet-50/60 to-fuchsia-50/40 p-4">
+          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-r from-cyan-50/60 to-indigo-50/40 p-4">
             <div className="flex items-start gap-3">
               <span className="text-2xl mt-0.5">🎟️</span>
               <div className="flex-1">

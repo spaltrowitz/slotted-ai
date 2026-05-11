@@ -370,7 +370,7 @@ export default function EventInviteLandingPage() {
   // Loading state
   if (loading || authLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-50 via-white to-amber-50">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-amber-50">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-slotted-300 border-t-slotted-600" />
       </div>
     );
@@ -379,7 +379,7 @@ export default function EventInviteLandingPage() {
   // Error state
   if (error || (!invite && !scheduleId)) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-50 via-white to-amber-50 p-6">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-amber-50 p-6">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-xl">
           <div className="mb-4 text-4xl">😕</div>
           <h1 className="mb-2 text-lg font-bold text-gray-900">
@@ -397,7 +397,7 @@ export default function EventInviteLandingPage() {
   // Done state — accepted
   if (phase === 'done') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-50 via-white to-amber-50 p-6">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-amber-50 p-6">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-xl">
           <div className="mb-4 text-4xl">🎉</div>
           <h1 className="mb-2 text-lg font-bold text-gray-900">{scheduleId ? 'Picks saved!' : "You're in!"}</h1>
@@ -433,7 +433,7 @@ export default function EventInviteLandingPage() {
     const bestOverlapCount = showtimes.reduce((best, item) => Math.max(best, item.voters.length), 0);
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-amber-50 px-4 py-6">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-amber-50 px-4 py-6">
         <div className="mx-auto max-w-md space-y-4">
           <div className="overflow-hidden rounded-2xl bg-white shadow-xl">
             {schedule.eventImageUrl && (
@@ -445,7 +445,7 @@ export default function EventInviteLandingPage() {
               />
             )}
             <div className="p-5">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-purple-600">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-600">
                 {allResponsesIn ? 'Ready to pick' : 'Choose dates'}
               </p>
               <h1 className="text-xl font-bold text-gray-900">
@@ -540,7 +540,7 @@ export default function EventInviteLandingPage() {
                   ? finalShowtimeIndex === null || confirmingDate || !!pendingRemoval
                   : selectedIndices.size === 0 || savingVote || !!pendingRemoval}
                 className={`min-h-[44px] rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                  allResponsesIn ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-purple-500 to-blue-500'
+                  allResponsesIn ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-indigo-500 to-blue-500'
                 }`}
               >
                 {pendingRemoval
@@ -559,8 +559,8 @@ export default function EventInviteLandingPage() {
   // Calendar connect phase
   if (phase === 'calendar') {
     return (
-      <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-purple-50 via-white to-amber-50">
-        <div className="absolute -top-32 -right-32 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-purple-200/40 via-pink-100/30 to-transparent blur-3xl" />
+      <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-indigo-50 via-white to-amber-50">
+        <div className="absolute -top-32 -right-32 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-indigo-200/40 via-pink-100/30 to-transparent blur-3xl" />
         <div className="absolute bottom-0 -left-32 h-[400px] w-[400px] rounded-full bg-gradient-to-tr from-amber-200/40 via-orange-100/30 to-transparent blur-3xl" />
 
         <div className="relative z-10 mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 py-12">
@@ -571,9 +571,9 @@ export default function EventInviteLandingPage() {
               This is optional, but it helps Slotted double-check your availability before you pick dates.
             </p>
 
-            <div className="rounded-xl bg-purple-50 border border-purple-100 p-4 text-left space-y-2">
-              <p className="text-xs font-medium text-purple-800">What we check:</p>
-              <ul className="text-xs text-purple-700 space-y-1">
+            <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-4 text-left space-y-2">
+              <p className="text-xs font-medium text-indigo-800">What we check:</p>
+              <ul className="text-xs text-indigo-700 space-y-1">
                 <li className="flex items-center gap-2">✓ Only busy/free status</li>
                 <li className="flex items-center gap-2">✓ Never event titles or details</li>
                 <li className="flex items-center gap-2">✓ Disconnect anytime in settings</li>
@@ -582,7 +582,7 @@ export default function EventInviteLandingPage() {
 
             <button
               onClick={handleConnectCalendar}
-              className="w-full rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 px-4 py-3.5 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
+              className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-3.5 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
             >
               Connect Google Calendar
             </button>
@@ -608,15 +608,15 @@ export default function EventInviteLandingPage() {
     : null;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-purple-50 via-white to-amber-50">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-indigo-50 via-white to-amber-50">
       {/* Background blobs */}
-      <div className="absolute -top-32 -right-32 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-purple-200/40 via-pink-100/30 to-transparent blur-3xl" />
+      <div className="absolute -top-32 -right-32 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-indigo-200/40 via-pink-100/30 to-transparent blur-3xl" />
       <div className="absolute bottom-0 -left-32 h-[400px] w-[400px] rounded-full bg-gradient-to-tr from-amber-200/40 via-orange-100/30 to-transparent blur-3xl" />
 
       {/* Nav */}
       <nav className="relative z-10 flex items-center justify-center px-6 py-5">
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 text-sm font-bold text-white shadow-md">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-indigo-500 to-blue-500 text-sm font-bold text-white shadow-md">
             <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
@@ -666,9 +666,9 @@ export default function EventInviteLandingPage() {
 
             {/* Social proof */}
             {othersText && (
-              <div className="flex items-center gap-2 rounded-xl bg-purple-50/60 border border-purple-100/50 px-4 py-3">
+              <div className="flex items-center gap-2 rounded-xl bg-indigo-50/60 border border-indigo-100/50 px-4 py-3">
                 <span className="text-sm">👥</span>
-                <p className="text-xs text-purple-800">
+                <p className="text-xs text-indigo-800">
                   {inviterFirst}, {othersText} are also picking a time
                 </p>
               </div>
@@ -684,7 +684,7 @@ export default function EventInviteLandingPage() {
             {/* CTA */}
             <button
               onClick={handleJoinClick}
-              className="w-full rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 px-4 py-4 text-base font-semibold text-white shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+              className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-4 text-base font-semibold text-white shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
             >
               Join & Pick a Time
             </button>

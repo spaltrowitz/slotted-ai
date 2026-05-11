@@ -124,7 +124,7 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
 
   // Default: not yet asked
   return (
-    <div className="rounded-2xl border border-slotted-200 bg-gradient-to-r from-slotted-50 to-purple-50 p-5 shadow-sm">
+    <div className="rounded-2xl border border-slotted-200 bg-gradient-to-r from-slotted-50 to-indigo-50 p-5 shadow-sm">
       <div className="flex items-start gap-4">
         <span className="text-3xl"></span>
         <div className="flex-1 min-w-0">
@@ -143,7 +143,7 @@ export default function PushNotificationPrompt({ mobileOnly = false }: { mobileO
           <button
             onClick={requestPermission}
             disabled={loading}
-            className="mt-3 rounded-xl bg-gradient-to-r from-slotted-500 to-purple-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="mt-3 rounded-xl bg-gradient-to-r from-slotted-500 to-indigo-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Setting up…' : 'Enable Notifications'}
           </button>
