@@ -379,7 +379,7 @@ router.patch("/meetups/:meetupId/rsvp", authWithRateLimit, async (req: AuthReque
         }
 
         // Auto-add to all participants' Google Calendars (background)
-        const meetupData = { id: meetupId, title: meetup.title, description: meetup.description, location: meetup.location, start_time: meetup.start_time, end_time: meetup.end_time };
+        const meetupData = { id: meetupId, title: meetup.title, description: meetup.description, location: meetup.location, start_time: meetup.start_time, end_time: meetup.end_time, status: "confirmed" };
         for (const p of allParticipants) {
           // Look up firebase_uid for each participant
           const { data: pUser } = await getSupabase().from("users").select("firebase_uid").eq("id", p.user_id).maybeSingle();
@@ -790,6 +790,14 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
       "Managed by Slotted.ai — https://slotted-ai.web.app",
     ].join("\n");
 
+    const { data: existingCalendarPart } = await getSupabase()
+      .from("meetup_participants")
+      .select("google_event_id")
+      .eq("meetup_id", meetupId)
+      .eq("user_id", me.id)
+      .maybeSingle();
+    const existingEventId = existingCalendarPart?.google_event_id || null;
+
     // ─── Google Calendar ───
     if (source === "google") {
       if (!me.google_refresh_token) {
@@ -807,44 +815,70 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
 
       const targetCalendar = calendarId || "primary";
 
-      const gcalEvent = await calendarApi.events.insert({
-        calendarId: targetCalendar,
-        requestBody: {
-          summary: eventTitle,
-          description: eventDescription,
-          colorId: "9",
-          location: meetup.location || undefined,
-          start: {
-            dateTime: meetup.start_time,
-            timeZone: me.timezone || "America/New_York",
-          },
-          end: {
-            dateTime: meetup.end_time,
-            timeZone: me.timezone || "America/New_York",
-          },
-          attendees: [
-            ...attendees.filter((a: any) => a.email !== me.email),
-            { email: SLOTTED_CALENDAR_GUEST.email, displayName: SLOTTED_CALENDAR_GUEST.displayName, responseStatus: "accepted" },
-          ],
-          reminders: {
-            useDefault: false,
-            overrides: [
-              { method: "popup", minutes: 60 },
-              { method: "popup", minutes: 15 },
-            ],
-          },
+      const requestBody = {
+        summary: eventTitle,
+        description: eventDescription,
+        colorId: "9",
+        location: meetup.location || undefined,
+        start: {
+          dateTime: meetup.start_time,
+          timeZone: me.timezone || "America/New_York",
         },
-      });
+        end: {
+          dateTime: meetup.end_time,
+          timeZone: me.timezone || "America/New_York",
+        },
+        attendees: [
+          ...attendees.filter((a: any) => a.email !== me.email),
+          { email: SLOTTED_CALENDAR_GUEST.email, displayName: SLOTTED_CALENDAR_GUEST.displayName, responseStatus: "accepted" },
+        ],
+        reminders: {
+          useDefault: false,
+          overrides: [
+            { method: "popup", minutes: 60 },
+            { method: "popup", minutes: 15 },
+          ],
+        },
+      };
+
+      let eventId = existingEventId;
+      let eventLink: string | null | undefined = null;
+      if (existingEventId) {
+        try {
+          const updatedEvent = await calendarApi.events.patch({
+            calendarId: targetCalendar,
+            eventId: existingEventId,
+            sendUpdates: "all",
+            requestBody,
+          });
+          eventLink = updatedEvent.data.htmlLink;
+        } catch (updateErr: any) {
+          const status = updateErr?.code || updateErr?.response?.status;
+          if (status !== 404 && status !== 410) throw updateErr;
+          eventId = null;
+        }
+      }
+
+      if (!eventId) {
+        const gcalEvent = await calendarApi.events.insert({
+          calendarId: targetCalendar,
+          sendUpdates: "all",
+          requestBody,
+        });
+        eventId = gcalEvent.data.id || null;
+        eventLink = gcalEvent.data.htmlLink;
+      }
 
       // Store the Google event ID on the meetup_participant row for reference
       // (google_event_id column may need migration — see migrations/add_google_event_id.sql)
       try {
         await getSupabase()
           .from("meetup_participants")
-          .update({ google_event_id: gcalEvent.data.id })
+          .update({ google_event_id: eventId })
           .eq("meetup_id", meetupId)
           .eq("user_id", me.id);
-      } catch (err) { console.error(err);
+      } catch (err) {
+        console.error("Failed to update calendar event ID for meetup participant (column may not exist yet):", err);
         // Column may not exist yet — safe to ignore
       }
 
@@ -852,8 +886,8 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
         success: true,
         source: "google",
         calendarId: targetCalendar,
-        eventId: gcalEvent.data.id,
-        eventLink: gcalEvent.data.htmlLink,
+        eventId,
+        eventLink,
       });
       return;
     }
@@ -919,6 +953,16 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
           filename: `${uid}.ics`,
           iCalString: icsContent,
         });
+
+        try {
+          await getSupabase()
+            .from("meetup_participants")
+            .update({ google_event_id: uid })
+            .eq("meetup_id", meetupId)
+            .eq("user_id", me.id);
+        } catch (err) {
+          console.error("Failed to update Apple calendar event ID for meetup participant:", err);
+        }
 
         res.json({ success: true, source: "apple", eventId: uid });
         return;

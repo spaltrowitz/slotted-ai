@@ -1462,7 +1462,7 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
     const showtimes: any[] = [];
 
     for (const ev of upcomingEvents) {
-      const dtValue = ev.datetimeLocal || ev.datetime;
+      const dtValue = ev.datetime || ev.datetimeLocal;
       if (!dtValue) continue; // skip events with no datetime
 
       const eventStart = new Date(dtValue);

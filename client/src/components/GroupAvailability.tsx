@@ -233,7 +233,7 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
             {(() => {
               const unsynced = participants.filter(p => !p.calendarConnected);
               if (unsynced.length > 0) {
-                const names = unsynced.map(p => ((p.displayName || p.name || "Friend" || p.name || "Friend")).split(' ')[0]).join(' & ');
+                const names = unsynced.map(p => (p.displayName || p.name || "Friend").split(' ')[0]).join(' & ');
                 return (
                   <>
                     <span className="text-3xl">📅</span>
