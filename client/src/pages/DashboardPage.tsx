@@ -390,13 +390,16 @@ export default function DashboardPage() {
   const acceptedFriends = useMemo(
     () => {
       const accepted = friendsData.filter((f) => f.status === 'accepted');
-      // Smart sort: overdue friends first, then by recency, then alphabetical
+      // Sort by people you make the most plans with: total hangouts desc,
+      // then most recent, then alphabetical. This makes the first 8 faces
+      // (when collapsed) your closest, most-frequent friends.
       return accepted.sort((a, b) => {
-        // Overdue friends first (days since / avg cadence, higher = more overdue)
-        const aOverdue = (a.daysSinceLastHangout ?? 999) / (a.avgCadenceDays || 14);
-        const bOverdue = (b.daysSinceLastHangout ?? 999) / (b.avgCadenceDays || 14);
-        if (Math.abs(aOverdue - bOverdue) > 0.3) return bOverdue - aOverdue;
-        // Fallback: alphabetical
+        const aHangouts = a.totalHangouts ?? 0;
+        const bHangouts = b.totalHangouts ?? 0;
+        if (aHangouts !== bHangouts) return bHangouts - aHangouts;
+        const aDays = a.daysSinceLastHangout ?? 9999;
+        const bDays = b.daysSinceLastHangout ?? 9999;
+        if (aDays !== bDays) return aDays - bDays;
         return getFirstName(a.friend.displayName).localeCompare(getFirstName(b.friend.displayName));
       });
     },
