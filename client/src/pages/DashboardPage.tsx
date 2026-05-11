@@ -911,14 +911,14 @@ export default function DashboardPage() {
                         )}
                         {poll.pending.length > 0 && !needsMyPicks && (
                           <div className="rounded-xl border border-slate-100 bg-white px-2.5 py-2">
-                            <p className="mb-1.5 text-[11px] font-semibold text-slate-600">⏳ Pending</p>
-                            <div className="flex flex-wrap items-center gap-1.5">
+                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                              <p className="text-[11px] font-semibold text-slate-600">⏳ Pending</p>
                               {poll.isOwner && (
                                 <button
                                   type="button"
                                   onClick={() => nudgePollMutation.mutate(poll.id)}
                                   disabled={nudgePollMutation.isPending}
-                                  className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                                  className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
                                 >
                                   {nudgePollMutation.isPending
                                     ? 'Sending…'
@@ -927,6 +927,8 @@ export default function DashboardPage() {
                                       : '👋 Nudge'}
                                 </button>
                               )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
                               {poll.pending.map((person) => (
                                 <PersonChip key={person.userId} person={person} tone="pending" />
                               ))}
