@@ -12,6 +12,7 @@ import {
   createNotification,
   filterOverlapsToHangoutWindows,
   GOOGLE_WEBHOOK_SECRET,
+  formatDateTimeForTimeZone,
 } from "./utils/helpers";
 
 // Route modules
@@ -138,6 +139,43 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 // ---------------------------------------------------------------------------
 // Scheduled Functions
 // ---------------------------------------------------------------------------
+async function sendEventPollNudgeEmail(userId: string, subject: string, body: string) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM_EMAIL || "Slotted.ai <noreply@slotted.ai>";
+  if (!apiKey) {
+    console.log(`[EMAIL_POLL_NUDGE] RESEND_API_KEY not configured; skipped email for ${userId}`);
+    return;
+  }
+
+  const { data: user, error } = await getSupabase()
+    .from("users")
+    .select("email, display_name")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error || !user?.email) {
+    console.warn(`[EMAIL_POLL_NUDGE] Could not load email for ${userId}: ${error?.message || "missing email"}`);
+    return;
+  }
+
+  const resp = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: user.email,
+      subject,
+      text: body,
+    }),
+  });
+
+  if (!resp.ok) {
+    console.error(`[EMAIL_POLL_NUDGE] Failed to email ${user.email}: ${resp.status} ${await resp.text()}`);
+  }
+}
+
 export const renewCalendarWatchChannels = onSchedule("every 6 hours", async () => {
   const sb = getSupabase();
   const cutoff = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -227,17 +265,19 @@ export const sendMeetupReminders = onSchedule("every 1 hours", async (event) => 
   }
 
   for (const meetup of meetups) {
-    const startDt = new Date(meetup.start_time);
-    const timeStr = startDt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
-      " at " + startDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-    
     const locationStr = meetup.location ? ` at ${meetup.location}` : "";
     
     // Send reminders to all accepted participants
     const acceptedParticipants = (meetup.meetup_participants || [])
       .filter((p: any) => p.rsvp === "accepted");
+    const acceptedUserIds = acceptedParticipants.map((participant: any) => participant.user_id);
+    const { data: recipientRows } = acceptedUserIds.length
+      ? await sb.from("users").select("id, timezone").in("id", acceptedUserIds)
+      : { data: [] };
+    const recipientTimeZones = new Map((recipientRows || []).map((user: any) => [user.id, user.timezone || "America/New_York"]));
     
     for (const participant of acceptedParticipants) {
+      const timeStr = formatDateTimeForTimeZone(meetup.start_time, recipientTimeZones.get(participant.user_id));
       await createNotification({
         userId: participant.user_id,
         type: "meetup_reminder",
@@ -255,6 +295,27 @@ export const sendMeetupReminders = onSchedule("every 1 hours", async (event) => 
     
     console.log(`Sent reminders for meetup ${meetup.id} to ${acceptedParticipants.length} participants`);
   }
+});
+
+export const expireEventSchedulePolls = onSchedule("every 1 hours", async () => {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await getSupabase()
+    .from("event_schedules")
+    .update({
+      status: "expired",
+      invites_closed: true,
+      invites_closed_at: nowIso,
+    })
+    .eq("status", "voting")
+    .lt("expires_at", nowIso)
+    .select("id");
+
+  if (error) {
+    console.error("Failed to expire event schedule polls:", error.message);
+    return;
+  }
+
+  console.log(`Expired ${data?.length || 0} event schedule polls`);
 });
 
 /**
@@ -358,6 +419,79 @@ export const sendPendingRsvpNudges = onSchedule("every 4 hours", async (event) =
     }
 
     console.log(`Sent RSVP nudge for meetup ${meetup.id} — ${pendingParticipants.length} pending`);
+  }
+});
+
+/**
+ * Event poll nudge: once a poll has been waiting at least 24 hours, remind
+ * invited participants who still have not picked dates. Uses notification
+ * history for dedupe so each person gets at most one auto nudge per poll/day.
+ */
+export const sendEventPollNudges = onSchedule("every 4 hours", async () => {
+  const sb = getSupabase();
+  const now = new Date();
+  const olderThan24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const recentNudgeCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: schedules, error: schedulesErr } = await sb
+    .from("event_schedules")
+    .select("id, event_title, created_by, friend_ids, created_at")
+    .eq("status", "voting")
+    .lte("created_at", olderThan24h)
+    .limit(100);
+
+  if (schedulesErr) {
+    console.error("Failed to fetch event polls for nudges:", schedulesErr.message);
+    return;
+  }
+  if (!schedules || schedules.length === 0) return;
+
+  const scheduleIds = schedules.map((schedule: any) => schedule.id);
+  const { data: votes, error: votesErr } = await sb
+    .from("event_schedule_votes")
+    .select("schedule_id, user_id")
+    .in("schedule_id", scheduleIds);
+  if (votesErr) {
+    console.error("Failed to fetch event poll votes for nudges:", votesErr.message);
+    return;
+  }
+
+  const votedBySchedule = new Map<string, Set<string>>();
+  for (const vote of votes || []) {
+    const current = votedBySchedule.get(vote.schedule_id) || new Set<string>();
+    current.add(vote.user_id);
+    votedBySchedule.set(vote.schedule_id, current);
+  }
+
+  for (const schedule of schedules) {
+    const voted = votedBySchedule.get(schedule.id) || new Set<string>();
+    const pendingFriendIds = (schedule.friend_ids || []).filter((userId: string) => !voted.has(userId));
+    if (pendingFriendIds.length === 0) continue;
+
+    for (const userId of pendingFriendIds) {
+      const { data: existing } = await sb
+        .from("notifications")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("type", "meetup_request")
+        .eq("related_id", schedule.id)
+        .gte("created_at", recentNudgeCutoff)
+        .limit(1);
+      if (existing && existing.length > 0) continue;
+
+      await createNotification({
+        userId,
+        type: "meetup_request",
+        title: `Reminder: pick dates for ${schedule.event_title}`,
+        body: "The poll is waiting on your availability.",
+        relatedId: schedule.id,
+      });
+      await sendEventPollNudgeEmail(
+        userId,
+        `Reminder: pick dates for ${schedule.event_title}`,
+        `The ${schedule.event_title} poll is waiting on your availability. Open Slotted.ai to pick the dates that work for you.`,
+      );
+    }
   }
 });
 

@@ -165,6 +165,7 @@ CREATE TABLE meetup_participants (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   meetup_id   UUID NOT NULL REFERENCES meetups(id) ON DELETE CASCADE,
   user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  google_event_id TEXT,
   rsvp        TEXT NOT NULL DEFAULT 'pending'
     CHECK (rsvp IN ('pending', 'accepted', 'declined', 'maybe')),
   google_event_id TEXT,

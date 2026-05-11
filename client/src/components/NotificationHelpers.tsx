@@ -9,6 +9,7 @@ export const NOTIFICATION_TYPE_CONFIG: Record<string, { emoji: string; bg: strin
   meetup_reminder: { emoji: '⏳', bg: 'bg-blue-50', border: 'border-blue-100' },
   calendar_match: { emoji: '', bg: 'bg-amber-50', border: 'border-amber-100' },
   event_shared: { emoji: '', bg: 'bg-purple-50', border: 'border-purple-100' },
+  event_poll_update: { emoji: '', bg: 'bg-purple-50', border: 'border-purple-100' },
   meetup_rsvp_changed: { emoji: '', bg: 'bg-sky-50', border: 'border-sky-100' },
   meetup_time_changed: { emoji: '', bg: 'bg-indigo-50', border: 'border-indigo-100' },
   meetup_counter_propose: { emoji: '', bg: 'bg-violet-50', border: 'border-violet-100' },

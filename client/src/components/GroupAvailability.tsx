@@ -19,13 +19,15 @@ interface GroupAvailabilityProps {
   allFriendNames?: string[];
   onClose: () => void;
   onBook?: (slot: ScoredSlot) => void;
+  embedded?: boolean;
 }
 
-export default function GroupAvailability({ friendIds, friendNames, onClose, onBook }: GroupAvailabilityProps) {
+export default function GroupAvailability({ friendIds, friendNames, allFriendNames: _allFriendNames = [], onClose, onBook, embedded = false }: GroupAvailabilityProps) {
   const [loading, setLoading] = useState(true);
   const [suggestions, setSuggestions] = useState<ScoredSlot[]>([]);
   const [overlaps, setOverlaps] = useState<{ start: string; end: string }[]>([]);
-  const [everyoneSynced, setEveryoneSynced] = useState(true);
+  // Privacy: we only track an aggregate sync state — never per-participant sync flags.
+  const [everyoneSynced, setEveryoneSynced] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [booked, setBooked] = useState<string | null>(null);
@@ -47,9 +49,7 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
       });
       setSuggestions(data.suggestions || []);
       setOverlaps(data.overlaps || []);
-      // Privacy: API no longer returns per-friend sync status. Track only
-      // whether everyone is fully synced so we can show a generic empty state.
-      setEveryoneSynced(Boolean(data.syncStatus?.everyoneSynced ?? true));
+      setEveryoneSynced(data.syncStatus?.everyoneSynced ?? true);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
       setError(axiosErr.response?.data?.error || axiosErr.message || 'Failed to find group availability');
@@ -115,9 +115,9 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
 
 
   return (
-    <div className="rounded-2xl border border-purple-200/60 bg-white shadow-lg overflow-hidden">
+    <div className={`overflow-hidden rounded-2xl border border-purple-200/60 bg-white ${embedded ? 'shadow-sm' : 'shadow-lg'}`}>
       {/* Header — purple gradient for groups */}
-      <div className="flex items-center justify-between border-b border-purple-100 px-4 sm:px-5 py-4 bg-gradient-to-r from-purple-50/50 to-fuchsia-50/30">
+      <div className={`flex items-center justify-between border-b border-purple-100 bg-gradient-to-r from-purple-50/50 to-fuchsia-50/30 px-4 sm:px-5 ${embedded ? 'py-3' : 'py-4'}`}>
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-sm font-bold text-gray-900 truncate">
             Group Availability ({friendNames.length + 1} people)
@@ -136,8 +136,14 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
         </button>
       </div>
 
-      {/* Privacy: per-friend sync badges removed — Slotted never shows another
-          person's calendar sync state. Server auto-nudges friends to connect. */}
+      {/* Privacy: no per-participant sync badges — we never name who hasn't synced. */}
+      {!everyoneSynced && (
+        <div className="px-5 py-3 border-b border-gray-100">
+          <p className="text-[11px] text-gray-500">
+            Some calendars in this group aren't synced yet — we'll work with what we have.
+          </p>
+        </div>
+      )}
 
       {/* Content */}
       <div className="px-5 py-4">
@@ -201,29 +207,36 @@ export default function GroupAvailability({ friendIds, friendNames, onClose, onB
           </div>
         ) : suggestions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center px-4">
-            {!everyoneSynced ? (
-              <>
-                <span className="text-3xl">🔎</span>
-                <h4 className="mt-3 text-sm font-semibold text-gray-800">Still finding times</h4>
-                <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-                  We're checking everyone's availability. Hang tight — or pick a time below and we'll confirm with the group.
-                </p>
-                <div className="mt-3 w-full">
-                  <EventScheduleButton preselectedFriendIds={friendIds} variant="compact" />
-                </div>
-              </>
-            ) : (
-              <>
-                <span className="text-3xl">😅</span>
-                <h4 className="mt-3 text-sm font-semibold text-gray-800">Everyone's pretty busy!</h4>
-                <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
-                  No common free times for all {friendNames.length + 1} people in the next 2 weeks. Try a smaller group or check back soon!
-                </p>
-                <div className="mt-4 w-full">
-                  <EventScheduleButton preselectedFriendIds={friendIds} variant="compact" />
-                </div>
-              </>
-            )}
+            {(() => {
+              if (!everyoneSynced) {
+                return (
+                  <>
+                    <span className="text-3xl">📅</span>
+                    <h4 className="mt-3 text-sm font-semibold text-gray-800">
+                      Still finding times that work
+                    </h4>
+                    <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                      Not every calendar in this group is synced yet. Pick a time you like and we'll send everyone an invite.
+                    </p>
+                    <div className="mt-4 w-full">
+                      <EventScheduleButton preselectedFriendIds={friendIds} variant="compact" />
+                    </div>
+                  </>
+                );
+              }
+              return (
+                <>
+                  <span className="text-3xl">😅</span>
+                  <h4 className="mt-3 text-sm font-semibold text-gray-800">Everyone's pretty busy!</h4>
+                  <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                    No common free times for all {friendNames.length + 1} people in the next 2 weeks. Try a smaller group or check back soon!
+                  </p>
+                  <div className="mt-4 w-full">
+                    <EventScheduleButton preselectedFriendIds={friendIds} variant="compact" />
+                  </div>
+                </>
+              );
+            })()}
           </div>
         ) : (
           <div className="space-y-2">

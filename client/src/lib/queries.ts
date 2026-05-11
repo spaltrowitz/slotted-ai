@@ -33,6 +33,7 @@ export interface Meetup {
   end_time: string;
   status: string;
   created_by: string;
+  calendarAdded?: boolean;
   participants: MeetupParticipant[];
   myRsvp: string;
 }
@@ -78,7 +79,7 @@ export interface UserSettings {
 
 export interface Notification {
   id: string;
-  type: 'friend_accepted' | 'friend_request' | 'meetup_request' | 'meetup_confirmed' | 'meetup_reminder' | 'calendar_match' | 'meetup_rsvp_changed' | 'meetup_time_changed' | 'meetup_counter_propose';
+  type: 'friend_accepted' | 'friend_request' | 'meetup_request' | 'meetup_confirmed' | 'meetup_reminder' | 'calendar_match' | 'event_poll_update' | 'meetup_rsvp_changed' | 'meetup_time_changed' | 'meetup_counter_propose';
   title: string;
   body: string;
   read: boolean;

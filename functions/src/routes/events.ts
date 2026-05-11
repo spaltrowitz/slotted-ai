@@ -15,6 +15,7 @@ import {
   getOutlookGraphClient,
   fetchAppleBusyBlocks,
   autoAddToCalendar,
+  formatDateTimeForTimeZone,
 } from "../utils/helpers";
 import { getSupabase } from "../supabase";
 import * as admin from "firebase-admin";
@@ -22,6 +23,25 @@ import { randomBytes } from "crypto";
 import { google } from "googleapis";
 
 const router = express.Router();
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function formatNameList(names: string[]) {
+  if (names.length <= 1) return names[0] || "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+function truncatePreviewText(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trim()}…`;
+}
 
 function authWithRateLimit(req: AuthRequest, res: Response, next: express.NextFunction): void {
   requireAuth(req, res, (err?: any) => {
@@ -132,6 +152,52 @@ function parseEventTime(dt: string): number {
   if (!dt) return 0;
   const normalized = dt.endsWith("Z") ? dt : dt + "Z";
   return new Date(normalized).getTime();
+}
+
+function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const zonedAsUtc = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second),
+  );
+  return zonedAsUtc - date.getTime();
+}
+
+function parseShowtimeAsEventLocalTime(datetime: string, timeZone = "America/New_York"): Date {
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(datetime)) {
+    return new Date(datetime);
+  }
+
+  const match = datetime.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return new Date(datetime);
+
+  const [, year, month, day, hour, minute, second = "0"] = match;
+  const localAsUtc = new Date(Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+  ));
+  const firstOffset = getTimeZoneOffsetMs(localAsUtc, timeZone);
+  const firstCandidate = new Date(localAsUtc.getTime() - firstOffset);
+  const finalOffset = getTimeZoneOffsetMs(firstCandidate, timeZone);
+  return new Date(localAsUtc.getTime() - finalOffset);
 }
 
 /**
@@ -245,7 +311,7 @@ async function searchSeatGeek(params: {
     url.searchParams.set("client_id", SEATGEEK_CLIENT_ID);
     url.searchParams.set("q", params.q);
     url.searchParams.set("per_page", String(params.perPage || 25));
-    url.searchParams.set("sort", "score.desc");
+    url.searchParams.set("sort", params.dateFrom || params.dateTo ? "datetime_utc.asc" : "score.desc");
 
     if (params.city) {
       // SeatGeek uses venue.city for location filtering
@@ -315,7 +381,7 @@ async function searchTicketmaster(params: {
     url.searchParams.set("apikey", TICKETMASTER_API_KEY);
     url.searchParams.set("keyword", params.q);
     url.searchParams.set("size", String(params.perPage || 25));
-    url.searchParams.set("sort", "relevance,desc");
+    url.searchParams.set("sort", params.dateFrom || params.dateTo ? "date,asc" : "relevance,desc");
 
     if (params.city) {
       url.searchParams.set("city", params.city);
@@ -694,6 +760,26 @@ interface SuggestionItem {
   source: "seatgeek" | "ticketmaster";
 }
 
+function normalizeEventSearchCity(profile: { event_city?: string | null; neighborhood?: string | null } | null | undefined): string | undefined {
+  const source = (profile?.event_city || profile?.neighborhood || "").trim();
+  if (!source) return undefined;
+
+  const parts = source.split(",").map((part) => part.trim()).filter(Boolean);
+  const candidate = parts.length > 1 ? parts[parts.length - 1] : source;
+  const normalized = candidate.toLowerCase();
+
+  if (["nyc", "new york city", "manhattan"].includes(normalized)) return "New York";
+  if (["brooklyn", "queens", "bronx", "staten island"].includes(normalized)) return candidate;
+
+  // If the value is "New York, NY", use the city portion rather than the state.
+  if (/^[a-z]{2}$/i.test(candidate) && parts.length > 1) return parts[0];
+
+  // Neighborhood-only values like "Upper West Side" are too narrow for event APIs.
+  if (!profile?.event_city && parts.length === 1) return undefined;
+
+  return candidate;
+}
+
 async function suggestSeatGeek(q: string, city?: string): Promise<SuggestionItem[]> {
   if (!SEATGEEK_CLIENT_ID || !q) return [];
   try {
@@ -808,13 +894,12 @@ router.get("/events/autocomplete", authWithRateLimit, async (req: AuthRequest, r
 
     // Use user's neighborhood to filter by city for more relevant results
     const dbUser = await getDbUser(req.uid!);
-    const userCity = dbUser?.neighborhood
-      ? dbUser.neighborhood.split(",").pop()?.trim()
-      : undefined;
+    const userCity = normalizeEventSearchCity(dbUser);
 
     const results: { id: string; title: string; venue: string; type: string }[] = [];
 
-    if (TICKETMASTER_API_KEY) {
+    const searchTicketmasterAutocomplete = async (city?: string) => {
+      if (!TICKETMASTER_API_KEY) return;
       const url = new URL("https://app.ticketmaster.com/discovery/v2/events.json");
       url.searchParams.set("apikey", TICKETMASTER_API_KEY);
       url.searchParams.set("keyword", q);
@@ -844,16 +929,16 @@ router.get("/events/autocomplete", authWithRateLimit, async (req: AuthRequest, r
           });
         }
       }
-    }
+    };
 
-    // Fallback to SeatGeek if Ticketmaster returned nothing
-    if (results.length === 0 && SEATGEEK_CLIENT_ID) {
+    const searchSeatGeekAutocomplete = async (city?: string) => {
+      if (!SEATGEEK_CLIENT_ID) return;
       const url = new URL("https://api.seatgeek.com/2/events");
       url.searchParams.set("client_id", SEATGEEK_CLIENT_ID);
       url.searchParams.set("q", q);
       url.searchParams.set("per_page", "20");
-      if (userCity) {
-        url.searchParams.set("venue.city", userCity);
+      if (city) {
+        url.searchParams.set("venue.city", city);
       }
       const resp = await fetch(url.toString());
       if (resp.ok) {
@@ -871,6 +956,21 @@ router.get("/events/autocomplete", authWithRateLimit, async (req: AuthRequest, r
             type: typeName.charAt(0).toUpperCase() + typeName.slice(1),
           });
         }
+      }
+    };
+
+    if (TICKETMASTER_API_KEY) {
+      await searchTicketmasterAutocomplete(userCity);
+      if (results.length === 0 && userCity) {
+        await searchTicketmasterAutocomplete();
+      }
+    }
+
+    // Fallback to SeatGeek if Ticketmaster returned nothing
+    if (results.length === 0 && SEATGEEK_CLIENT_ID) {
+      await searchSeatGeekAutocomplete(userCity);
+      if (results.length === 0 && userCity) {
+        await searchSeatGeekAutocomplete();
       }
     }
 
@@ -1108,7 +1208,7 @@ router.get("/events/discover", authWithRateLimit, async (req: AuthRequest, res: 
     const me = await getDbUser(req.uid!);
 
     if (!city) {
-      const userCity = me?.event_city || me?.neighborhood || "";
+      const userCity = normalizeEventSearchCity(me);
       if (!userCity) {
         res.json({ events: [], message: "Set your city in Settings to discover local events." });
         return;
@@ -1122,14 +1222,13 @@ router.get("/events/discover", authWithRateLimit, async (req: AuthRequest, res: 
 
     // If no category filter specified, use the user's event interests to personalize results
     const userInterests: string[] = me?.event_interests || [];
-    let effectiveType = type;
     let searchQueries: string[] = [];
 
     if (!type && userInterests.length > 0) {
       // Search for each user interest separately, then merge
       searchQueries = userInterests.slice(0, 4); // limit to 4 interests to control API calls
     } else {
-      searchQueries = [type || city];
+      searchQueries = type ? [type] : ["theater", "concert", "comedy", "sports"];
     }
 
     // Run searches for each interest category in parallel
@@ -1344,10 +1443,22 @@ function freeCount(matches: { availabilityScore: number }[]) {
   return best >= 100 ? "everyone" : "some";
 }
 
+function isPreferredShowtime(datetime: string) {
+  const dateMatch = datetime.match(/^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2}))?/);
+  if (!dateMatch) return true;
+
+  const [, datePart, hourPart] = dateMatch;
+  const day = new Date(`${datePart}T12:00:00Z`).getUTCDay();
+  const isWeekend = day === 0 || day === 6;
+  if (isWeekend || !hourPart) return true;
+
+  return Number(hourPart) >= 17;
+}
+
 /** POST /events/schedule — event-anchored group scheduling with detailed availability */
 router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res: Response) => {
   try {
-    const { query: q, friendIds, location, dateRange } = req.body;
+    const { query: q, friendIds, location, dateRange, dateRanges } = req.body;
     if (!q?.trim()) {
       res.status(400).json({ error: "Query is required" });
       return;
@@ -1364,16 +1475,39 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
     const acceptedFriendIds = requestedFriendIds.length > 0 ? await getAcceptedFriendIdSet(me.id) : new Set<string>();
     const validFriendIds = requestedFriendIds.filter((fid) => fid !== me.id && (requestedFriendIds.length === 0 || acceptedFriendIds.has(fid)));
 
+    const today = new Date().toISOString().split("T")[0];
+    const usingExplicitDateRanges = Array.isArray(dateRanges);
+    const requestedDateRanges: { start: string; end?: string }[] = usingExplicitDateRanges
+      ? dateRanges
+        .filter((range: any) => typeof range?.start === "string" && range.start)
+        .map((range: any) => ({
+          start: range.start,
+          end: typeof range.end === "string" && range.end ? range.end : undefined,
+        }))
+      : [{
+        start: typeof dateRange?.start === "string" && dateRange.start ? dateRange.start : today,
+        end: typeof dateRange?.end === "string" && dateRange.end ? dateRange.end : undefined,
+      }];
+
+    for (const range of requestedDateRanges) {
+      if (range.end && range.end < range.start) {
+        res.status(400).json({ error: "End date must be on or after start date" });
+        return;
+      }
+    }
+
     // 1. Search events (Ticketmaster-first waterfall)
     // Use perPage=200 (Ticketmaster max) to get ALL showtimes for a run
-    const searchParams = {
-      q,
-      city: location,
-      dateFrom: dateRange?.start,
-      dateTo: dateRange?.end,
-      perPage: 200,
-    };
-    const events = await searchTicketedEvents(searchParams);
+    const eventSets = await Promise.all(
+      requestedDateRanges.map((range) => searchTicketedEvents({
+        q,
+        city: location,
+        dateFrom: range.start,
+        dateTo: range.end,
+        perPage: 200,
+      })),
+    );
+    const events = deduplicateEvents(eventSets.flat());
 
     if (events.length === 0) {
       res.json({ event: null, showtimes: [], message: "No events found for that query." });
@@ -1384,18 +1518,20 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
     const primaryTitle = normalizeTitle(events[0].title);
     const matchingEvents = events.filter((e) => titlesMatch(normalizeTitle(e.title), primaryTitle));
 
-    // Only check availability for the next 12 upcoming showtimes (avoid overwhelming UI + API calls)
+    // Specific date-window searches should return the chosen range, not just the first few dates.
+    const showtimeLimit = usingExplicitDateRanges ? 80 : 24;
     const now = new Date();
     const upcomingEvents = matchingEvents
       .filter((e) => {
         const dt = e.datetimeLocal || e.datetime;
         return dt && new Date(dt) > now;
       })
+      .filter((e) => isPreferredShowtime(e.datetimeLocal || e.datetime))
       .sort((a, b) => new Date(a.datetimeLocal || a.datetime).getTime() - new Date(b.datetimeLocal || b.datetime).getTime())
-      .slice(0, 12);
+      .slice(0, showtimeLimit);
 
     if (upcomingEvents.length === 0) {
-      res.json({ event: null, showtimes: [], message: "No upcoming showtimes found." });
+      res.json({ event: null, showtimes: [], message: "No weekday evening or weekend showtimes found." });
       return;
     }
 
@@ -1463,7 +1599,7 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
     const showtimes: any[] = [];
 
     for (const ev of upcomingEvents) {
-      const dtValue = ev.datetime || ev.datetimeLocal;
+      const dtValue = ev.datetimeLocal || ev.datetime;
       if (!dtValue) continue; // skip events with no datetime
 
       const eventStart = new Date(dtValue);
@@ -1473,9 +1609,12 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
       const windowStart = new Date(eventStart.getTime() - PRE_BUFFER_MS);
       const windowEnd = new Date(eventStart.getTime() + showDurationMs + POST_BUFFER_MS);
 
-      const conflictNames: string[] = [];
+      // Privacy: aggregate availability counters only. We never expose
+      // which named friend is busy or has an unconnected calendar back
+      // to the caller — they only learn an aggregate state.
       let busyCount = 0;
       let checkFailedCount = 0;
+      let calendarNotConnectedCount = 0;
 
       for (let i = 0; i < allProfiles.length; i++) {
         const name = participantNames[i];
@@ -1484,8 +1623,7 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
         const calConnected = isMe ? meCalendarConnected : friendCalendarConnected[i - 1];
 
         if (!calConnected) {
-          conflictNames.push(name);
-          checkFailedCount++;
+          calendarNotConnectedCount++;
           continue;
         }
 
@@ -1611,49 +1749,36 @@ router.post("/events/schedule", authWithRateLimit, async (req: AuthRequest, res:
         } else if (sourcesAttempted > 0 && sourcesSucceeded === 0) {
           checkFailedCount++;
         }
-        // else: this participant is free — counted implicitly via totalChecked
+        // (We do NOT track per-name "free" — clients don't need that detail.)
+        void name; // name no longer surfaced in the response (privacy)
       }
 
-      // Privacy: never return per-participant free/busy/sync state by name.
-      // The requester sees aggregate availability only. Marketing claim:
-      // "Friends never see your free blocks or your sync status."
-      const totalChecked = allProfiles.length;
-      let availabilityState: "all_clear" | "some_busy" | "check_incomplete";
-      if (busyCount > 0) {
-        availabilityState = "some_busy";
-      } else if (checkFailedCount > 0) {
-        availabilityState = "check_incomplete";
-      } else {
-        availabilityState = "all_clear";
-      }
-
-      // Silence unused-locals lint for now-unused `conflictNames` while keeping
-      // the variable defined for future structured logging.
-      void conflictNames;
+      const totalParticipants = allProfiles.length;
+      const incompleteCount = checkFailedCount + calendarNotConnectedCount;
+      const availabilityState: 'all_clear' | 'some_busy' | 'check_incomplete' =
+        busyCount > 0
+          ? 'some_busy'
+          : incompleteCount > 0
+            ? 'check_incomplete'
+            : 'all_clear';
 
       showtimes.push({
         datetime: dtValue,
-        available: availabilityState === "all_clear",
+        available: busyCount === 0 && incompleteCount === 0,
         availabilityState,
-        totalParticipants: totalChecked,
+        totalParticipants,
         busyCount,
-        checkFailedCount,
+        checkFailedCount: incompleteCount,
         ticketUrl: ev.url,
         price: { min: ev.priceMin || null, max: ev.priceMax || null },
       });
     }
 
-    // Sort: available first, then by date
+    // Keep showtimes chronological; availability is shown on each card without changing date order.
     showtimes.sort((a: any, b: any) => {
-      if (a.available === b.available) {
-        const aTime = a.datetime ? new Date(a.datetime).getTime() : 0;
-        const bTime = b.datetime ? new Date(b.datetime).getTime() : 0;
-        return aTime - bTime;
-      }
-      if (a.available === true) return -1;
-      if (b.available === true) return 1;
-      if (a.available === null) return 1; // date-only at end
-      return 0;
+      const aTime = a.datetime ? new Date(a.datetime).getTime() : 0;
+      const bTime = b.datetime ? new Date(b.datetime).getTime() : 0;
+      return aTime - bTime;
     });
 
     res.json({
@@ -1857,7 +1982,7 @@ router.post("/events/invite", authWithRateLimit, async (req: AuthRequest, res: R
         // Send notification
         await createNotification({
           userId: friendId,
-          type: "meetup_request",
+          type: "event_poll_update",
           title: `${me.display_name || "A friend"} wants to go to ${savedEvent.title}!`,
           body: `You've been invited to ${savedEvent.title} on ${new Date(savedEvent.datetime_utc).toLocaleDateString()}. Check it out!`,
           relatedUserId: me.id,
@@ -2230,17 +2355,159 @@ router.post("/events/share", authWithRateLimit, async (req: AuthRequest, res: Re
 
 // ---------------------------------------------------------------------------
 // Event Scheduling Polls — group voting on showtimes
-// POST /events/poll — create a schedule + creator vote
+// POST /events/poll-draft — create/update a schedule before publishing
+// POST /events/poll — create/update a schedule + creator vote
 // GET /events/schedules/:scheduleId — get schedule with all votes
 // POST /events/schedules/:scheduleId/vote — friend submits vote
 // ---------------------------------------------------------------------------
+
+function sortShowtimesWithIndexMap(showtimes: any[]) {
+  const sorted = showtimes
+    .map((showtime, originalIndex) => ({ showtime, originalIndex }))
+    .sort((a, b) => {
+      const aTime = new Date(a.showtime?.datetime || 0).getTime();
+      const bTime = new Date(b.showtime?.datetime || 0).getTime();
+      return aTime - bTime;
+    });
+  const indexMap = new Map<number, number>();
+  sorted.forEach((item, sortedIndex) => indexMap.set(item.originalIndex, sortedIndex));
+  return {
+    showtimes: sorted.map((item) => item.showtime),
+    indexMap,
+  };
+}
+
+function remapSelectedIndices(selectedIndices: unknown[], indexMap: Map<number, number>) {
+  return [...new Set(selectedIndices
+    .filter((index): index is number => Number.isInteger(index))
+    .map((index) => indexMap.get(index))
+    .filter((index): index is number => typeof index === "number"))]
+    .sort((a, b) => a - b);
+}
+
+function isScheduleExpired(schedule: any) {
+  return schedule.status === "expired" || (schedule.expires_at && new Date(schedule.expires_at) < new Date());
+}
+
+async function expireScheduleIfNeeded(schedule: any) {
+  if (!isScheduleExpired(schedule)) return false;
+  if (schedule.status !== "expired") {
+    const nowIso = new Date().toISOString();
+    await getSupabase()
+      .from("event_schedules")
+      .update({ status: "expired", invites_closed: true, invites_closed_at: schedule.invites_closed_at || nowIso })
+      .eq("id", schedule.id)
+      .eq("status", "voting");
+  }
+  return true;
+}
+
+async function expireDueEventSchedules() {
+  const nowIso = new Date().toISOString();
+  const { error } = await getSupabase()
+    .from("event_schedules")
+    .update({ status: "expired", invites_closed: true, invites_closed_at: nowIso })
+    .eq("status", "voting")
+    .lt("expires_at", nowIso);
+  if (error) throw new Error(error.message);
+}
+
+function validateSelectedIndices(selectedIndices: unknown[], showtimeCount: number) {
+  const unique = [...new Set(selectedIndices)];
+  return unique.length > 0 &&
+    unique.every((index) => Number.isInteger(index) && (index as number) >= 0 && (index as number) < showtimeCount)
+    ? unique as number[]
+    : null;
+}
+
+router.post("/events/poll-draft", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { eventScheduleId, eventTitle, eventVenue, eventImageUrl, eventUrl, showtimes, friendIds } = req.body;
+    if (!eventTitle?.trim()) {
+      res.status(400).json({ error: "eventTitle is required" });
+      return;
+    }
+    if (!Array.isArray(showtimes) || showtimes.length === 0) {
+      res.status(400).json({ error: "showtimes must be a non-empty array" });
+      return;
+    }
+    const orderedShowtimes = sortShowtimesWithIndexMap(showtimes).showtimes;
+
+    const validFriendIds = Array.isArray(friendIds)
+      ? friendIds.filter((fid: unknown): fid is string => typeof fid === "string" && !!fid && fid !== me.id)
+      : [];
+
+    if (typeof eventScheduleId === "string" && eventScheduleId) {
+      const { data: existing } = await getSupabase()
+        .from("event_schedules")
+        .select("id")
+        .eq("id", eventScheduleId)
+        .eq("created_by", me.id)
+        .maybeSingle();
+
+      if (existing) {
+        const { data: updated, error: updateErr } = await getSupabase()
+          .from("event_schedules")
+          .update({
+            event_title: eventTitle.trim(),
+            event_venue: eventVenue || null,
+            event_image_url: eventImageUrl || null,
+            event_url: eventUrl || null,
+            showtimes: orderedShowtimes,
+            friend_ids: validFriendIds,
+            invites_closed: false,
+            invites_closed_at: null,
+          })
+          .eq("id", eventScheduleId)
+          .eq("created_by", me.id)
+          .select("id")
+          .maybeSingle();
+
+        if (updateErr || !updated) {
+          res.status(500).json({ error: updateErr?.message || "Failed to update draft" });
+          return;
+        }
+        res.json({ scheduleId: updated.id, success: true });
+        return;
+      }
+    }
+
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .insert({
+        created_by: me.id,
+        event_title: eventTitle.trim(),
+        event_venue: eventVenue || null,
+        event_image_url: eventImageUrl || null,
+        event_url: eventUrl || null,
+        showtimes: orderedShowtimes,
+        friend_ids: validFriendIds,
+        invites_closed: false,
+        invites_closed_at: null,
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (schedErr || !schedule) {
+      res.status(500).json({ error: schedErr?.message || "Failed to save draft" });
+      return;
+    }
+
+    res.json({ scheduleId: schedule.id, success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.post("/events/poll", authWithRateLimit, async (req: AuthRequest, res: Response) => {
   try {
     const me = await getDbUser(req.uid!);
     if (!me) { res.status(404).json({ error: "User not found" }); return; }
 
-    const { eventTitle, eventVenue, eventImageUrl, eventUrl, showtimes, friendIds, selectedIndices } = req.body;
+    const { eventScheduleId, eventTitle, eventVenue, eventImageUrl, eventUrl, showtimes, friendIds, selectedIndices } = req.body;
     if (!eventTitle?.trim()) {
       res.status(400).json({ error: "eventTitle is required" });
       return;
@@ -2253,25 +2520,60 @@ router.post("/events/poll", authWithRateLimit, async (req: AuthRequest, res: Res
       res.status(400).json({ error: "selectedIndices must be a non-empty array" });
       return;
     }
+    const ordered = sortShowtimesWithIndexMap(showtimes);
+    const orderedShowtimes = ordered.showtimes;
+    const orderedSelectedIndices = remapSelectedIndices(selectedIndices, ordered.indexMap);
+    if (orderedSelectedIndices.length === 0) {
+      res.status(400).json({ error: "selectedIndices must include valid showtime indexes" });
+      return;
+    }
 
     const validFriendIds = Array.isArray(friendIds)
       ? friendIds.filter((fid: unknown): fid is string => typeof fid === "string" && !!fid && fid !== me.id)
       : [];
 
-    // Create the schedule
-    const { data: schedule, error: schedErr } = await getSupabase()
-      .from("event_schedules")
-      .insert({
-        created_by: me.id,
-        event_title: eventTitle.trim(),
-        event_venue: eventVenue || null,
-        event_image_url: eventImageUrl || null,
-        event_url: eventUrl || null,
-        showtimes,
-        friend_ids: validFriendIds,
-      })
-      .select()
-      .maybeSingle();
+    let schedule: any = null;
+    let schedErr: any = null;
+    if (typeof eventScheduleId === "string" && eventScheduleId) {
+      const { data, error } = await getSupabase()
+        .from("event_schedules")
+        .update({
+          event_title: eventTitle.trim(),
+          event_venue: eventVenue || null,
+          event_image_url: eventImageUrl || null,
+          event_url: eventUrl || null,
+          showtimes: orderedShowtimes,
+          friend_ids: validFriendIds,
+          invites_closed: false,
+          invites_closed_at: null,
+        })
+        .eq("id", eventScheduleId)
+        .eq("created_by", me.id)
+        .select()
+        .maybeSingle();
+      schedule = data;
+      schedErr = error;
+    }
+
+    if (!schedule && !schedErr) {
+      const { data, error } = await getSupabase()
+        .from("event_schedules")
+        .insert({
+          created_by: me.id,
+          event_title: eventTitle.trim(),
+          event_venue: eventVenue || null,
+          event_image_url: eventImageUrl || null,
+          event_url: eventUrl || null,
+          showtimes: orderedShowtimes,
+          friend_ids: validFriendIds,
+          invites_closed: false,
+          invites_closed_at: null,
+        })
+        .select()
+        .maybeSingle();
+      schedule = data;
+      schedErr = error;
+    }
 
     if (schedErr || !schedule) {
       res.status(500).json({ error: schedErr?.message || "Failed to create schedule" });
@@ -2281,11 +2583,15 @@ router.post("/events/poll", authWithRateLimit, async (req: AuthRequest, res: Res
     // Record creator's vote
     const { error: voteErr } = await getSupabase()
       .from("event_schedule_votes")
-      .insert({
-        schedule_id: schedule.id,
-        user_id: me.id,
-        selected_indices: selectedIndices,
-      });
+      .upsert(
+        {
+           schedule_id: schedule.id,
+           user_id: me.id,
+           selected_indices: orderedSelectedIndices,
+           voted_at: new Date().toISOString(),
+         },
+        { onConflict: "schedule_id,user_id" },
+      );
 
     if (voteErr) {
       console.error("Failed to record creator vote:", voteErr.message);
@@ -2296,7 +2602,7 @@ router.post("/events/poll", authWithRateLimit, async (req: AuthRequest, res: Res
     for (const friendId of validFriendIds) {
       await createNotification({
         userId: friendId,
-        type: "meetup_request",
+        type: "event_poll_update",
         title: `${creatorName} wants to see ${eventTitle.trim()}!`,
         body: "Pick your dates — tap to vote on showtimes.",
         relatedUserId: me.id,
@@ -2323,6 +2629,14 @@ router.get("/events/schedules/:scheduleId", async (req: Request, res: Response) 
 
     if (schedErr || !schedule) {
       res.status(404).json({ error: "Schedule not found" });
+      return;
+    }
+    if (await expireScheduleIfNeeded(schedule)) {
+      res.status(410).json({
+        error: "This poll has expired",
+        code: "poll_expired",
+        lifecycleStatus: "expired",
+      });
       return;
     }
 
@@ -2369,6 +2683,14 @@ router.get("/events/schedules/:scheduleId", async (req: Request, res: Response) 
         eventUrl: schedule.event_url,
         showtimes: schedule.showtimes,
         status: schedule.status,
+        lifecycleStatus: schedule.status === "confirmed" ? "confirmed" : "open",
+        invitesClosed: Boolean(schedule.invites_closed),
+        invitesClosedAt: schedule.invites_closed_at,
+        confirmedAt: schedule.confirmed_at || null,
+        confirmedBy: schedule.confirmed_by || null,
+        confirmedSource: schedule.confirmed_source || null,
+        confirmedShowtimeIndex: schedule.confirmed_showtime_index ?? null,
+        confirmedMeetupId: schedule.confirmed_meetup_id || null,
         createdAt: schedule.created_at,
         expiresAt: schedule.expires_at,
       },
@@ -2382,6 +2704,587 @@ router.get("/events/schedules/:scheduleId", async (req: Request, res: Response) 
       votersByShowtime,
       totalVoters: voterIds.length,
       totalInvited: (schedule.friend_ids || []).length + 1,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/events/schedules/:scheduleId/my-vote", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { scheduleId } = req.params;
+    if (!scheduleId) { res.status(400).json({ error: "scheduleId is required" }); return; }
+
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .select("id, created_by, friend_ids, status, expires_at, invites_closed")
+      .eq("id", scheduleId)
+      .maybeSingle();
+    if (schedErr || !schedule) {
+      res.status(404).json({ error: "Schedule not found" });
+      return;
+    }
+    if (await expireScheduleIfNeeded(schedule)) {
+      res.status(410).json({ error: "This poll has expired", code: "poll_expired" });
+      return;
+    }
+
+    const isParticipant = schedule.created_by === me.id || (schedule.friend_ids || []).includes(me.id);
+    if (!isParticipant) {
+      res.status(403).json({ error: "You are not part of this poll" });
+      return;
+    }
+
+    const { data: vote, error: voteErr } = await getSupabase()
+      .from("event_schedule_votes")
+      .select("selected_indices, voted_at")
+      .eq("schedule_id", scheduleId)
+      .eq("user_id", me.id)
+      .maybeSingle();
+    if (voteErr) { res.status(500).json({ error: voteErr.message }); return; }
+
+    res.json({
+      selectedIndices: vote?.selected_indices || [],
+      votedAt: vote?.voted_at || null,
+      isOwner: schedule.created_by === me.id,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/events/schedules", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+    await expireDueEventSchedules();
+
+    const [createdRes, invitedRes] = await Promise.all([
+      getSupabase()
+        .from("event_schedules")
+        .select("*")
+        .eq("created_by", me.id)
+        .neq("status", "expired")
+        .order("created_at", { ascending: false })
+        .limit(50),
+      getSupabase()
+        .from("event_schedules")
+        .select("*")
+        .contains("friend_ids", [me.id])
+        .neq("status", "expired")
+        .order("created_at", { ascending: false })
+        .limit(50),
+    ]);
+
+    if (createdRes.error) { res.status(500).json({ error: createdRes.error.message }); return; }
+    if (invitedRes.error) { res.status(500).json({ error: invitedRes.error.message }); return; }
+
+    const byId = new Map<string, any>();
+    for (const schedule of [...(createdRes.data || []), ...(invitedRes.data || [])]) {
+      byId.set(schedule.id, schedule);
+    }
+    const sortedSchedules = [...byId.values()].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+    const votesLookupIds = sortedSchedules.map((schedule) => schedule.id);
+    const { data: draftCheckVotes, error: draftCheckVotesErr } = votesLookupIds.length
+      ? await getSupabase()
+        .from("event_schedule_votes")
+        .select("schedule_id")
+        .in("schedule_id", votesLookupIds)
+      : { data: [], error: null };
+    if (draftCheckVotesErr) { res.status(500).json({ error: draftCheckVotesErr.message }); return; }
+
+    const scheduleIdsWithVotes = new Set((draftCheckVotes || []).map((vote: any) => vote.schedule_id));
+    const eventOwnerKeyForSchedule = (schedule: any) => [
+      String(schedule.event_title || "").trim().toLowerCase(),
+      String(schedule.event_venue || "").trim().toLowerCase(),
+      schedule.created_by,
+    ].join("::");
+    const duplicateKeyForSchedule = (schedule: any) => {
+      const participantKey = [schedule.created_by, ...(schedule.friend_ids || [])].sort().join("|");
+      return [
+        String(schedule.event_title || "").trim().toLowerCase(),
+        String(schedule.event_venue || "").trim().toLowerCase(),
+        schedule.created_by,
+        participantKey,
+      ].join("::");
+    };
+
+    const hasSubstantivePollForEvent = new Set<string>();
+    for (const schedule of sortedSchedules) {
+      if (schedule.status !== "confirmed" && !scheduleIdsWithVotes.has(schedule.id)) continue;
+      hasSubstantivePollForEvent.add(eventOwnerKeyForSchedule(schedule));
+    }
+
+    const dedupedSchedules = new Map<string, any>();
+    for (const schedule of sortedSchedules) {
+      const eventOwnerKey = eventOwnerKeyForSchedule(schedule);
+      const isEmptyDraft = schedule.status === "voting" && !scheduleIdsWithVotes.has(schedule.id);
+      if (isEmptyDraft && hasSubstantivePollForEvent.has(eventOwnerKey)) {
+        continue;
+      }
+      const duplicateKey = duplicateKeyForSchedule(schedule);
+      const existing = dedupedSchedules.get(duplicateKey);
+      const existingHasVotes = existing ? scheduleIdsWithVotes.has(existing.id) : false;
+      const scheduleHasVotes = scheduleIdsWithVotes.has(schedule.id);
+      if (
+        !existing ||
+        (schedule.status === "voting" && existing.status !== "voting") ||
+        (schedule.status === existing.status && scheduleHasVotes && !existingHasVotes)
+      ) {
+        dedupedSchedules.set(duplicateKey, schedule);
+      }
+    }
+    const schedules = [...dedupedSchedules.values()].filter((schedule) => schedule.status === "voting");
+
+    const scheduleIds = schedules.map((schedule) => schedule.id);
+    const allUserIds = new Set<string>();
+    for (const schedule of schedules) {
+      allUserIds.add(schedule.created_by);
+      for (const friendId of schedule.friend_ids || []) allUserIds.add(friendId);
+    }
+
+    const [{ data: votes, error: votesErr }, { data: users, error: usersErr }, { data: invites, error: invitesErr }] = await Promise.all([
+      scheduleIds.length
+        ? getSupabase()
+          .from("event_schedule_votes")
+          .select("schedule_id, user_id, selected_indices, voted_at")
+          .in("schedule_id", scheduleIds)
+        : Promise.resolve({ data: [], error: null }),
+      allUserIds.size
+        ? getSupabase()
+          .from("users")
+          .select("id, display_name, photo_url")
+          .in("id", [...allUserIds])
+        : Promise.resolve({ data: [], error: null }),
+      scheduleIds.length
+        ? getSupabase()
+          .from("friend_invites")
+          .select("event_schedule_id, token, expires_at, created_at")
+          .in("event_schedule_id", scheduleIds)
+          .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (votesErr) { res.status(500).json({ error: votesErr.message }); return; }
+    if (usersErr) { res.status(500).json({ error: usersErr.message }); return; }
+    if (invitesErr) { res.status(500).json({ error: invitesErr.message }); return; }
+
+    const profiles = new Map((users || []).map((user: any) => [
+      user.id,
+      {
+        name: user.display_name?.split(" ")[0] || "Friend",
+        photoUrl: user.photo_url || null,
+      },
+    ]));
+    const votesBySchedule = new Map<string, any[]>();
+    for (const vote of votes || []) {
+      const current = votesBySchedule.get(vote.schedule_id) || [];
+      current.push(vote);
+      votesBySchedule.set(vote.schedule_id, current);
+    }
+    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    const inviteBySchedule = new Map<string, any>();
+    for (const invite of invites || []) {
+      if (!inviteBySchedule.has(invite.event_schedule_id) && new Date(invite.expires_at) >= new Date()) {
+        inviteBySchedule.set(invite.event_schedule_id, invite);
+      }
+    }
+
+    res.json({
+      schedules: schedules.map((schedule) => {
+        const scheduleVotes = votesBySchedule.get(schedule.id) || [];
+        const voterIds = new Set(scheduleVotes.map((vote) => vote.user_id));
+        const participantIds = [schedule.created_by, ...(schedule.friend_ids || [])];
+        const pendingIds = participantIds.filter((id: string) => !voterIds.has(id));
+        const invite = inviteBySchedule.get(schedule.id);
+        return {
+          id: schedule.id,
+          eventTitle: schedule.event_title,
+          eventVenue: schedule.event_venue,
+          eventImageUrl: schedule.event_image_url,
+          showtimeCount: Array.isArray(schedule.showtimes) ? schedule.showtimes.length : 0,
+          status: schedule.status,
+          lifecycleStatus: schedule.status === "confirmed" ? "confirmed" : "open",
+          invitesClosed: Boolean(schedule.invites_closed),
+          invitesClosedAt: schedule.invites_closed_at,
+          confirmedAt: schedule.confirmed_at || null,
+          confirmedBy: schedule.confirmed_by || null,
+          confirmedSource: schedule.confirmed_source || null,
+          confirmedShowtimeIndex: schedule.confirmed_showtime_index ?? null,
+          confirmedMeetupId: schedule.confirmed_meetup_id || null,
+          createdAt: schedule.created_at,
+          expiresAt: schedule.expires_at,
+          isOwner: schedule.created_by === me.id,
+          needsMyPicks: pendingIds.includes(me.id),
+          inviteUrl: invite ? `${frontendUrl}/event-invite-meta/${invite.token}` : null,
+          voted: scheduleVotes.map((vote) => ({
+            userId: vote.user_id,
+            name: profiles.get(vote.user_id)?.name || "Friend",
+            photoUrl: profiles.get(vote.user_id)?.photoUrl || null,
+            selectedCount: Array.isArray(vote.selected_indices) ? vote.selected_indices.length : 0,
+            votedAt: vote.voted_at,
+          })),
+          pending: pendingIds.map((userId: string) => ({
+            userId,
+            name: profiles.get(userId)?.name || "Friend",
+            photoUrl: profiles.get(userId)?.photoUrl || null,
+          })),
+        };
+      }),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/events/schedules/:scheduleId/nudge", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { scheduleId } = req.params;
+    if (!scheduleId) { res.status(400).json({ error: "scheduleId is required" }); return; }
+
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .select("*")
+      .eq("id", scheduleId)
+      .maybeSingle();
+    if (schedErr || !schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+    if (schedule.created_by !== me.id) { res.status(403).json({ error: "Only the poll creator can nudge invitees" }); return; }
+
+    const { data: votes, error: votesErr } = await getSupabase()
+      .from("event_schedule_votes")
+      .select("user_id")
+      .eq("schedule_id", scheduleId);
+    if (votesErr) { res.status(500).json({ error: votesErr.message }); return; }
+
+    const voterIds = new Set((votes || []).map((vote: any) => vote.user_id));
+    const pendingIds = (schedule.friend_ids || []).filter((friendId: string) => !voterIds.has(friendId));
+    for (const friendId of pendingIds) {
+      await createNotification({
+        userId: friendId,
+        type: "event_poll_update",
+        title: `${me.display_name?.split(" ")[0] || "A friend"} is waiting on your ${schedule.event_title} picks`,
+        body: "Tap the event poll link to save your availability.",
+        relatedUserId: me.id,
+        relatedId: schedule.id,
+      });
+    }
+
+    res.json({ nudged: pendingIds.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/events/schedules/:scheduleId/participants", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { scheduleId } = req.params;
+    const { friendIds } = req.body as { friendIds?: string[] };
+    if (!scheduleId || !Array.isArray(friendIds) || friendIds.length === 0) {
+      res.status(400).json({ error: "scheduleId and friendIds are required" });
+      return;
+    }
+
+    const requestedFriendIds = [...new Set(friendIds.filter((id) => typeof id === "string" && id !== me.id))];
+    if (requestedFriendIds.length === 0 || requestedFriendIds.length > 20) {
+      res.status(400).json({ error: "Choose between 1 and 20 friends" });
+      return;
+    }
+
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .select("*")
+      .eq("id", scheduleId)
+      .maybeSingle();
+    if (schedErr || !schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+    if (schedule.created_by !== me.id) { res.status(403).json({ error: "Only the poll creator can add people" }); return; }
+    if (await expireScheduleIfNeeded(schedule)) { res.status(410).json({ error: "This poll has expired", code: "poll_expired" }); return; }
+    if (schedule.status !== "voting") { res.status(400).json({ error: "Confirmed polls cannot be edited" }); return; }
+
+    const { data: friendships, error: friendshipErr } = await getSupabase()
+      .from("friendships")
+      .select("user_a_id, user_b_id, status")
+      .or(`user_a_id.eq.${me.id},user_b_id.eq.${me.id}`)
+      .eq("status", "accepted");
+    if (friendshipErr) { res.status(500).json({ error: friendshipErr.message }); return; }
+
+    const acceptedFriendIds = new Set(
+      (friendships || []).map((friendship: any) =>
+        friendship.user_a_id === me.id ? friendship.user_b_id : friendship.user_a_id,
+      ),
+    );
+    const validFriendIds = requestedFriendIds.filter((friendId) => acceptedFriendIds.has(friendId));
+    if (validFriendIds.length === 0) {
+      res.status(400).json({ error: "Choose friends you are already connected with" });
+      return;
+    }
+
+    const currentFriendIds = Array.isArray(schedule.friend_ids) ? schedule.friend_ids : [];
+    const newFriendIds = validFriendIds.filter((friendId) => !currentFriendIds.includes(friendId));
+    if (newFriendIds.length === 0) {
+      res.json({ success: true, added: 0, friendIds: currentFriendIds });
+      return;
+    }
+
+    const updatedFriendIds = [...currentFriendIds, ...newFriendIds];
+    const { error: updateErr } = await getSupabase()
+      .from("event_schedules")
+      .update({
+        friend_ids: updatedFriendIds,
+        invites_closed: false,
+        invites_closed_at: null,
+      })
+      .eq("id", scheduleId)
+      .eq("created_by", me.id);
+    if (updateErr) { res.status(500).json({ error: updateErr.message }); return; }
+
+    for (const friendId of newFriendIds) {
+      await createNotification({
+        userId: friendId,
+        type: "event_poll_update",
+        title: `${me.display_name?.split(" ")[0] || "A friend"} added you to ${schedule.event_title}`,
+        body: "Tap to share which dates work for you.",
+        relatedUserId: me.id,
+        relatedId: schedule.id,
+      });
+    }
+
+    res.json({ success: true, added: newFriendIds.length, friendIds: updatedFriendIds });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/events/schedules/:scheduleId/invites-closed", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { scheduleId } = req.params;
+    const closed = req.body?.closed !== false;
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .select("id, created_by, status")
+      .eq("id", scheduleId)
+      .maybeSingle();
+    if (schedErr || !schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+    if (schedule.created_by !== me.id) { res.status(403).json({ error: "Only the poll creator can close invites" }); return; }
+    if (await expireScheduleIfNeeded(schedule)) { res.status(410).json({ error: "This poll has expired", code: "poll_expired" }); return; }
+    if (schedule.status !== "voting") { res.status(400).json({ error: "Confirmed polls cannot be edited" }); return; }
+
+    const { error: updateErr } = await getSupabase()
+      .from("event_schedules")
+      .update({
+        invites_closed: closed,
+        invites_closed_at: closed ? new Date().toISOString() : null,
+      })
+      .eq("id", scheduleId)
+      .eq("created_by", me.id);
+    if (updateErr) { res.status(500).json({ error: updateErr.message }); return; }
+
+    res.json({ success: true, invitesClosed: closed });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/events/schedules/:scheduleId", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { scheduleId } = req.params;
+    if (!scheduleId) { res.status(400).json({ error: "scheduleId is required" }); return; }
+
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .select("*")
+      .eq("id", scheduleId)
+      .maybeSingle();
+    if (schedErr || !schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+
+    if (schedule.created_by === me.id) {
+      const { error } = await getSupabase()
+        .from("event_schedules")
+        .update({ status: "expired" })
+        .eq("id", scheduleId)
+        .eq("created_by", me.id);
+      if (error) { res.status(500).json({ error: error.message }); return; }
+
+      res.json({ success: true, deleted: true });
+      return;
+    }
+
+    const friendIds = Array.isArray(schedule.friend_ids) ? schedule.friend_ids : [];
+    if (!friendIds.includes(me.id)) {
+      res.status(403).json({ error: "You are not part of this poll" });
+      return;
+    }
+
+    const { error: updateErr } = await getSupabase()
+      .from("event_schedules")
+      .update({ friend_ids: friendIds.filter((friendId: string) => friendId !== me.id) })
+      .eq("id", scheduleId);
+    if (updateErr) { res.status(500).json({ error: updateErr.message }); return; }
+
+    const { error: voteErr } = await getSupabase()
+      .from("event_schedule_votes")
+      .delete()
+      .eq("schedule_id", scheduleId)
+      .eq("user_id", me.id);
+    if (voteErr) { res.status(500).json({ error: voteErr.message }); return; }
+
+    res.json({ success: true, deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/events/schedules/:scheduleId/showtimes/:index", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { scheduleId, index } = req.params;
+    const removeIndex = Number(index);
+    if (!scheduleId || !Number.isInteger(removeIndex) || removeIndex < 0) {
+      res.status(400).json({ error: "Valid scheduleId and showtime index are required" });
+      return;
+    }
+
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .select("*")
+      .eq("id", scheduleId)
+      .maybeSingle();
+    if (schedErr || !schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+    if (schedule.created_by !== me.id) { res.status(403).json({ error: "Only the poll creator can remove dates" }); return; }
+    if (schedule.status !== "voting") { res.status(400).json({ error: "Confirmed polls cannot be edited" }); return; }
+
+    const showtimes = Array.isArray(schedule.showtimes) ? schedule.showtimes : [];
+    if (showtimes.length <= 1) {
+      res.status(400).json({ error: "A poll needs at least one date option" });
+      return;
+    }
+    if (removeIndex >= showtimes.length) {
+      res.status(400).json({ error: "Showtime index is out of range" });
+      return;
+    }
+
+    const updatedShowtimes = showtimes.filter((_: unknown, idx: number) => idx !== removeIndex);
+    const { error: updateErr } = await getSupabase()
+      .from("event_schedules")
+      .update({ showtimes: updatedShowtimes })
+      .eq("id", scheduleId)
+      .eq("created_by", me.id);
+    if (updateErr) { res.status(500).json({ error: updateErr.message }); return; }
+
+    const { data: votes, error: votesErr } = await getSupabase()
+      .from("event_schedule_votes")
+      .select("id, selected_indices")
+      .eq("schedule_id", scheduleId);
+    if (votesErr) { res.status(500).json({ error: votesErr.message }); return; }
+
+    for (const vote of votes || []) {
+      const selected = Array.isArray(vote.selected_indices) ? vote.selected_indices : [];
+      const adjusted = selected
+        .filter((selectedIndex: number) => selectedIndex !== removeIndex)
+        .map((selectedIndex: number) => selectedIndex > removeIndex ? selectedIndex - 1 : selectedIndex);
+      await getSupabase()
+        .from("event_schedule_votes")
+        .update({ selected_indices: adjusted, voted_at: new Date().toISOString() })
+        .eq("id", vote.id);
+    }
+
+    res.json({ success: true, showtimes: updatedShowtimes });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/events/schedules/:scheduleId/invite-link", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { scheduleId } = req.params;
+    if (!scheduleId) { res.status(400).json({ error: "scheduleId is required" }); return; }
+
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .select("*")
+      .eq("id", scheduleId)
+      .maybeSingle();
+    if (schedErr || !schedule || schedule.status === "expired") {
+      res.status(404).json({ error: "Schedule not found" });
+      return;
+    }
+    if (await expireScheduleIfNeeded(schedule)) {
+      res.status(410).json({ error: "This poll has expired", code: "poll_expired" });
+      return;
+    }
+    const scheduleFriendIds = Array.isArray(schedule.friend_ids) ? schedule.friend_ids : [];
+    const isParticipant = schedule.created_by === me.id || scheduleFriendIds.includes(me.id);
+    if (!isParticipant) {
+      res.status(403).json({ error: "You are not part of this poll" });
+      return;
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    const { data: existing, error: existingErr } = await getSupabase()
+      .from("friend_invites")
+      .select("id, token, expires_at")
+      .eq("event_schedule_id", scheduleId)
+      .gte("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingErr) { res.status(500).json({ error: existingErr.message }); return; }
+
+    if (existing) {
+      res.json({
+        inviteId: existing.id,
+        inviteUrl: `${frontendUrl}/event-invite-meta/${existing.token}`,
+        token: existing.token,
+        expiresAt: existing.expires_at,
+      });
+      return;
+    }
+
+    const token = randomBytes(32).toString("base64url");
+    const expiresAt = new Date(Date.now() + 30 * 24 * 3600000).toISOString();
+    const { data: invite, error } = await getSupabase()
+      .from("friend_invites")
+      .insert({
+        token,
+        inviter_id: me.id,
+        event_schedule_id: schedule.id,
+        event_title: schedule.event_title,
+        friend_ids: [schedule.created_by, ...scheduleFriendIds].filter((id: string) => id !== me.id),
+        expires_at: expiresAt,
+      })
+      .select("id, token, expires_at")
+      .maybeSingle();
+    if (error || !invite) {
+      res.status(500).json({ error: error?.message || "Failed to create invite link" });
+      return;
+    }
+
+    res.json({
+      inviteId: invite.id,
+      inviteUrl: `${frontendUrl}/event-invite-meta/${invite.token}`,
+      token: invite.token,
+      expiresAt: invite.expires_at,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -2412,9 +3315,35 @@ router.post("/events/schedules/:scheduleId/vote", authWithRateLimit, async (req:
       res.status(404).json({ error: "Schedule not found" });
       return;
     }
+    if (await expireScheduleIfNeeded(schedule)) {
+      res.status(410).json({ error: "This poll has expired", code: "poll_expired" });
+      return;
+    }
 
     if (schedule.status !== "voting") {
       res.status(400).json({ error: "This poll is no longer accepting votes" });
+      return;
+    }
+    const pollParticipantIds: string[] = [schedule.created_by, ...(schedule.friend_ids || [])];
+    if (!pollParticipantIds.includes(me.id)) {
+      res.status(403).json({ error: "You are not part of this poll" });
+      return;
+    }
+    const showtimes = Array.isArray(schedule.showtimes) ? schedule.showtimes : [];
+    const validatedSelectedIndices = validateSelectedIndices(selectedIndices, showtimes.length);
+    if (!validatedSelectedIndices) {
+      res.status(400).json({ error: "Choose valid dates from this poll" });
+      return;
+    }
+
+    const { data: existingVote, error: existingVoteErr } = await getSupabase()
+      .from("event_schedule_votes")
+      .select("id")
+      .eq("schedule_id", scheduleId)
+      .eq("user_id", me.id)
+      .maybeSingle();
+    if (existingVoteErr) {
+      res.status(500).json({ error: existingVoteErr.message });
       return;
     }
 
@@ -2425,7 +3354,7 @@ router.post("/events/schedules/:scheduleId/vote", authWithRateLimit, async (req:
         {
           schedule_id: scheduleId,
           user_id: me.id,
-          selected_indices: selectedIndices,
+          selected_indices: validatedSelectedIndices,
           voted_at: new Date().toISOString(),
         },
         { onConflict: "schedule_id,user_id" },
@@ -2436,141 +3365,193 @@ router.post("/events/schedules/:scheduleId/vote", authWithRateLimit, async (req:
       return;
     }
 
-    // Notify creator
-    const voterName = me.display_name?.split(" ")[0] || "Someone";
-    await createNotification({
-      userId: schedule.created_by,
-      type: "meetup_request",
-      title: `${voterName} voted on ${schedule.event_title}!`,
-      body: "Tap to see everyone's availability.",
-      relatedUserId: me.id,
-      relatedId: schedule.id,
-    });
+    if (!existingVote && schedule.created_by !== me.id) {
+      const voterName = me.display_name?.split(" ")[0] || "Someone";
+      await createNotification({
+        userId: schedule.created_by,
+        type: "event_poll_update",
+        title: `${voterName} shared availability for ${schedule.event_title}`,
+        body: "Tap to see everyone's availability.",
+        relatedUserId: me.id,
+        relatedId: schedule.id,
+      });
+    }
 
-    // Check if all invited friends have voted
+    // Check if everyone in the poll, including the creator, has voted
     const { data: allVotes } = await getSupabase()
       .from("event_schedule_votes")
       .select("user_id")
       .eq("schedule_id", scheduleId);
 
     const voterSet = new Set((allVotes || []).map((v: any) => v.user_id));
-    const allFriendsVoted = (schedule.friend_ids || []).every((fid: string) => voterSet.has(fid));
+    const allFriendsVoted = pollParticipantIds.every((uid: string) => voterSet.has(uid));
 
-    if (allFriendsVoted && (schedule.friend_ids || []).length > 0) {
-      // Re-fetch votes with selected_indices for tallying
-      const { data: fullVotes } = await getSupabase()
-        .from("event_schedule_votes")
-        .select("user_id, selected_indices")
-        .eq("schedule_id", scheduleId);
-
-      const voteCounts = new Map<number, number>();
-      for (const vote of (fullVotes || [])) {
-        for (const idx of (vote.selected_indices || [])) {
-          voteCounts.set(idx, (voteCounts.get(idx) || 0) + 1);
-        }
-      }
-
-      let bestIdx = 0;
-      let bestCount = 0;
-      for (const [idx, count] of voteCounts) {
-        if (count > bestCount) {
-          bestIdx = idx;
-          bestCount = count;
-        }
-      }
-
-      const showtimes = (schedule.showtimes || []) as { datetime?: string }[];
-      const winningShowtime = showtimes[bestIdx];
-
-      if (winningShowtime?.datetime) {
-        const startTime = new Date(winningShowtime.datetime);
-        const endTime = new Date(startTime.getTime() + 2.5 * 3600000);
-
-        const { data: meetup } = await getSupabase()
-          .from("meetups")
-          .insert({
-            title: schedule.event_title,
-            location: schedule.event_venue || undefined,
-            start_time: startTime.toISOString(),
-            end_time: endTime.toISOString(),
-            created_by: schedule.created_by,
-          })
-          .select()
-          .maybeSingle();
-
-        if (meetup) {
-          const allParticipantIds: string[] = [schedule.created_by, ...(schedule.friend_ids || [])];
-          await getSupabase()
-            .from("meetup_participants")
-            .insert(
-              allParticipantIds.map((uid: string) => ({
-                meetup_id: meetup.id,
-                user_id: uid,
-                rsvp: "accepted",
-              })),
-            );
-
-          await getSupabase()
-            .from("meetups")
-            .update({ status: "confirmed" })
-            .eq("id", meetup.id);
-
-          await getSupabase()
-            .from("event_schedules")
-            .update({ status: "confirmed" })
-            .eq("id", scheduleId);
-
-          const timeStr = startTime.toLocaleDateString("en-US", {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-          });
-
-          for (const uid of allParticipantIds) {
-            if (uid === me.id) continue;
-            await createNotification({
-              userId: uid,
-              type: "meetup_confirmed",
-              title: `${schedule.event_title} is confirmed! 🎉`,
-              body: `Everyone voted — you're going on ${timeStr}`,
-              relatedUserId: me.id,
-              relatedId: meetup.id,
-            });
-          }
-
-          // Auto-add to participants' calendars
-          const meetupData = {
-            id: meetup.id,
-            title: schedule.event_title,
-            location: schedule.event_venue || undefined,
-            start_time: startTime.toISOString(),
-            end_time: endTime.toISOString(),
-            status: "confirmed",
-          };
-          for (const uid of allParticipantIds) {
-            const { data: pUser } = await getSupabase()
-              .from("users")
-              .select("firebase_uid")
-              .eq("id", uid)
-              .maybeSingle();
-            if (pUser?.firebase_uid) {
-              autoAddToCalendar(pUser.firebase_uid, meetupData).catch(() => {});
-            }
-          }
-        }
-      } else {
-        await createNotification({
-          userId: schedule.created_by,
-          type: "meetup_request",
-          title: "Everyone's voted!",
-          body: `All friends voted on ${schedule.event_title} — pick a showtime!`,
-          relatedUserId: me.id,
-          relatedId: schedule.id,
-        });
-      }
+    if (schedule.invites_closed && allFriendsVoted && (schedule.friend_ids || []).length > 0 && schedule.created_by !== me.id) {
+      await createNotification({
+        userId: schedule.created_by,
+        type: "event_poll_update",
+        title: "Everyone filled out the poll 🎉",
+        body: `${schedule.event_title} is ready — pick the final date.`,
+        relatedUserId: me.id,
+        relatedId: schedule.id,
+      });
     }
 
     res.json({ success: true, allVotesIn: allFriendsVoted });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/events/schedules/:scheduleId/confirm", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { scheduleId } = req.params;
+    const { selectedIndex } = req.body as { selectedIndex?: number };
+    if (!scheduleId || !Number.isInteger(selectedIndex) || selectedIndex < 0) {
+      res.status(400).json({ error: "Valid scheduleId and selectedIndex are required" });
+      return;
+    }
+    const finalSelectedIndex = selectedIndex;
+
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .select("*")
+      .eq("id", scheduleId)
+      .maybeSingle();
+    if (schedErr || !schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+    if (schedule.created_by !== me.id) { res.status(403).json({ error: "Only the poll creator can choose the final date" }); return; }
+    if (await expireScheduleIfNeeded(schedule)) { res.status(410).json({ error: "This poll has expired", code: "poll_expired" }); return; }
+    if (schedule.status !== "voting") { res.status(400).json({ error: "This poll is no longer accepting changes" }); return; }
+    if (!schedule.invites_closed) {
+      res.status(400).json({ error: "Mark invites complete before choosing the final date" });
+      return;
+    }
+
+    const showtimes = Array.isArray(schedule.showtimes) ? schedule.showtimes : [];
+    const selectedShowtime = showtimes[finalSelectedIndex];
+    if (!selectedShowtime?.datetime) {
+      res.status(400).json({ error: "Choose a valid showtime" });
+      return;
+    }
+
+    const participantIds: string[] = [schedule.created_by, ...(schedule.friend_ids || [])];
+    const { data: votes, error: votesErr } = await getSupabase()
+      .from("event_schedule_votes")
+      .select("user_id")
+      .eq("schedule_id", scheduleId);
+    if (votesErr) { res.status(500).json({ error: votesErr.message }); return; }
+
+    const voterSet = new Set((votes || []).map((vote: any) => vote.user_id));
+    const allVoted = participantIds.every((userId) => voterSet.has(userId));
+    if (!allVoted) {
+      res.status(400).json({ error: "Everyone needs to fill out the poll before choosing the final date" });
+      return;
+    }
+
+    if (schedule.confirmed_meetup_id) {
+      res.status(409).json({
+        error: "This poll already has a confirmed event",
+        existingMeetupId: schedule.confirmed_meetup_id,
+      });
+      return;
+    }
+
+    const startTime = parseShowtimeAsEventLocalTime(selectedShowtime.datetime);
+    const endTime = new Date(startTime.getTime() + 2.5 * 3600000);
+    const { data: existingMeetup } = await getSupabase()
+      .from("meetups")
+      .select("id")
+      .eq("source_event_schedule_id", scheduleId)
+      .maybeSingle();
+    if (existingMeetup?.id) {
+      await getSupabase()
+        .from("event_schedules")
+        .update({
+          status: "confirmed",
+          confirmed_by: me.id,
+          confirmed_source: "event_poll",
+          confirmed_at: new Date().toISOString(),
+          confirmed_showtime_index: finalSelectedIndex,
+          confirmed_meetup_id: existingMeetup.id,
+        })
+        .eq("id", scheduleId);
+      res.status(409).json({
+        error: "This poll already has a confirmed event",
+        existingMeetupId: existingMeetup.id,
+      });
+      return;
+    }
+
+    const { data: meetup, error: meetupErr } = await getSupabase()
+      .from("meetups")
+      .insert({
+        title: schedule.event_title,
+        location: schedule.event_venue || undefined,
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        created_by: schedule.created_by,
+        status: "confirmed",
+        source_event_schedule_id: scheduleId,
+      })
+      .select()
+      .maybeSingle();
+    if (meetupErr || !meetup) {
+      res.status(500).json({ error: meetupErr?.message || "Could not confirm event" });
+      return;
+    }
+
+    const { error: participantsErr } = await getSupabase()
+      .from("meetup_participants")
+      .insert(
+        participantIds.map((userId) => ({
+          meetup_id: meetup.id,
+          user_id: userId,
+          rsvp: "accepted",
+        })),
+      );
+    if (participantsErr) { res.status(500).json({ error: participantsErr.message }); return; }
+
+    const { error: updateErr } = await getSupabase()
+      .from("event_schedules")
+      .update({
+        status: "confirmed",
+        confirmed_by: me.id,
+        confirmed_source: "event_poll",
+        confirmed_at: new Date().toISOString(),
+        confirmed_showtime_index: finalSelectedIndex,
+        confirmed_meetup_id: meetup.id,
+      })
+      .eq("id", scheduleId);
+    if (updateErr) { res.status(500).json({ error: updateErr.message }); return; }
+
+    const { data: participantUsers } = await getSupabase()
+      .from("users")
+      .select("id, firebase_uid, timezone")
+      .in("id", participantIds);
+    const participantTimeZones = new Map((participantUsers || []).map((user: any) => [user.id, user.timezone || "America/New_York"]));
+
+    for (const userId of participantIds) {
+      const timeStr = formatDateTimeForTimeZone(startTime.toISOString(), participantTimeZones.get(userId));
+      await createNotification({
+        userId,
+        type: "meetup_confirmed",
+        title: `${schedule.event_title} is confirmed! 🎉`,
+        body: `Calendar invite is live for ${timeStr}.`,
+        relatedUserId: me.id,
+        relatedId: meetup.id,
+      });
+    }
+
+    for (const participant of participantUsers || []) {
+      if (participant.firebase_uid) {
+        autoAddToCalendar(participant.firebase_uid, meetup).catch(() => {});
+      }
+    }
+
+    res.json({ success: true, meetupId: meetup.id });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -2622,7 +3603,7 @@ router.post("/events/friend-invite", authWithRateLimit, async (req: AuthRequest,
     const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
     res.json({
       inviteId: invite.id,
-      inviteUrl: `${frontendUrl}/invite/${token}`,
+      inviteUrl: `${frontendUrl}/event-invite-meta/${token}`,
       token,
       expiresAt: invite.expires_at,
     });
@@ -2640,26 +3621,36 @@ router.get("/events/friend-invite/:token", async (req: Request, res: Response) =
       .from("friend_invites")
       .select("*")
       .eq("token", token)
-      .is("accepted_by", null)
       .maybeSingle();
 
     if (error || !invite) {
-      res.status(404).json({ valid: false, error: "Invite not found or already used" });
+      res.status(404).json({ valid: false, error: "Invite not found" });
       return;
     }
 
     // Check expiry
     if (new Date(invite.expires_at) < new Date()) {
-      res.json({ valid: false, error: "This invite has expired" });
+      res.json({ valid: false, error: "This invite has expired", code: "invite_expired", inviteState: "expired" });
       return;
     }
 
-    // Fetch inviter name
-    const { data: inviter } = await getSupabase()
-      .from("users")
-      .select("display_name")
-      .eq("id", invite.inviter_id)
-      .maybeSingle();
+    const [{ data: inviter }, { data: schedule }] = await Promise.all([
+      getSupabase()
+        .from("users")
+        .select("display_name")
+        .eq("id", invite.inviter_id)
+        .maybeSingle(),
+      invite.event_schedule_id
+        ? getSupabase()
+          .from("event_schedules")
+          .select("id, status, expires_at, invites_closed")
+          .eq("id", invite.event_schedule_id)
+          .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    if (schedule && await expireScheduleIfNeeded(schedule)) {
+      return null;
+    }
 
     // Fetch group member first names
     const groupMembers: string[] = [];
@@ -2681,6 +3672,8 @@ router.get("/events/friend-invite/:token", async (req: Request, res: Response) =
       inviterName: inviter?.display_name?.split(" ")[0] || "A friend",
       groupMembers,
       eventScheduleId: invite.event_schedule_id || null,
+      inviteState: schedule?.invites_closed ? "reused_existing_only" : "open",
+      invitesClosed: Boolean(schedule?.invites_closed),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -2706,11 +3699,6 @@ router.post("/events/friend-invite/:token/accept", authWithRateLimit, async (req
       return;
     }
 
-    if (invite.accepted_by) {
-      res.status(409).json({ error: "Invite already accepted" });
-      return;
-    }
-
     if (new Date(invite.expires_at) < new Date()) {
       res.status(410).json({ error: "Invite has expired" });
       return;
@@ -2721,13 +3709,17 @@ router.post("/events/friend-invite/:token/accept", authWithRateLimit, async (req
       return;
     }
 
-    // Mark invite as accepted
-    const { error: updateErr } = await getSupabase()
-      .from("friend_invites")
-      .update({ accepted_by: me.id, accepted_at: new Date().toISOString() })
-      .eq("id", invite.id);
+    const firstTimeAcceptingLink = invite.accepted_by !== me.id;
 
-    if (updateErr) { res.status(500).json({ error: updateErr.message }); return; }
+    // Keep event links reusable for multiple recipients; first accept preserves legacy audit columns.
+    if (!invite.accepted_by) {
+      const { error: updateErr } = await getSupabase()
+        .from("friend_invites")
+        .update({ accepted_by: me.id, accepted_at: new Date().toISOString() })
+        .eq("id", invite.id);
+
+      if (updateErr) { res.status(500).json({ error: updateErr.message }); return; }
+    }
 
     // Auto-create friendships: invitee ↔ inviter + invitee ↔ all group members
     const allFriendTargets = [invite.inviter_id, ...(invite.friend_ids || [])].filter(
@@ -2752,27 +3744,234 @@ router.post("/events/friend-invite/:token/accept", authWithRateLimit, async (req
         );
     }
 
-    // Notify inviter
-    await createNotification({
-      userId: invite.inviter_id,
-      type: "friend_accepted",
-      title: "Your invite was accepted!",
-      body: `${me.display_name?.split(" ")[0] || "Someone"} joined your ${invite.event_title} group via your invite link.`,
-      relatedUserId: me.id,
-      relatedId: invite.id,
-    });
+    let userAddedToSchedule = !invite.event_schedule_id;
+    let inviteState = "open";
+    let alreadyInPoll = false;
+    if (invite.event_schedule_id) {
+      const { data: schedule, error: scheduleErr } = await getSupabase()
+        .from("event_schedules")
+        .select("id, created_by, friend_ids, status, expires_at, invites_closed")
+        .eq("id", invite.event_schedule_id)
+        .maybeSingle();
+      if (scheduleErr) { res.status(500).json({ error: scheduleErr.message }); return; }
+
+      if (schedule && await expireScheduleIfNeeded(schedule)) {
+        res.status(410).json({ error: "This poll has expired", code: "poll_expired", inviteState: "expired" });
+        return;
+      }
+
+      if (schedule && schedule.status === "voting" && schedule.created_by !== me.id) {
+        const friendIds = Array.isArray(schedule.friend_ids) ? schedule.friend_ids : [];
+        alreadyInPoll = friendIds.includes(me.id);
+        if (schedule.invites_closed && !alreadyInPoll) {
+          res.status(409).json({
+            error: "This poll is no longer adding new people",
+            code: "invites_closed",
+            inviteState: "closed",
+          });
+          return;
+        }
+        if (!friendIds.includes(me.id)) {
+          const { error: updateScheduleErr } = await getSupabase()
+            .from("event_schedules")
+            .update({ friend_ids: [...friendIds, me.id] })
+            .eq("id", invite.event_schedule_id);
+          if (updateScheduleErr) { res.status(500).json({ error: updateScheduleErr.message }); return; }
+          userAddedToSchedule = true;
+        } else {
+          userAddedToSchedule = true;
+          inviteState = "reused";
+        }
+      } else if (schedule?.created_by === me.id || schedule?.friend_ids?.includes(me.id)) {
+        userAddedToSchedule = true;
+        alreadyInPoll = true;
+        inviteState = "reused";
+      }
+    }
+
+    // Notify inviter, combining joins for the same poll instead of stacking one notification per person.
+    if (firstTimeAcceptingLink) {
+      const recentJoinCutoff = new Date(Date.now() - 60 * 60000).toISOString();
+      const { data: recentJoinNotifications } = await getSupabase()
+        .from("notifications")
+        .select("id")
+        .eq("user_id", invite.inviter_id)
+        .eq("type", "friend_accepted")
+        .eq("related_user_id", me.id)
+        .gte("created_at", recentJoinCutoff)
+        .limit(1);
+
+      if (!recentJoinNotifications || recentJoinNotifications.length === 0) {
+        const { data: pollJoinNotification } = await getSupabase()
+          .from("notifications")
+          .select("id")
+          .eq("user_id", invite.inviter_id)
+          .eq("type", "friend_accepted")
+          .eq("related_id", invite.id)
+          .limit(1)
+          .maybeSingle();
+        const joinedIds = invite.event_schedule_id
+          ? [...new Set([...(Array.isArray(invite.friend_ids) ? invite.friend_ids : []), me.id])]
+          : [me.id];
+        const { data: joinedUsers } = await getSupabase()
+          .from("users")
+          .select("display_name")
+          .in("id", joinedIds);
+        const joinedNames = (joinedUsers || []).map((user: any) => user.display_name?.split(" ")[0] || "Someone");
+        const joinedText = formatNameList(joinedNames);
+        const body = `${joinedText || me.display_name?.split(" ")[0] || "Someone"} joined your ${invite.event_title} poll.`;
+        if (pollJoinNotification?.id) {
+          await getSupabase()
+            .from("notifications")
+            .update({
+              title: `${joinedText || "Someone"} joined your poll`,
+              body,
+              related_user_id: me.id,
+              read: false,
+            })
+            .eq("id", pollJoinNotification.id);
+        } else {
+        await createNotification({
+          userId: invite.inviter_id,
+          type: "friend_accepted",
+          title: `${joinedText || "Someone"} joined your poll`,
+          body,
+          relatedUserId: me.id,
+          relatedId: invite.id,
+        });
+        }
+      }
+    }
 
     // Trigger calendar sync for the new member
-    try { await syncUserCalendar(req.uid!); } catch (err) { console.error("Calendar sync failed:", err); }
+    let calendarSyncFailed = false;
+    try { await syncUserCalendar(req.uid!); } catch (err) {
+      calendarSyncFailed = true;
+      console.error("Calendar sync failed:", err);
+    }
 
     res.json({
       success: true,
       eventTitle: invite.event_title,
       eventScheduleId: invite.event_schedule_id || null,
       friendsCreated: uniqueTargets.length,
+      userAddedToSchedule,
+      inviteState,
+      alreadyInPoll,
+      calendarSyncFailed,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+async function getInvitePreview(token: string) {
+  const { data: invite } = await getSupabase()
+    .from("friend_invites")
+    .select("*")
+    .eq("token", token)
+    .maybeSingle();
+
+  if (!invite) return null;
+
+  const [{ data: inviter }, { data: schedule }] = await Promise.all([
+    getSupabase()
+      .from("users")
+      .select("display_name")
+      .eq("id", invite.inviter_id)
+      .maybeSingle(),
+    invite.event_schedule_id
+      ? getSupabase()
+        .from("event_schedules")
+        .select("id, status, expires_at, invites_closed, event_venue, event_image_url")
+        .eq("id", invite.event_schedule_id)
+        .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  if (schedule && await expireScheduleIfNeeded(schedule)) {
+    return null;
+  }
+
+  const friendNames: string[] = [];
+  if (invite.friend_ids && invite.friend_ids.length > 0) {
+    const { data: friends } = await getSupabase()
+      .from("users")
+      .select("display_name")
+      .in("id", invite.friend_ids);
+    for (const friend of friends || []) {
+      friendNames.push(friend.display_name?.split(" ")[0] || "Friend");
+    }
+  }
+
+  const inviterName = inviter?.display_name?.split(" ")[0] || "A friend";
+  const participantNames = [inviterName, ...friendNames];
+  const title = invite.event_title || "an event";
+  const venue = schedule?.event_venue || null;
+  const withText = `with ${formatNameList(participantNames)}`;
+  const participantText = formatNameList(participantNames);
+
+  return {
+    title,
+    venue,
+    imageUrl: typeof schedule?.event_image_url === "string" && schedule.event_image_url.startsWith("https://")
+      ? schedule.event_image_url
+      : null,
+    inviterName,
+    participantNames,
+    participantText,
+    withText,
+    headline: `Pick a date for ${title}`,
+    description: `${participantText} are finding the best showtime${venue ? ` at ${venue}` : ""}. Tap to add your availability.`,
+  };
+}
+
+/** GET /event-invite-image/:token.svg — generated event-specific social image */
+router.get("/event-invite-image/:token.svg", async (req: Request, res: Response) => {
+  try {
+    const preview = await getInvitePreview(req.params.token);
+    const title = escapeHtml(truncatePreviewText(preview?.title || "Event poll", 34));
+    const participantText = escapeHtml(truncatePreviewText(preview?.participantText || "friends", 46));
+    const venue = escapeHtml(truncatePreviewText(preview?.venue || "Pick the showtime that works best", 48));
+
+    res.setHeader("Content-Type", "image/svg+xml");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6d28d9"/>
+      <stop offset="52%" stop-color="#9333ea"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="70%" cy="20%" r="65%">
+      <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#312e81" flood-opacity="0.24"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <circle cx="1025" cy="105" r="190" fill="#ffffff" opacity="0.12"/>
+  <circle cx="120" cy="560" r="240" fill="#ffffff" opacity="0.10"/>
+  <rect x="82" y="72" width="1036" height="486" rx="52" fill="#ffffff" opacity="0.96" filter="url(#shadow)"/>
+  <rect x="118" y="108" width="964" height="414" rx="34" fill="#faf5ff"/>
+  <rect x="118" y="108" width="964" height="122" rx="34" fill="#ffffff"/>
+  <text x="158" y="163" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="900" fill="#7c3aed">Slotted.ai</text>
+  <rect x="842" y="132" width="198" height="46" rx="23" fill="#ede9fe"/>
+  <text x="872" y="163" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="800" fill="#6d28d9">Event invite</text>
+  <text x="158" y="282" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="800" fill="#4b5563">Pick a date for</text>
+  <text x="158" y="370" font-family="Inter, Arial, sans-serif" font-size="76" font-weight="950" fill="#111827">${title}</text>
+  <text x="158" y="432" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="700" fill="#6b7280">${venue}</text>
+  <circle cx="180" cy="485" r="25" fill="#7c3aed"/>
+  <circle cx="218" cy="485" r="25" fill="#9333ea"/>
+  <circle cx="256" cy="485" r="25" fill="#2563eb"/>
+  <text x="302" y="496" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800" fill="#4b5563">${participantText}</text>
+  <rect x="760" y="450" width="282" height="58" rx="29" fill="#7c3aed"/>
+  <text x="803" y="487" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="900" fill="#ffffff">Add your availability</text>
+</svg>`);
+  } catch {
+    res.status(404).send("Not found");
   }
 });
 
@@ -2780,20 +3979,15 @@ router.post("/events/friend-invite/:token/accept", authWithRateLimit, async (req
 router.get("/event-invite-meta/:token", async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
-
-    const { data: invite } = await getSupabase()
-      .from("friend_invites")
-      .select("*")
-      .eq("token", token)
-      .maybeSingle();
-
-    const title = invite?.event_title || "You're invited to an event on Slotted";
-    const description = invite?.event_venue
-      ? `${invite.event_title} at ${invite.event_venue} — pick the dates that work for you`
-      : "Pick the dates that work for you on Slotted.ai";
-    const imageUrl = invite?.event_image_url || "https://slotted-ai.web.app/icons/icon-512.png";
-    const escTitle = title.replace(/"/g, "&quot;").replace(/</g, "&lt;");
-    const escDesc = description.replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    const preview = await getInvitePreview(token);
+    const title = preview?.headline || "You're invited to an event on Slotted";
+    const description = preview?.description || "Pick the dates that work for you on Slotted.ai";
+    const imageUrl = preview?.imageUrl || `${frontendUrl}/event-invite-image/${token}.svg`;
+    const imageType = preview?.imageUrl?.includes(".png") ? "image/png" : preview?.imageUrl ? "image/jpeg" : "image/svg+xml";
+    const escTitle = escapeHtml(title);
+    const escDesc = escapeHtml(description);
+    const escImageUrl = escapeHtml(imageUrl);
 
     res.setHeader("Content-Type", "text/html");
     res.send(`<!DOCTYPE html>
@@ -2802,18 +3996,22 @@ router.get("/event-invite-meta/:token", async (req: Request, res: Response) => {
   <meta charset="UTF-8">
   <meta property="og:title" content="${escTitle}" />
   <meta property="og:description" content="${escDesc}" />
-  <meta property="og:image" content="${imageUrl}" />
-  <meta property="og:url" content="https://slotted-ai.web.app/invite/${token}" />
+  <meta property="og:image" content="${escImageUrl}" />
+  <meta property="og:image:secure_url" content="${escImageUrl}" />
+  <meta property="og:image:type" content="${imageType}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:url" content="https://slotted-ai.web.app/event-invite/${token}" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${escTitle}" />
   <meta name="twitter:description" content="${escDesc}" />
-  <meta name="twitter:image" content="${imageUrl}" />
-  <meta http-equiv="refresh" content="0;url=/invite/${token}">
-  <title>${title.replace(/</g, "&lt;")}</title>
+  <meta name="twitter:image" content="${escImageUrl}" />
+  <meta http-equiv="refresh" content="0;url=/event-invite/${token}">
+  <title>${escTitle}</title>
 </head>
 <body>
-  <p>Redirecting to <a href="/invite/${token}">Slotted.ai</a>...</p>
+  <p>Redirecting to <a href="/event-invite/${token}">Slotted.ai</a>...</p>
 </body>
 </html>`);
   } catch {

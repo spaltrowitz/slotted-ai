@@ -199,6 +199,12 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('slotted_calendar_connected', 'true');
       checkCalendarStatus();
       setTimeout(() => setCalendarJustConnected(false), 3000);
+      const pendingEventInviteToken = localStorage.getItem('slotted_pending_event_invite');
+      if (pendingEventInviteToken) {
+        localStorage.removeItem('slotted_pending_event_invite');
+        window.location.replace(`/event-invite/${pendingEventInviteToken}`);
+        return;
+      }
       const url = new URL(window.location.href);
       url.searchParams.delete('calendar');
       window.history.replaceState({}, '', url.pathname);

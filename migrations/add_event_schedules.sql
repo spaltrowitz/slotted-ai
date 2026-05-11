@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS event_schedules (
   event_url TEXT,
   showtimes JSONB NOT NULL DEFAULT '[]'::JSONB,
   friend_ids UUID[] NOT NULL DEFAULT '{}',
+  invites_closed BOOLEAN NOT NULL DEFAULT FALSE,
+  invites_closed_at TIMESTAMPTZ,
   status TEXT NOT NULL DEFAULT 'voting'
     CHECK (status IN ('voting', 'confirmed', 'expired')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

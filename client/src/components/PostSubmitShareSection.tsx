@@ -6,14 +6,31 @@ interface PostSubmitShareSectionProps {
   event: ScheduleEvent;
   pendingFriends: string[];
   eventScheduleId?: string;
+  inviteUrl?: string;
 }
 
 export default function PostSubmitShareSection({
   event,
   pendingFriends,
   eventScheduleId,
+  inviteUrl,
 }: PostSubmitShareSectionProps) {
   const [showModal, setShowModal] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const shareMessage = `Pick your dates for ${event.title}${event.venue ? ` at ${event.venue}` : ''} with me`;
+
+  const copyInviteUrl = async () => {
+    if (!inviteUrl) return;
+    await navigator.clipboard.writeText(inviteUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const textInviteUrl = () => {
+    if (!inviteUrl) return;
+    window.open(`sms:?&body=${encodeURIComponent(`${shareMessage}\n\n${inviteUrl}`)}`, '_self');
+  };
 
   return (
     <>
@@ -34,12 +51,37 @@ export default function PostSubmitShareSection({
             Pick a time for {event.title} with me! 🎭
           </p>
 
-          <button
-            onClick={() => setShowModal(true)}
-            className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2"
-          >
-            🔗 Share invite link
-          </button>
+          {inviteUrl ? (
+            <>
+              <div className="rounded-xl border border-violet-100 bg-white px-3 py-2">
+                <p className="truncate font-mono text-xs text-gray-600">{inviteUrl}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={copyInviteUrl}
+                  className="min-h-[44px] rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                >
+                  {copied ? 'Copied!' : 'Copy link'}
+                </button>
+                <button
+                  onClick={textInviteUrl}
+                  className="min-h-[44px] rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md"
+                >
+                  Text link
+                </button>
+              </div>
+              <p className="text-center text-[11px] text-gray-500">
+                Once texting is connected, Slotted can send this poll link automatically.
+              </p>
+            </>
+          ) : (
+            <button
+              onClick={() => setShowModal(true)}
+              className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2"
+            >
+              🔗 Share invite link
+            </button>
+          )}
         </div>
 
         {/* Waiting status */}

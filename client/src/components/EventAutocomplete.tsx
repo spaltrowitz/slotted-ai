@@ -8,28 +8,19 @@ export interface AutocompleteEvent {
   type: string;
 }
 
-const TYPE_BADGES: Record<string, string> = {
-  theater: '🎭',
-  concert: '🎵',
-  comedy: '😂',
-  sports: '⚽',
-  festival: '🎪',
-  dance: '💃',
-  opera: '🎶',
-  musical: '🎭',
-};
-
 interface EventAutocompleteProps {
+  value: string;
+  onChange: (value: string) => void;
   onSelect: (event: AutocompleteEvent) => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
-export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompleteProps) {
-  const [query, setQuery] = useState('');
+export default function EventAutocomplete({ value, onChange, onSelect, inputRef }: EventAutocompleteProps) {
   const [results, setResults] = useState<AutocompleteEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [searched, setSearched] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -40,10 +31,12 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
       setResults([]);
       setOpen(false);
       setLoading(false);
+      setSearched(false);
       return;
     }
 
     setLoading(true);
+    setSearched(false);
 
     // Cancel any in-flight request
     if (abortRef.current) abortRef.current.abort();
@@ -58,6 +51,7 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
         setOpen(items.length > 0);
         setActiveIndex(-1);
         setLoading(false);
+        setSearched(true);
       })
       .catch((err) => {
         if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
@@ -65,20 +59,22 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
         setResults([]);
         setOpen(false);
         setLoading(false);
+        setSearched(true);
       });
   };
 
-  const handleChange = (value: string) => {
-    setQuery(value);
+  const handleChange = (nextValue: string) => {
+    onChange(nextValue);
+    setSearched(false);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    if (value.length < 2) {
+    if (nextValue.length < 2) {
       setResults([]);
       setOpen(false);
       setLoading(false);
       return;
     }
     setLoading(true);
-    debounceTimer.current = setTimeout(() => doSearch(value), 400);
+    debounceTimer.current = setTimeout(() => doSearch(nextValue), 400);
   };
 
   useEffect(() => {
@@ -96,24 +92,26 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
   }, [activeIndex]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!open) return;
-
     if (e.key === 'ArrowDown') {
+      if (!open) return;
       e.preventDefault();
       setActiveIndex((i) => (i < results.length - 1 ? i + 1 : 0));
     } else if (e.key === 'ArrowUp') {
+      if (!open) return;
       e.preventDefault();
       setActiveIndex((i) => (i > 0 ? i - 1 : results.length - 1));
-    } else if (e.key === 'Enter' && activeIndex >= 0) {
+    } else if (e.key === 'Enter' && open && activeIndex >= 0) {
       e.preventDefault();
       selectItem(results[activeIndex]);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
     } else if (e.key === 'Escape') {
       setOpen(false);
     }
   };
 
   const selectItem = (event: AutocompleteEvent) => {
-    setQuery(event.title);
+    onChange(event.title);
     setOpen(false);
     onSelect(event);
   };
@@ -124,7 +122,7 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
         <input
           ref={inputRef as React.RefObject<HTMLInputElement>}
           type="text"
-          value={query}
+          value={value}
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => { if (results.length > 0) setOpen(true); }}
@@ -161,19 +159,22 @@ export default function EventAutocomplete({ onSelect, inputRef }: EventAutocompl
                 idx === activeIndex ? 'bg-violet-50' : 'hover:bg-gray-50'
               }`}
             >
-              <span className="text-lg shrink-0">
-                {TYPE_BADGES[event.type?.toLowerCase()] ?? '🎫'}
-              </span>
+              <span className="shrink-0 text-lg">🎫</span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-gray-900 truncate">{event.title}</p>
                 <p className="text-xs text-gray-500 truncate">{event.venue}</p>
               </div>
-              <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500 capitalize">
-                {event.type}
-              </span>
             </li>
-          ))}
-        </ul>
+            ))}
+          </ul>
+      )}
+
+      {!loading && searched && value.trim().length >= 2 && results.length === 0 && (
+        <div className="mt-2 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+          <p className="text-xs text-gray-500 mb-2">
+            No quick matches yet — continue to search the full title.
+          </p>
+        </div>
       )}
     </div>
   );

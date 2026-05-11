@@ -21,6 +21,32 @@ import {
   type FriendRecord,
 } from '../lib/queries';
 
+type SavedFriendGroup = {
+  id: string;
+  name: string;
+  friendIds: string[];
+};
+
+type EventPollSummary = {
+  id: string;
+  eventTitle: string;
+  eventVenue?: string | null;
+  showtimeCount: number;
+  status: string;
+  invitesClosed?: boolean;
+  invitesClosedAt?: string | null;
+  lifecycleStatus?: 'open' | 'confirmed' | 'expired';
+  confirmedAt?: string | null;
+  confirmedSource?: string | null;
+  confirmedMeetupId?: string | null;
+  createdAt?: string;
+  isOwner: boolean;
+  needsMyPicks?: boolean;
+  inviteUrl?: string | null;
+  voted: { userId: string; name: string; photoUrl?: string | null; selectedCount: number; votedAt: string }[];
+  pending: { userId: string; name: string; photoUrl?: string | null }[];
+};
+
 /* ─── stage components ─── */
 
 function StageNoCalendar() {
@@ -135,7 +161,7 @@ function StagePendingInvite({
   );
 }
 
-function ShareInviteButton({ inviteUrl, variant }: { inviteUrl: string; variant: 'secondary' | 'subtle' }) {
+function ShareInviteButton({ inviteUrl, variant }: { inviteUrl: string; variant: 'secondary' | 'inline' }) {
   const [copied, setCopied] = useState(false);
   const message = `Let's hang! This app finds times we're both free — no more back-and-forth 📅`;
 
@@ -153,13 +179,13 @@ function ShareInviteButton({ inviteUrl, variant }: { inviteUrl: string; variant:
     }
   };
 
-  if (variant === 'subtle') {
+  if (variant === 'inline') {
     return (
       <button
         onClick={handleShare}
-        className="w-full text-center text-xs font-medium text-gray-500 hover:text-slotted-600 transition-colors py-2"
+        className="shrink-0 rounded-full border border-slotted-200 bg-slotted-50 px-3 py-1.5 text-xs font-semibold text-slotted-700 transition-all hover:border-slotted-300 hover:bg-slotted-100"
       >
-        {copied ? 'Copied!' : 'Invite someone new'}
+        {copied ? 'Copied!' : 'Invite a friend'}
       </button>
     );
   }
@@ -169,8 +195,33 @@ function ShareInviteButton({ inviteUrl, variant }: { inviteUrl: string; variant:
       onClick={handleShare}
       className="w-full rounded-xl border border-gray-200 bg-white px-5 py-3 text-center text-sm font-medium text-gray-600 shadow-sm transition-all hover:bg-gray-50 hover:border-slotted-300"
     >
-      {copied ? 'Copied!' : 'Invite someone new'}
+      {copied ? 'Copied!' : 'Invite a friend'}
     </button>
+  );
+}
+
+function PersonChip({
+  person,
+  tone,
+}: {
+  person: { userId: string; name: string; photoUrl?: string | null };
+  tone: 'confirmed' | 'pending';
+}) {
+  const toneClasses = tone === 'confirmed'
+    ? 'border-emerald-100 bg-emerald-50 text-emerald-800'
+    : 'border-slate-100 bg-slate-50 text-slate-700';
+
+  return (
+    <span className={`inline-flex min-h-[28px] items-center gap-1.5 rounded-full border py-1 pl-1 pr-2 text-[11px] font-semibold ${toneClasses}`}>
+      {person.photoUrl ? (
+        <img src={person.photoUrl} alt="" className="h-5 w-5 rounded-full ring-1 ring-white" loading="lazy" />
+      ) : (
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[10px] font-semibold text-white ring-1 ring-white">
+          {person.name?.[0] ?? '?'}
+        </span>
+      )}
+      {person.name}
+    </span>
   );
 }
 
@@ -211,13 +262,20 @@ export default function DashboardPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [groupFriendIds, setGroupFriendIds] = useState<string[] | null>(null);
-
-  const today = new Date();
-  const greeting =
-    today.getHours() < 12 ? 'Good morning' : today.getHours() < 18 ? 'Good afternoon' : 'Good evening';
+  const [savedGroups, setSavedGroups] = useState<SavedFriendGroup[]>([]);
+  const [showAllFriends, setShowAllFriends] = useState(false);
+  const [copiedPollId, setCopiedPollId] = useState<string | null>(null);
+  const [sharingPollId, setSharingPollId] = useState<string | null>(null);
+  const [pollFriendSelections, setPollFriendSelections] = useState<Record<string, string>>({});
+  const [expandedPollId, setExpandedPollId] = useState<string | null>(null);
+  const [eventPollsMinimized, setEventPollsMinimized] = useState(false);
+  const [friendTipDismissed, setFriendTipDismissed] = useState(false);
 
   const userUid = user?.uid;
   const inviteUrl = `https://slotted-ai.web.app?ref=${userUid ?? ''}`;
+  const savedGroupsKey = userUid ? `slotted_saved_friend_groups_${userUid}` : null;
+  const eventPollsMinimizedKey = userUid ? `slotted_event_polls_minimized_${userUid}` : null;
+  const friendTipDismissedKey = userUid ? `slotted_friend_tip_dismissed_${userUid}` : null;
 
   /* ─── data fetching ─── */
   const { isLoading: dashboardLoading } = useQuery({
@@ -238,6 +296,15 @@ export default function DashboardPage() {
     enabled: !!userUid,
   });
 
+  const { data: eventPolls = [] } = useQuery({
+    queryKey: ['event-polls'],
+    queryFn: async () => {
+      const { data } = await api.get<{ schedules: EventPollSummary[] }>('/events/schedules');
+      return data.schedules;
+    },
+    enabled: !!userUid,
+  });
+
   /* ─── friend action mutations ─── */
   const friendActionMutation = useMutation({
     mutationFn: async ({ friendshipId, action }: { friendshipId: string; action: 'accept' | 'decline' }) => {
@@ -248,6 +315,73 @@ export default function DashboardPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
     },
   });
+
+  const nudgePollMutation = useMutation({
+    mutationFn: async (scheduleId: string) => {
+      await api.post(`/events/schedules/${scheduleId}/nudge`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-polls'] });
+    },
+  });
+
+  const deletePollMutation = useMutation({
+    mutationFn: async (scheduleId: string) => {
+      await api.delete(`/events/schedules/${scheduleId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-polls'] });
+    },
+  });
+
+  const addPollFriendMutation = useMutation({
+    mutationFn: async ({ scheduleId, friendId }: { scheduleId: string; friendId: string }) => {
+      await api.post(`/events/schedules/${scheduleId}/participants`, { friendIds: [friendId] });
+    },
+    onSuccess: (_, { scheduleId }) => {
+      setPollFriendSelections((prev) => ({ ...prev, [scheduleId]: '' }));
+      queryClient.invalidateQueries({ queryKey: ['event-polls'] });
+    },
+  });
+
+  const closePollInvitesMutation = useMutation({
+    mutationFn: async ({ scheduleId, closed }: { scheduleId: string; closed: boolean }) => {
+      await api.post(`/events/schedules/${scheduleId}/invites-closed`, { closed });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-polls'] });
+    },
+  });
+
+  const getPollInviteUrl = useCallback(async (poll: EventPollSummary) => {
+    if (poll.inviteUrl) return poll.inviteUrl;
+    const { data } = await api.post<{ inviteUrl: string }>(`/events/schedules/${poll.id}/invite-link`);
+    queryClient.invalidateQueries({ queryKey: ['event-polls'] });
+    return data.inviteUrl;
+  }, [queryClient]);
+
+  const copyPollInvite = useCallback(async (poll: EventPollSummary) => {
+    setSharingPollId(poll.id);
+    try {
+      const inviteUrl = await getPollInviteUrl(poll);
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopiedPollId(poll.id);
+      setTimeout(() => setCopiedPollId(null), 2000);
+    } finally {
+      setSharingPollId(null);
+    }
+  }, [getPollInviteUrl]);
+
+  const textPollInvite = useCallback(async (poll: EventPollSummary) => {
+    setSharingPollId(poll.id);
+    try {
+      const inviteUrl = await getPollInviteUrl(poll);
+      const message = `Pick your dates for ${poll.eventTitle}${poll.eventVenue ? ` at ${poll.eventVenue}` : ''} with me`;
+      window.open(`sms:?&body=${encodeURIComponent(`${message}\n\n${inviteUrl}`)}`, '_self');
+    } finally {
+      setSharingPollId(null);
+    }
+  }, [getPollInviteUrl]);
 
   /* ─── derived data ─── */
   const currentUserId = user?.uid?.replace(/^firebase_/, '') || '';
@@ -272,6 +406,21 @@ export default function DashboardPage() {
   const allFriendNames = useMemo(
     () => friendsData.map((f) => f.friend.displayName),
     [friendsData],
+  );
+
+  const sortedEventPolls = useMemo(
+    () => [...eventPolls].sort((a, b) => {
+      const aNeedsMe = a.needsMyPicks ? 1 : 0;
+      const bNeedsMe = b.needsMyPicks ? 1 : 0;
+      if (aNeedsMe !== bNeedsMe) return bNeedsMe - aNeedsMe;
+      const aReady = a.isOwner && Boolean(a.invitesClosed) && !a.needsMyPicks && a.pending.length === 0 && a.voted.length > 0 ? 1 : 0;
+      const bReady = b.isOwner && Boolean(b.invitesClosed) && !b.needsMyPicks && b.pending.length === 0 && b.voted.length > 0 ? 1 : 0;
+      if (aReady !== bReady) return bReady - aReady;
+      if (a.isOwner !== b.isOwner) return Number(b.isOwner) - Number(a.isOwner);
+      if (a.pending.length !== b.pending.length) return b.pending.length - a.pending.length;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    }),
+    [eventPolls],
   );
 
   const pendingInbound = useMemo(
@@ -304,6 +453,27 @@ export default function DashboardPage() {
 
   const completedHangoutCount = completedHangouts.length;
 
+  const validSavedGroups = useMemo(
+    () => savedGroups
+      .map((group) => ({
+        ...group,
+        friendIds: group.friendIds.filter((id) => acceptedFriends.some((f) => f.friend.id === id)),
+      }))
+      .filter((group) => group.friendIds.length >= 2),
+    [savedGroups, acceptedFriends],
+  );
+
+  const visibleFriends = useMemo(
+    () => acceptedFriends.length > 8 && !showAllFriends ? acceptedFriends.slice(0, 8) : acceptedFriends,
+    [acceptedFriends, showAllFriends],
+  );
+
+  const selectedGroupExists = useMemo(() => {
+    if (selectedIds.size < 2) return false;
+    const selected = [...selectedIds].sort().join('|');
+    return validSavedGroups.some((group) => [...group.friendIds].sort().join('|') === selected);
+  }, [selectedIds, validSavedGroups]);
+
   const stage: UserStage = useMemo(
     () =>
       getUserStage({
@@ -317,6 +487,71 @@ export default function DashboardPage() {
   );
 
   const isLoading = dashboardLoading;
+
+  useEffect(() => {
+    if (!savedGroupsKey) {
+      setSavedGroups([]);
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(savedGroupsKey);
+      setSavedGroups(raw ? JSON.parse(raw) as SavedFriendGroup[] : []);
+    } catch {
+      setSavedGroups([]);
+    }
+  }, [savedGroupsKey]);
+
+  useEffect(() => {
+    if (!savedGroupsKey) return;
+    try {
+      localStorage.setItem(savedGroupsKey, JSON.stringify(savedGroups));
+    } catch {
+      // ignore local storage quota/private mode failures
+    }
+  }, [savedGroups, savedGroupsKey]);
+
+  useEffect(() => {
+    if (!eventPollsMinimizedKey) {
+      setEventPollsMinimized(false);
+      return;
+    }
+    try {
+      setEventPollsMinimized(localStorage.getItem(eventPollsMinimizedKey) === 'true');
+    } catch {
+      setEventPollsMinimized(false);
+    }
+  }, [eventPollsMinimizedKey]);
+
+  useEffect(() => {
+    if (!eventPollsMinimizedKey) return;
+    try {
+      localStorage.setItem(eventPollsMinimizedKey, String(eventPollsMinimized));
+    } catch {
+      // ignore local storage quota/private mode failures
+    }
+  }, [eventPollsMinimized, eventPollsMinimizedKey]);
+
+  useEffect(() => {
+    if (!friendTipDismissedKey) {
+      setFriendTipDismissed(false);
+      return;
+    }
+    try {
+      setFriendTipDismissed(localStorage.getItem(friendTipDismissedKey) === 'true');
+    } catch {
+      setFriendTipDismissed(false);
+    }
+  }, [friendTipDismissedKey]);
+
+  const dismissFriendTip = useCallback(() => {
+    setFriendTipDismissed(true);
+    if (!friendTipDismissedKey) return;
+    try {
+      localStorage.setItem(friendTipDismissedKey, 'true');
+    } catch {
+      // ignore local storage quota/private mode failures
+    }
+  }, [friendTipDismissedKey]);
 
   /* ─── friend selection handlers (from FriendsPage) ─── */
   useEffect(() => {
@@ -351,11 +586,25 @@ export default function DashboardPage() {
   const toggleSelect = useCallback((friendId: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
-      if (next.has(friendId)) next.delete(friendId);
-      else next.add(friendId);
+      const isRemoving = next.has(friendId);
+      if (isRemoving) {
+        next.delete(friendId);
+        if (selectedFriendId === friendId) {
+          setSelectedFriendId(null);
+          setSelectedFriendName('');
+          startTransition(() => {
+            setSearchParams({}, { replace: true });
+          });
+        }
+        if (groupFriendIds?.includes(friendId)) {
+          setGroupFriendIds(null);
+        }
+      } else {
+        next.add(friendId);
+      }
       return next;
     });
-  }, []);
+  }, [groupFriendIds, selectedFriendId, setSearchParams]);
 
   const handleRowClick = useCallback((f: FriendRecord) => {
     if (selectMode) {
@@ -368,6 +617,40 @@ export default function DashboardPage() {
   const exitSelectMode = useCallback(() => {
     setSelectMode(false);
     setSelectedIds(new Set());
+  }, []);
+
+  const openSavedGroup = useCallback((friendIds: string[]) => {
+    setGroupFriendIds(friendIds);
+    setSelectedIds(new Set(friendIds));
+    setSelectedFriendId(null);
+    setSelectedFriendName('');
+    setSelectMode(false);
+    startTransition(() => {
+      setSearchParams({}, { replace: true });
+    });
+  }, [setSearchParams]);
+
+  const saveSelectedGroup = useCallback(() => {
+    if (selectedIds.size < 2 || selectedGroupExists) return;
+    const friendIds = [...selectedIds];
+    const names = friendIds
+      .map((id) => acceptedFriends.find((f) => f.friend.id === id)?.friend.displayName)
+      .filter((name): name is string => Boolean(name))
+      .map((name) => getFirstName(name));
+    const name = names.join(' + ');
+
+    setSavedGroups((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${friendIds.sort().join('-')}`,
+        name,
+        friendIds,
+      },
+    ]);
+  }, [acceptedFriends, selectedGroupExists, selectedIds]);
+
+  const deleteSavedGroup = useCallback((groupId: string) => {
+    setSavedGroups((prev) => prev.filter((group) => group.id !== groupId));
   }, []);
 
   useEffect(() => {
@@ -461,15 +744,6 @@ export default function DashboardPage() {
   /* ─── render ─── */
   return (
     <AppShell>
-      {/* Greeting — only for content-heavy stages */}
-      {isActiveStage && (
-        <div className="mb-5">
-          <h1 className="font-display text-xl font-semibold tracking-tight text-gray-900">
-            {greeting}, {getFirstName(user?.displayName)}
-          </h1>
-        </div>
-      )}
-
       {/* Calendar just connected toast */}
       {calendarJustConnected && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 animate-in fade-in">
@@ -512,50 +786,338 @@ export default function DashboardPage() {
           {/* 1. Smart AI Suggestions */}
           <SmartSuggestions />
 
-          {/* 2. Upcoming meetups */}
+          {eventPolls.length > 0 && (
+            <div>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-gray-900">Events in the works</h2>
+                <div className="flex shrink-0 items-center gap-2">
+                  {eventPolls.length > 3 && !eventPollsMinimized && (
+                    <span className="text-[11px] font-medium text-gray-400">Top 3 of {eventPolls.length}</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEventPollsMinimized((prev) => !prev);
+                      setExpandedPollId(null);
+                    }}
+                    className="min-h-[32px] rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50"
+                    aria-expanded={!eventPollsMinimized}
+                  >
+                    {eventPollsMinimized ? 'Expand' : 'Minimize'}
+                  </button>
+                </div>
+              </div>
+              {eventPollsMinimized ? (
+                <button
+                  type="button"
+                  onClick={() => setEventPollsMinimized(false)}
+                  className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-3 py-2 text-left shadow-sm"
+                >
+                  <span className="min-w-0 truncate text-xs font-medium text-gray-600">
+                    {eventPolls.length} active event poll{eventPolls.length === 1 ? '' : 's'}
+                  </span>
+                  <span className="text-[11px] font-semibold text-violet-600">
+                    Show
+                  </span>
+                </button>
+              ) : (
+              <div className="space-y-2">
+                {sortedEventPolls.slice(0, 3).map((poll) => {
+                  const pendingFirstNames = poll.pending.map((p) => p.name);
+                  const knownParticipantCount = poll.voted.length + poll.pending.length;
+                  const knownResponsePct = knownParticipantCount ? Math.round((poll.voted.length / knownParticipantCount) * 100) : 0;
+                  const needsMyPicks = Boolean(poll.needsMyPicks);
+                  const hasAllKnownResponses = !needsMyPicks && poll.pending.length === 0 && poll.voted.length > 0;
+                  const isReadyToChoose = poll.isOwner && Boolean(poll.invitesClosed) && hasAllKnownResponses;
+                  const pickedLabel = needsMyPicks
+                    ? 'Draft'
+                    : isReadyToChoose
+                      ? 'Ready to choose'
+                      : hasAllKnownResponses && poll.isOwner
+                        ? 'Invites open'
+                      : poll.voted.length === 0
+                      ? 'Waiting for responses'
+                      : `${poll.voted.length} ${poll.voted.length === 1 ? 'response' : 'responses'}`;
+                  const pendingLabel = poll.pending.length === 1
+                    ? `Waiting on ${pendingFirstNames[0]}`
+                    : poll.pending.length === 2
+                      ? `Waiting on ${pendingFirstNames[0]} + ${pendingFirstNames[1]}`
+                      : `Waiting on ${poll.pending.length} people`;
+                  const pollParticipantIds = new Set([
+                    ...poll.voted.map((v) => v.userId),
+                    ...poll.pending.map((p) => p.userId),
+                  ]);
+                  const friendsAvailableForPoll = acceptedFriends.filter((friend) => !pollParticipantIds.has(friend.friend.id));
+                  const selectedPollFriendId = pollFriendSelections[poll.id] || '';
+                  const isExpanded = expandedPollId === poll.id;
+                  return (
+                    <div
+                      key={poll.id}
+                      className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-gray-900">{poll.eventTitle}</p>
+                          {poll.eventVenue && (
+                            <p className="truncate text-xs text-gray-500">{poll.eventVenue}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 rounded-xl bg-gray-50 px-3 py-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className={`font-medium ${isReadyToChoose ? 'text-emerald-700' : 'text-gray-600'}`}>
+                            {pickedLabel}
+                          </span>
+                          <span className="text-gray-500">
+                            {poll.showtimeCount} showtime{poll.showtimeCount === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
+                            style={{ width: `${knownResponsePct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-3 space-y-1.5 text-xs">
+                        {isReadyToChoose && (
+                          <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2">
+                            <p className="font-semibold text-emerald-800">Everyone filled it out 🎉 Review the overlap and pick the date.</p>
+                          </div>
+                        )}
+                        {poll.isOwner && !poll.invitesClosed && (
+                          <div className="rounded-xl border border-amber-100 bg-amber-50 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="font-semibold text-amber-800">Done inviting?</p>
+                                <p className="mt-0.5 text-amber-700">
+                                  Mark invites complete after everyone has the link.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => closePollInvitesMutation.mutate({ scheduleId: poll.id, closed: true })}
+                                disabled={closePollInvitesMutation.isPending}
+                                className="min-h-[44px] shrink-0 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:shadow-md disabled:opacity-50"
+                              >
+                                {closePollInvitesMutation.isPending ? 'Closing…' : 'Mark complete'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {poll.invitesClosed && (
+                          <div className="rounded-xl border border-violet-100 bg-violet-50 px-3 py-2">
+                            <p className="font-semibold text-violet-800">
+                              Invites closed
+                            </p>
+                            <p className="mt-0.5 text-violet-700">
+                              The invite link now only works for people already in this poll.
+                            </p>
+                          </div>
+                        )}
+                        {poll.voted.length > 0 && (
+                          <div className="rounded-xl border border-emerald-100 bg-white px-2.5 py-2">
+                            <p className="mb-1.5 text-[11px] font-semibold text-emerald-700">✅ Confirmed availability</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {poll.voted.map((person) => (
+                                <PersonChip key={person.userId} person={person} tone="confirmed" />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {poll.pending.length > 0 && !needsMyPicks && (
+                          <div className="rounded-xl border border-slate-100 bg-white px-2.5 py-2">
+                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                              <p className="min-w-0 truncate text-[11px] font-semibold text-slate-600">⏳ {pendingLabel}</p>
+                              {poll.isOwner && (
+                                <button
+                                  type="button"
+                                  onClick={() => nudgePollMutation.mutate(poll.id)}
+                                  disabled={nudgePollMutation.isPending}
+                                  className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                                >
+                                  {nudgePollMutation.isPending ? 'Sending…' : '👋 Nudge'}
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {poll.pending.map((person) => (
+                                <PersonChip key={person.userId} person={person} tone="pending" />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <Link
+                          to={`/event-poll/${poll.id}`}
+                          className={`flex min-h-[40px] items-center justify-center rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors ${
+                            needsMyPicks
+                              ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm'
+                              : isReadyToChoose
+                                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-sm'
+                                : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {needsMyPicks ? 'Choose dates' : isReadyToChoose ? 'Pick date' : 'Edit dates'}
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => copyPollInvite(poll)}
+                          disabled={sharingPollId === poll.id || (poll.invitesClosed && !poll.isOwner)}
+                          className={`min-h-[40px] rounded-xl px-2 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
+                            needsMyPicks
+                              ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm'
+                              : isReadyToChoose
+                                ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                : 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm hover:shadow-md'
+                          }`}
+                        >
+                          {copiedPollId === poll.id ? 'Copied!' : poll.invitesClosed ? 'Link closed' : 'Copy link'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedPollId(isExpanded ? null : poll.id)}
+                          className="min-h-[40px] rounded-xl border border-gray-200 bg-white px-2 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                          aria-expanded={isExpanded}
+                        >
+                          {isExpanded ? 'Less' : 'More'}
+                        </button>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/70 p-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => textPollInvite(poll)}
+                              disabled={sharingPollId === poll.id}
+                              className="min-h-[38px] w-auto rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              {sharingPollId === poll.id ? 'Opening...' : 'Text invite link'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const message = poll.isOwner
+                                  ? `Are you sure you want to delete the ${poll.eventTitle} poll? This removes it for everyone.`
+                                  : `Are you sure you want to remove the ${poll.eventTitle} poll from your dashboard?`;
+                                if (window.confirm(message)) {
+                                  deletePollMutation.mutate(poll.id);
+                                }
+                              }}
+                              disabled={deletePollMutation.isPending}
+                              className="min-h-[38px] w-auto rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                            >
+                            {poll.isOwner ? 'Delete poll' : 'Leave poll'}
+                          </button>
+                        </div>
+                          {poll.isOwner && poll.invitesClosed && (
+                            <button
+                              type="button"
+                              onClick={() => closePollInvitesMutation.mutate({ scheduleId: poll.id, closed: !poll.invitesClosed })}
+                              disabled={closePollInvitesMutation.isPending}
+                              className="mt-2 min-h-[44px] w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              Reopen invites
+                            </button>
+                          )}
+                          {poll.isOwner && friendsAvailableForPoll.length > 0 && (
+                            <div className="mt-2 flex items-center gap-2">
+                                <select
+                                  value={selectedPollFriendId}
+                                  onChange={(event) => setPollFriendSelections((prev) => ({ ...prev, [poll.id]: event.target.value }))}
+                                  className="min-h-[36px] min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-700"
+                                  aria-label={`Add a friend to ${poll.eventTitle}`}
+                                >
+                                  <option value="">Add friend</option>
+                                  {friendsAvailableForPoll.map((friend) => (
+                                    <option key={friend.friend.id} value={friend.friend.id}>
+                                      {getSmartDisplayName(friend.friend.displayName, allFriendNames)}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (selectedPollFriendId) {
+                                      addPollFriendMutation.mutate({ scheduleId: poll.id, friendId: selectedPollFriendId });
+                                    }
+                                  }}
+                                  disabled={!selectedPollFriendId || addPollFriendMutation.isPending}
+                                  className="min-h-[36px] shrink-0 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+                                >
+                                  Add to poll
+                                </button>
+                            </div>
+                            )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              )}
+            </div>
+          )}
+
           {upcoming.length > 0 && (
             <div>
-              <h2 className="mb-3 text-sm font-semibold text-gray-900">Upcoming</h2>
-              <div className="space-y-2">
-                {upcoming.slice(0, 3).map((m) => {
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-gray-900">Upcoming events</h2>
+                {upcoming.length > 3 && (
+                  <span className="text-[11px] font-medium text-gray-400">+{upcoming.length - 3} more</span>
+                )}
+              </div>
+               <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                {upcoming.slice(0, 3).map((m, index) => {
                   const others = m.participants.filter((p) => p.userId !== currentUserId);
                   const displayTitle = m.title || others.map((p) => getSmartDisplayName(p.displayName, allFriendNames)).join(', ');
-                  const isConfirmed = m.status === 'confirmed' || m.participants.every((p) => p.rsvp === 'accepted');
                   return (
                     <div
                       key={m.id}
-                      className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm cursor-pointer"
-                      onClick={() => setCalendarModal({ meetupId: m.id, title: m.title, startTime: m.start_time, endTime: m.end_time })}
+                      className={`flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-gray-50 ${
+                        index !== Math.min(upcoming.length, 3) - 1 ? 'border-b border-gray-100' : ''
+                      }`}
                     >
-                      <div className="flex -space-x-2 shrink-0">
+                      <div className="flex -space-x-1.5 shrink-0">
                         {others.slice(0, 2).map((p) =>
                           p.photoUrl ? (
                             <img
                               key={p.userId}
                               src={p.photoUrl}
                               alt=""
-                              className="h-8 w-8 rounded-full ring-2 ring-white"
+                              className="h-6 w-6 rounded-full ring-2 ring-white"
                               loading="lazy"
                             />
                           ) : (
                             <div
                               key={p.userId}
-                              className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-xs font-semibold text-white ring-2 ring-white"
+                              className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-slotted-400 to-purple-500 text-[10px] font-semibold text-white ring-2 ring-white"
                             >
                               {p.displayName?.[0] ?? '?'}
                             </div>
                           ),
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{displayTitle}</p>
-                        <p className="text-xs text-gray-500">{formatMeetupTime(m.start_time)}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-gray-700">{displayTitle}</p>
+                        <p className="truncate text-[11px] text-gray-400">{formatMeetupTime(m.start_time)}</p>
                       </div>
-                      <span
-                        className={`shrink-0 text-xs font-medium ${isConfirmed ? 'text-emerald-600' : 'text-amber-600'}`}
+                      <button
+                        type="button"
+                        onClick={() => setCalendarModal({ meetupId: m.id, title: m.title, startTime: m.start_time, endTime: m.end_time })}
+                        className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                          m.calendarAdded
+                            ? 'border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            : 'border-slotted-200 bg-slotted-50 text-slotted-700 hover:bg-slotted-100'
+                        }`}
                       >
-                        {isConfirmed ? '✅' : '⏳'}
-                      </span>
+                        {m.calendarAdded ? '✓ On calendar' : 'Check calendar'}
+                      </button>
                     </div>
                   );
                 })}
@@ -563,56 +1125,83 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* 3. Friend availability panels (inline) */}
-          {selectedFriendId && !groupFriendIds && (
-            <div className="scroll-mt-4" ref={(el) => el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>
-              <FriendAvailability
-                key={selectedFriendId}
-                friendId={selectedFriendId}
-                friendName={selectedFriendName}
-                allFriendNames={allFriendNames}
-                onClose={handleCloseFindTimes}
-                completedHangouts={completedHangoutCount}
-              />
-            </div>
-          )}
-
-          {groupFriendIds && groupFriendIds.length >= 2 && (
-            <GroupAvailability
-              friendIds={groupFriendIds}
-              friendNames={groupFriendIds.map(id => {
-                const f = acceptedFriends.find(fr => fr.friend.id === id);
-                return f?.friend.displayName ?? '';
-              })}
-              allFriendNames={allFriendNames}
-              onClose={() => setGroupFriendIds(null)}
-            />
-          )}
-
-          {/* 4. Friend grid (3-col) */}
+          {/* 3. Friend grid (3-col) */}
           {acceptedFriends.length > 0 && (
             <div>
-              <div className="mb-1">
+              <div className="mb-1 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-gray-900">Who do you want to see?</h2>
+                <ShareInviteButton inviteUrl={inviteUrl} variant="inline" />
               </div>
-              <p className="text-xs text-gray-500 mb-3">Tap to find times · check multiple for group plans</p>
+              {!friendTipDismissed && (
+                <div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-slotted-100 bg-slotted-50/70 px-3 py-2.5">
+                  <p className="text-xs leading-relaxed text-slotted-800">
+                    Tap a friend to find times, or check multiple friends for group plans.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={dismissFriendTip}
+                    className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-sm font-semibold text-slotted-500 transition-colors hover:bg-white/70 hover:text-slotted-700"
+                    aria-label="Dismiss friend tip"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
+              {validSavedGroups.length > 0 && (
+                <div className="mb-3">
+                  <p className="mb-2 text-xs font-medium text-gray-500">Groups</p>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {validSavedGroups.map((group) => (
+                      <div
+                        key={group.id}
+                        className="flex shrink-0 items-center overflow-hidden rounded-full border border-violet-100 bg-violet-50"
+                      >
+                        <button
+                          onClick={() => openSavedGroup(group.friendIds)}
+                          className="min-h-[44px] px-3 text-xs font-semibold text-violet-700"
+                        >
+                          {group.name}
+                        </button>
+                        <button
+                          onClick={() => deleteSavedGroup(group.id)}
+                          className="min-h-[44px] px-2 text-xs font-semibold text-violet-400 hover:text-violet-700"
+                          aria-label={`Delete ${group.name}`}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {selectedIds.size >= 2 && (
                 <div className="flex items-center justify-between mb-2 rounded-lg bg-slotted-50 px-3 py-2">
                   <p className="text-xs font-medium text-slotted-700">
                     {selectedIds.size} friends selected
                   </p>
-                  <button
-                    onClick={() => { exitSelectMode(); }}
-                    className="text-xs text-slotted-600 hover:text-slotted-800 font-medium"
-                  >
-                    Clear
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {!selectedGroupExists && (
+                      <button
+                        onClick={saveSelectedGroup}
+                        className="text-xs font-semibold text-slotted-700 hover:text-slotted-900"
+                      >
+                        Save group
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { exitSelectMode(); }}
+                      className="text-xs text-slotted-600 hover:text-slotted-800 font-medium"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
               )}
 
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {acceptedFriends.map((f) => {
+                {visibleFriends.map((f) => {
                   const isSelected = selectedIds.has(f.friend.id);
                   const isViewing = selectedFriendId === f.friend.id;
                   const seen = lastSeenLabel(f);
@@ -669,6 +1258,45 @@ export default function DashboardPage() {
                   );
                 })}
               </div>
+
+              {acceptedFriends.length > 8 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllFriends((prev) => !prev)}
+                  className="mt-2 min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+                >
+                  {showAllFriends ? 'Show fewer friends' : `Show all ${acceptedFriends.length} friends`}
+                </button>
+              )}
+
+              {selectedFriendId && !groupFriendIds && (
+                <div className="mt-3 scroll-mt-4" ref={(el) => el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>
+                  <FriendAvailability
+                    key={selectedFriendId}
+                    friendId={selectedFriendId}
+                    friendName={selectedFriendName}
+                    allFriendNames={allFriendNames}
+                    onClose={handleCloseFindTimes}
+                    completedHangouts={completedHangoutCount}
+                    embedded
+                  />
+                </div>
+              )}
+
+              {groupFriendIds && groupFriendIds.length >= 2 && (
+                <div className="mt-3">
+                  <GroupAvailability
+                    friendIds={groupFriendIds}
+                    friendNames={groupFriendIds.map(id => {
+                      const f = acceptedFriends.find(fr => fr.friend.id === id);
+                      return f?.friend.displayName ?? '';
+                    })}
+                    allFriendNames={allFriendNames}
+                    onClose={() => setGroupFriendIds(null)}
+                    embedded
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -678,8 +1306,13 @@ export default function DashboardPage() {
               <span className="text-2xl mt-0.5">🎟️</span>
               <div className="flex-1">
                 <h2 className="text-sm font-semibold text-gray-900">Want to do something together?</h2>
-                <p className="text-xs text-gray-500 mt-1 mb-3">Find shows, concerts, comedy, or things to do near you</p>
-                <EventScheduleButton friends={friendsData} variant="primary" />
+                <p className="text-xs text-gray-500 mt-1 mb-3">Browse ideas or search for something specific.</p>
+                <EventScheduleButton
+                  friends={friendsData}
+                  variant="primary"
+                  initialMode="browse"
+                  label="🎟️ Browse events"
+                />
               </div>
             </div>
           </div>
@@ -755,8 +1388,6 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-
-          <ShareInviteButton inviteUrl={inviteUrl} variant="subtle" />
 
           {calendarModal && (
             <AddToCalendarModal

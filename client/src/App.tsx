@@ -142,6 +142,7 @@ export default function App() {
               <Route element={<ProtectedRoute />}>
                 <Route path="/onboarding" element={<OnboardingPage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/event-poll/:scheduleId" element={<EventInviteLandingPage />} />
                 <Route path="/friends" element={<Navigate to="/dashboard" replace />} />
 
                 <Route path="/notifications" element={<NotificationsPage />} />

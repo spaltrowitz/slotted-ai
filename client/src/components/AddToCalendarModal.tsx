@@ -11,13 +11,17 @@ interface AddToCalendarModalProps {
 }
 
 /** Build a Google Calendar deep link that opens the "create event" UI with pre-filled details */
+function formatTimeZoneLabel(startTime: string): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || new Date(startTime).toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop() || 'your timezone';
+}
+
 function buildGoogleCalendarLink(title: string, startTime: string, endTime: string): string {
   const fmt = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const params = new URLSearchParams({
     action: 'TEMPLATE',
     text: title,
     dates: `${fmt(startTime)}/${fmt(endTime)}`,
-    details: 'Scheduled via Slotted.ai',
+    details: `Scheduled via Slotted.ai. Times display in ${formatTimeZoneLabel(startTime)}.`,
   });
   return `https://www.google.com/calendar/render?${params.toString()}`;
 }
@@ -41,7 +45,7 @@ function buildIcsContent(title: string, startTime: string, endTime: string): str
     `DTSTART:${dtStart}`,
     `DTEND:${dtEnd}`,
     `SUMMARY:${title}`,
-    'DESCRIPTION:Scheduled via Slotted.ai',
+    `DESCRIPTION:Scheduled via Slotted.ai. Times display in ${formatTimeZoneLabel(startTime)}.`,
     'BEGIN:VALARM',
     'TRIGGER:-PT60M',
     'ACTION:DISPLAY',
@@ -127,7 +131,7 @@ export default function AddToCalendarModal({
         {/* Event summary */}
         <div className="border-b border-gray-100 bg-gray-50/50 px-4 py-3 sm:px-6">
           <p className="text-sm font-semibold text-gray-900">{meetupTitle}</p>
-          <p className="text-xs text-gray-500">{formatTime(startTime)} → {formatTime(endTime)}</p>
+          <p className="text-xs text-gray-500">{formatTime(startTime)}</p>
         </div>
 
         {/* Content */}
@@ -136,12 +140,12 @@ export default function AddToCalendarModal({
             <div className="flex flex-col items-center justify-center py-8">
               <span className="text-4xl">✅</span>
               <p className="mt-2 text-sm font-semibold text-emerald-700">
-                {addedMethod === 'google' ? 'Google Calendar opened!' : 'File downloaded!'}
+                {addedMethod === 'google' ? 'Google Calendar opened!' : 'Calendar file downloaded!'}
               </p>
               <p className="mt-1 text-xs text-gray-500">
                 {addedMethod === 'google'
-                  ? 'Save the event in the tab that just opened'
-                  : 'Open the .ics file to add it to your calendar'}
+                  ? `Save it to the calendar you want. The time is shown in ${formatTimeZoneLabel(startTime)}.`
+                  : `Open the .ics file in Apple Calendar, Outlook, or another calendar app. The event uses ${formatTimeZoneLabel(startTime)}.`}
               </p>
             </div>
           ) : (
@@ -149,7 +153,7 @@ export default function AddToCalendarModal({
               {/* Google Calendar */}
               <button
                 onClick={handleGoogleCalendar}
-                className="flex w-full items-center gap-3 rounded-xl border border-gray-200 px-4 py-3.5 text-left transition-all hover:border-blue-300 hover:bg-blue-50/50 hover:shadow-sm"
+                className="flex min-h-[44px] w-full items-center gap-3 rounded-xl border border-gray-200 px-4 py-3.5 text-left transition-all hover:border-blue-300 hover:bg-blue-50/50 hover:shadow-sm"
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 shrink-0">
                   <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -161,7 +165,7 @@ export default function AddToCalendarModal({
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-gray-900">Google Calendar</p>
-                  <p className="text-[11px] text-gray-500">Opens in a new tab with event pre-filled</p>
+                  <p className="text-[11px] text-gray-500">Opens in a new tab; choose the exact Google calendar before saving</p>
                 </div>
                 <svg className="ml-auto h-4 w-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -171,7 +175,7 @@ export default function AddToCalendarModal({
               {/* Download .ics */}
               <button
                 onClick={handleDownloadIcs}
-                className="flex w-full items-center gap-3 rounded-xl border border-gray-200 px-4 py-3.5 text-left transition-all hover:border-gray-300 hover:bg-gray-50/50 hover:shadow-sm"
+                className="flex min-h-[44px] w-full items-center gap-3 rounded-xl border border-gray-200 px-4 py-3.5 text-left transition-all hover:border-gray-300 hover:bg-gray-50/50 hover:shadow-sm"
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 shrink-0 text-lg">
                   📥
