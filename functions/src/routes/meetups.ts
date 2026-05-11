@@ -17,6 +17,7 @@ import {
   isBlocked,
   fetchAppleCalendars,
   SLOTTED_CALENDAR_GUEST,
+  formatDateTimeForTimeZone,
 } from "../utils/helpers";
 import { getSupabase } from "../supabase";
 import { google } from "googleapis";
@@ -119,7 +120,8 @@ router.post("/meetups", authWithRateLimit, async (req: AuthRequest, res: Respons
           // Check if current participant set is a subset of (or equals) existing meetup's participants
           const allCurrentIds = [me.id, ...participantIds];
           const isSubset = allCurrentIds.every((id) => existingPartIds.has(id));
-          if (isSubset) {
+          const sameCreator = existing.created_by === me.id;
+          if (isSubset && sameCreator) {
             res.status(409).json({ error: "A similar meetup already exists for this time", existingMeetupId: existing.id });
             return;
           }
@@ -169,11 +171,14 @@ router.post("/meetups", authWithRateLimit, async (req: AuthRequest, res: Respons
     }
 
     // Notify each invited participant
-    const startDt = new Date(resolvedStartTime);
-    const timeStr = startDt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
-      " at " + startDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+    const { data: recipientRows } = await getSupabase()
+      .from("users")
+      .select("id, timezone")
+      .in("id", participantIds);
+    const recipientTimeZones = new Map((recipientRows || []).map((user: any) => [user.id, user.timezone || "America/New_York"]));
 
     for (const pid of participantIds) {
+      const timeStr = formatDateTimeForTimeZone(resolvedStartTime, recipientTimeZones.get(pid));
       await createNotification({
         userId: pid,
         type: "meetup_request",
@@ -215,7 +220,7 @@ router.get("/meetups", authWithRateLimit, async (req: AuthRequest, res: Response
     // Find meetup IDs the user participates in
     const { data: participations, error: partErr } = await getSupabase()
       .from("meetup_participants")
-      .select("meetup_id, rsvp")
+      .select("meetup_id, rsvp, google_event_id")
       .eq("user_id", me.id);
 
     if (partErr) {
@@ -269,9 +274,11 @@ router.get("/meetups", authWithRateLimit, async (req: AuthRequest, res: Response
             photoUrl: u?.photo_url || null,
           };
         });
+      const myParticipation = participations.find((p: any) => p.meetup_id === m.id);
       return {
         ...m,
-        myRsvp: participations.find((p: any) => p.meetup_id === m.id)?.rsvp || "pending",
+        myRsvp: myParticipation?.rsvp || "pending",
+        calendarAdded: Boolean(myParticipation?.google_event_id),
         participants: parts,
       };
     });
@@ -776,7 +783,6 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
 
     const eventTitle = meetup.title || "Hangout";
     const quickLinks = [
-      `Running late? https://slotted-ai.web.app/quick/status/${meetup.id}?action=late`,
       `Need to reschedule? https://slotted-ai.web.app/quick/reschedule/${meetup.id}`,
       `Can't make it? https://slotted-ai.web.app/quick/cancel/${meetup.id}`,
     ].join("\n");
@@ -1264,15 +1270,23 @@ router.post("/meetups/:meetupId/accept-counter-propose", authWithRateLimit, asyn
     const { data: participants } = await getSupabase()
       .from("meetup_participants")
       .select("user_id")
-      .eq("meetup_id", meetupId)
-      .neq("user_id", dbUser.id);
+      .eq("meetup_id", meetupId);
+
+    const newTimeStr = new Date(newStartTime).toLocaleString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
 
     for (const p of (participants || [])) {
       await createNotification({
         userId: p.user_id,
-        type: "meetup_confirmed",
-        title: `${dbUser.display_name} accepted your suggested time!`,
-        body: `Your meetup "${meetup.title}" has been confirmed with the new time.`,
+        type: "meetup_time_changed",
+        title: `${meetup.title || "Hangout"} time updated`,
+        body: `New time: ${newTimeStr}.`,
         relatedUserId: dbUser.id,
         relatedId: meetupId,
       });

@@ -57,7 +57,7 @@ router.get("/notifications", authWithRateLimit, async (req: AuthRequest, res: Re
         if (n.related_id && rsvpMap.has(n.related_id)) {
           (n as any).my_rsvp = rsvpMap.get(n.related_id);
         }
-        if (n.type === "meetup_request" && n.related_id && !rsvpMap.has(n.related_id)) {
+        if (n.type === "meetup_request" && n.related_id && meetupStatusMap.has(n.related_id) && !rsvpMap.has(n.related_id)) {
           (n as any).my_rsvp = "pending";
         }
         if (n.related_id && meetupStatusMap.has(n.related_id)) {

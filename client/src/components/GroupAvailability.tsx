@@ -29,9 +29,10 @@ interface GroupAvailabilityProps {
   allFriendNames?: string[];
   onClose: () => void;
   onBook?: (slot: ScoredSlot) => void;
+  embedded?: boolean;
 }
 
-export default function GroupAvailability({ friendIds, friendNames, allFriendNames = [], onClose, onBook }: GroupAvailabilityProps) {
+export default function GroupAvailability({ friendIds, friendNames, allFriendNames = [], onClose, onBook, embedded = false }: GroupAvailabilityProps) {
   const [loading, setLoading] = useState(true);
   const [suggestions, setSuggestions] = useState<ScoredSlot[]>([]);
   const [overlaps, setOverlaps] = useState<{ start: string; end: string }[]>([]);
@@ -123,9 +124,9 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
 
 
   return (
-    <div className="rounded-2xl border border-purple-200/60 bg-white shadow-lg overflow-hidden">
+    <div className={`overflow-hidden rounded-2xl border border-purple-200/60 bg-white ${embedded ? 'shadow-sm' : 'shadow-lg'}`}>
       {/* Header — purple gradient for groups */}
-      <div className="flex items-center justify-between border-b border-purple-100 px-4 sm:px-5 py-4 bg-gradient-to-r from-purple-50/50 to-fuchsia-50/30">
+      <div className={`flex items-center justify-between border-b border-purple-100 bg-gradient-to-r from-purple-50/50 to-fuchsia-50/30 px-4 sm:px-5 ${embedded ? 'py-3' : 'py-4'}`}>
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-sm font-bold text-gray-900 truncate">
             Group Availability ({friendNames.length + 1} people)
@@ -243,20 +244,22 @@ export default function GroupAvailability({ friendIds, friendNames, allFriendNam
                     <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
                       Send a reminder to sync, or just pick a time and ask if it works.
                     </p>
-                    <button
-                      onClick={async () => {
-                        try {
-                          for (const p of unsynced) {
-                            await api.post('/notifications/nudge-calendar', { friendId: p.userId || p.id });
+                    <div className="mt-4 grid w-full grid-cols-2 gap-2">
+                      <button
+                        onClick={async () => {
+                          try {
+                            for (const p of unsynced) {
+                              await api.post('/notifications/nudge-calendar', { friendId: p.userId || p.id });
+                            }
+                            alert(`Sent ${names} a reminder to connect!`);
+                          } catch {
+                            alert('Could not send reminders right now. Try again in a minute.');
                           }
-                          alert(`Sent ${names} a reminder to connect!`);
-                        } catch { /* silent */ }
-                      }}
-                      className="mt-4 inline-flex rounded-lg border border-purple-200 bg-purple-50 px-4 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition-all"
-                    >
-                      Send {unsynced.length === 1 ? 'a' : ''} reminder{unsynced.length > 1 ? 's' : ''}
-                    </button>
-                    <div className="mt-3 w-full">
+                        }}
+                        className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-center text-xs font-semibold text-purple-700 transition-all hover:bg-purple-100"
+                      >
+                        Send reminder{unsynced.length > 1 ? 's' : ''}
+                      </button>
                       <EventScheduleButton preselectedFriendIds={friendIds} variant="compact" />
                     </div>
                   </>

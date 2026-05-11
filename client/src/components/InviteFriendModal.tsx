@@ -35,15 +35,14 @@ export default function InviteFriendModal({ event, eventScheduleId, onClose }: I
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.post('/events/invite', {
+      const { data } = await api.post('/events/friend-invite', {
         eventScheduleId,
         eventTitle: event.title,
-        venue: event.venue,
-        friendName: friendName.trim(),
       });
       setInviteUrl(data.inviteUrl);
-    } catch {
-      setError('Failed to generate invite link. Try again.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to generate invite link.';
+      setError(`${message} Try again.`);
     } finally {
       setLoading(false);
     }

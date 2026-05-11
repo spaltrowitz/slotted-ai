@@ -42,7 +42,7 @@ interface AuthContextType {
   disconnectOutlookCalendar: () => Promise<void>;
   verifyCalendarHealth: () => Promise<void>;
   isSigningIn: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<User | null>;
   signOut: () => Promise<void>;
 }
 
@@ -94,6 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Auto-connect referral on every auth state change (handles already-logged-in users
         // who click a referral link and get redirected before signInWithGoogle runs)
         await connectReferral(firebaseUser);
+        const postAuthRedirect = sessionStorage.getItem('slotted_post_auth_redirect');
+        if (postAuthRedirect && window.location.pathname !== postAuthRedirect) {
+          sessionStorage.removeItem('slotted_post_auth_redirect');
+          window.location.replace(postAuthRedirect);
+        }
       }
     });
     return unsubscribe;
@@ -158,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   const signInWithGoogle = async () => {
-    if (isSigningIn) return;
+    if (isSigningIn) return null;
     setIsSigningIn(true);
     setAuthError(null);
     try {
@@ -175,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await syncUserToDb(result.user);
         await connectReferral(result.user);
       }
+      return result.user;
     } catch (err: unknown) {
       const firebaseErr = err as { code?: string; message?: string };
       console.error('Auth error:', firebaseErr.message || err);
@@ -195,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setAuthError(`Sign-in failed: ${firebaseErr.message || code}`);
       }
+      return null;
     } finally {
       setIsSigningIn(false);
     }

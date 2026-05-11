@@ -46,9 +46,10 @@ interface FriendAvailabilityProps {
   onClose: () => void;
   onBook?: (slot: ScoredSlot) => void;
   completedHangouts?: number;
+  embedded?: boolean;
 }
 
-export default function FriendAvailability({ friendId, friendName, allFriendNames = [], onClose, onBook, completedHangouts = 0 }: FriendAvailabilityProps) {
+export default function FriendAvailability({ friendId, friendName, allFriendNames = [], onClose, onBook, completedHangouts = 0, embedded = false }: FriendAvailabilityProps) {
   const { user } = useAuth();
   const myFirstName = getFirstName(user?.displayName) || 'Me';
   const friendFirst = getSmartDisplayName(friendName, allFriendNames);
@@ -134,14 +135,14 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
 
 
   return (
-    <div className="rounded-2xl border border-gray-200/60 bg-white shadow-lg overflow-hidden">
+    <div className={`mx-auto max-w-sm overflow-hidden rounded-2xl border border-gray-200/60 bg-white ${embedded ? 'shadow-sm' : 'shadow-lg'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-5 py-4 bg-gradient-to-r from-slotted-50/30 to-purple-50/30">
+      <div className={`flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-slotted-50/30 to-purple-50/30 px-3 sm:px-4 ${embedded ? 'py-2.5' : 'py-3'}`}>
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-sm font-bold text-gray-900 truncate">
             Suggestions with {getSmartDisplayName(friendName, allFriendNames)}
           </h3>
-          <p className="mt-0.5 text-[11px] text-gray-500">
+          <p className="mt-0.5 truncate text-[11px] text-gray-500">
             Best times to meet based on both your calendars &amp; preferences
           </p>
         </div>
@@ -156,7 +157,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
       </div>
 
       {/* Hangout mode toggle */}
-      <div className="flex items-center gap-1.5 px-4 sm:px-5 py-2.5 border-b border-gray-100 bg-gray-50/50">
+      <div className="flex items-center gap-1.5 border-b border-gray-100 bg-gray-50/50 px-3 sm:px-4 py-2">
         {(['in_person', 'call'] as HangoutMode[]).map((mode) => {
           const cfg = MODE_CONFIG[mode];
           const isActive = hangoutMode === mode;
@@ -206,7 +207,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
       )}
 
       {/* Content */}
-      <div className="px-5 py-4">
+      <div className={`px-3 sm:px-4 ${embedded ? 'py-2.5' : 'py-3'}`}>
         {booked && bookedLabel ? (
           /* ──── REQUEST SENT — full panel "what happens next" ──── */
           <div className="flex flex-col items-center text-center py-6 animate-in fade-in slide-in-from-bottom-2">
@@ -257,16 +258,16 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
             </button>
           </div>
         ) : loading ? (
-          <div className="flex flex-col items-center justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-3 border-slotted-400 border-t-transparent" />
-            <p className="mt-3 text-xs text-gray-400">Syncing calendars &amp; finding the best times…</p>
+          <div className="flex flex-col items-center justify-center py-8">
+            <div className="h-7 w-7 animate-spin rounded-full border-3 border-slotted-400 border-t-transparent" />
+            <p className="mt-2 text-xs text-gray-400">Syncing calendars &amp; finding the best times…</p>
           </div>
         ) : error ? (
           <div className="rounded-xl border border-red-100 bg-red-50/50 px-4 py-3 text-xs text-red-600">
             {error}
           </div>
         ) : suggestions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+          <div className="flex flex-col items-center justify-center px-2 py-5 text-center">
             {(() => {
               const meNotSynced = !syncStatus?.me.synced;
               const friendNotSynced = syncStatus?.friend && !syncStatus.friend.calendarConnected;
@@ -275,12 +276,12 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
               if (meNotSynced && friendNotSynced) {
                 return (
                   <>
-                    <span className="text-3xl">📅</span>
-                    <h4 className="mt-3 text-sm font-semibold text-gray-800">Neither of you have calendars connected yet!</h4>
-                    <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                    <span className="text-2xl">📅</span>
+                    <h4 className="mt-2 text-sm font-semibold text-gray-800">Neither calendar is connected yet</h4>
+                    <p className="mt-1 max-w-xs text-xs leading-relaxed text-gray-500">
                       Connect your calendar in Settings so Slotted can find times you're both free. Ask {displayName} to connect theirs too!
                     </p>
-                    <a href="/settings" className="mt-4 inline-flex rounded-lg gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm">
+                    <a href="/settings" className="mt-3 inline-flex rounded-lg gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm">
                       Connect my calendar
                     </a>
                   </>
@@ -289,12 +290,12 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
               if (meNotSynced) {
                 return (
                   <>
-                    <span className="text-3xl">📅</span>
-                    <h4 className="mt-3 text-sm font-semibold text-gray-800">Connect your calendar first</h4>
-                    <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                    <span className="text-2xl">📅</span>
+                    <h4 className="mt-2 text-sm font-semibold text-gray-800">Connect your calendar first</h4>
+                    <p className="mt-1 max-w-xs text-xs leading-relaxed text-gray-500">
                       Slotted needs your calendar to find when you're free. It only sees busy/free — never event details.
                     </p>
-                    <a href="/settings" className="mt-4 inline-flex rounded-lg gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm">
+                    <a href="/settings" className="mt-3 inline-flex rounded-lg gradient-btn px-4 py-2 text-xs font-semibold text-white shadow-sm">
                       Connect my calendar
                     </a>
                   </>
@@ -303,12 +304,12 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
               if (friendNotSynced) {
                 return (
                   <>
-                    <span className="text-3xl">👋</span>
-                    <h4 className="mt-3 text-sm font-semibold text-gray-800">{displayName} hasn't synced their calendar</h4>
-                    <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                    <span className="text-2xl">👋</span>
+                    <h4 className="mt-2 text-sm font-semibold text-gray-800">{displayName} hasn't synced their calendar</h4>
+                    <p className="mt-1 max-w-xs text-xs leading-relaxed text-gray-500">
                       Send a reminder, or just pick a time and we'll check if they're free.
                     </p>
-                    <div className="mt-4 flex gap-2">
+                    <div className="mt-3 flex gap-2">
                       <button
                         onClick={async () => {
                           try {
@@ -316,7 +317,7 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
                             alert(`Sent ${displayName} a reminder to connect their calendar!`);
                           } catch { /* silent */ }
                         }}
-                        className="inline-flex rounded-lg border border-slotted-200 bg-slotted-50 px-4 py-2 text-xs font-semibold text-slotted-700 hover:bg-slotted-100 transition-all"
+                        className="inline-flex min-h-[40px] items-center rounded-lg border border-slotted-200 bg-slotted-50 px-4 py-2 text-xs font-semibold text-slotted-700 transition-all hover:bg-slotted-100"
                       >
                         Send a reminder
                       </button>
@@ -326,9 +327,9 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
               }
               return (
                 <>
-                  <span className="text-3xl">😅</span>
-                  <h4 className="mt-3 text-sm font-semibold text-gray-800">You're both pretty busy!</h4>
-                  <p className="mt-1.5 max-w-sm text-xs text-gray-500 leading-relaxed">
+                  <span className="text-2xl">😅</span>
+                  <h4 className="mt-2 text-sm font-semibold text-gray-800">You're both pretty busy!</h4>
+                  <p className="mt-1 max-w-xs text-xs leading-relaxed text-gray-500">
                     No overlapping free times in the next 2 weeks. Try checking back in a few days — schedules change!
                   </p>
                 </>

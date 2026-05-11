@@ -5,6 +5,7 @@ import type { ScheduleEvent } from './EventSearchModal';
 interface EventPollBottomBarProps {
   selectedCount: number;
   submitted: boolean;
+  submitting?: boolean;
   pendingFriends: string[];
   event: ScheduleEvent;
   eventScheduleId?: string;
@@ -14,6 +15,7 @@ interface EventPollBottomBarProps {
 export default function EventPollBottomBar({
   selectedCount,
   submitted,
+  submitting = false,
   pendingFriends,
   event,
   onSubmit,
@@ -60,14 +62,14 @@ export default function EventPollBottomBar({
         </span>
         <button
           onClick={onSubmit}
-          disabled={selectedCount === 0}
+          disabled={selectedCount === 0 || submitting}
           className={`rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all ${
-            selectedCount > 0
+            selectedCount > 0 && !submitting
               ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0'
               : 'bg-gray-300 cursor-not-allowed'
           }`}
         >
-          Send to friends
+          {submitting ? 'Creating link…' : 'Send to friends'}
         </button>
       </div>
     </div>

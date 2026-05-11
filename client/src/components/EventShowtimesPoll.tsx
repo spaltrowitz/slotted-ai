@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import EventShowtimeCard from './EventShowtimeCard';
 import EventPollBottomBar from './EventPollBottomBar';
 import InviteFriendButton from './InviteFriendButton';
@@ -10,29 +10,86 @@ interface EventShowtimesPollProps {
   event: ScheduleEvent;
   showtimes: ScheduleShowtime[];
   friendIds?: string[];
+  initialEventScheduleId?: string;
+  initialSelectedDatetimes?: Set<string>;
+  onDraftSaved?: (scheduleId: string) => void;
+  onSelectionChange?: (datetimes: Set<string>) => void;
 }
 
 export default function EventShowtimesPoll({
   event,
   showtimes,
   friendIds = [],
+  initialEventScheduleId,
+  initialSelectedDatetimes = new Set<string>(),
+  onDraftSaved,
+  onSelectionChange,
 }: EventShowtimesPollProps) {
-  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  const orderedShowtimes = useMemo(
+    () => [...showtimes].sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime()),
+    [showtimes],
+  );
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(
+    () => new Set(orderedShowtimes
+      .map((showtime, index) => initialSelectedDatetimes.has(showtime.datetime) ? index : null)
+      .filter((index): index is number => index !== null)),
+  );
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [eventScheduleId, setEventScheduleId] = useState<string | undefined>(initialEventScheduleId);
+  const [inviteUrl, setInviteUrl] = useState<string | undefined>();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [draftStatus, setDraftStatus] = useState<'saving' | 'saved' | 'error'>('saving');
   const [pendingFriends] = useState<string[]>(() => {
     const names = new Set<string>();
-    for (const s of showtimes) {
+    for (const s of orderedShowtimes) {
       for (const name of s.allFree) names.add(name);
       for (const c of s.conflicts) names.add(c.name);
     }
     return Array.from(names);
   });
 
-  const sorted = [...showtimes].sort((a, b) => {
-    if (a.available && !b.available) return -1;
-    if (!a.available && b.available) return 1;
-    return new Date(a.datetime).getTime() - new Date(b.datetime).getTime();
-  });
+  const showtimePayload = useMemo(() => orderedShowtimes.map(s => ({
+    datetime: s.datetime,
+    ticketUrl: s.ticketUrl,
+    price: s.price,
+  })), [orderedShowtimes]);
+
+  useEffect(() => {
+    let canceled = false;
+    const saveDraft = async () => {
+      setDraftStatus('saving');
+      try {
+        const { data } = await api.post<{ scheduleId: string }>('/events/poll-draft', {
+          eventScheduleId,
+          eventTitle: event.title,
+          eventVenue: event.venue,
+          eventImageUrl: event.imageUrl,
+          showtimes: showtimePayload,
+          friendIds,
+        });
+        if (!canceled) {
+          setEventScheduleId(data.scheduleId);
+          onDraftSaved?.(data.scheduleId);
+          setDraftStatus('saved');
+        }
+      } catch (err: unknown) {
+        console.error('Draft save failed:', err instanceof Error ? err.message : err);
+        if (!canceled) setDraftStatus('error');
+      }
+    };
+
+    void saveDraft();
+    return () => {
+      canceled = true;
+    };
+  }, [event.title, event.venue, event.imageUrl, friendIds, onDraftSaved, showtimePayload]);
+
+  useEffect(() => {
+    setSelectedIndices(new Set(orderedShowtimes
+      .map((showtime, index) => initialSelectedDatetimes.has(showtime.datetime) ? index : null)
+      .filter((index): index is number => index !== null)));
+  }, [initialSelectedDatetimes, orderedShowtimes]);
 
   const toggleShowtime = (originalIndex: number) => {
     if (submitted) return;
@@ -43,31 +100,47 @@ export default function EventShowtimesPoll({
       } else {
         next.add(originalIndex);
       }
+      onSelectionChange?.(new Set(
+        [...next]
+          .map((index) => orderedShowtimes[index]?.datetime)
+          .filter((datetime): datetime is string => Boolean(datetime)),
+      ));
       return next;
     });
   };
 
   const handleSubmit = async () => {
-    setSubmitted(true);
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
     try {
-      await api.post('/events/poll', {
+      const { data: poll } = await api.post<{ scheduleId: string }>('/events/poll', {
+        eventScheduleId,
         eventTitle: event.title,
         eventVenue: event.venue,
         eventImageUrl: event.imageUrl,
-        showtimes: showtimes.map(s => ({
-          datetime: s.datetime,
-          ticketUrl: s.ticketUrl,
-          price: s.price,
-        })),
+        showtimes: showtimePayload,
         friendIds,
         selectedIndices: Array.from(selectedIndices),
       });
+      setEventScheduleId(poll.scheduleId);
+
+      const { data: invite } = await api.post<{ inviteUrl: string }>('/events/friend-invite', {
+        eventScheduleId: poll.scheduleId,
+        eventTitle: event.title,
+        friendIds,
+      });
+      setInviteUrl(invite.inviteUrl);
+      setSubmitted(true);
     } catch (err: unknown) {
       console.error('Poll submission failed:', err instanceof Error ? err.message : err);
+      setSubmitError('Could not create the poll link. Try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  if (sorted.length === 0) {
+  if (orderedShowtimes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
         <span className="text-3xl mb-3">🎭</span>
@@ -78,12 +151,6 @@ export default function EventShowtimesPoll({
       </div>
     );
   }
-
-  // Map sorted items back to their original index in the showtimes array
-  const sortedWithOriginalIndex = sorted.map((s) => ({
-    showtime: s,
-    originalIndex: showtimes.indexOf(s),
-  }));
 
   return (
     <div className="px-4 pt-4 pb-28 space-y-3">
@@ -106,16 +173,31 @@ export default function EventShowtimesPoll({
       </div>
 
       {submitted ? (
-        <PostSubmitShareSection event={event} pendingFriends={pendingFriends} />
+        <PostSubmitShareSection
+          event={event}
+          pendingFriends={pendingFriends}
+          eventScheduleId={eventScheduleId}
+          inviteUrl={inviteUrl}
+        />
       ) : (
         <>
           <p className="text-xs text-gray-500">
             Check all the dates that work for you
-            {sorted[0]?.ticketUrl && (
+            {' · '}
+            <span className={
+              draftStatus === 'saved'
+                ? 'text-emerald-600'
+                : draftStatus === 'error'
+                  ? 'text-red-500'
+                  : 'text-gray-400'
+            }>
+              {draftStatus === 'saved' ? 'Draft saved' : draftStatus === 'error' ? 'Draft not saved' : 'Saving draft…'}
+            </span>
+            {orderedShowtimes[0]?.ticketUrl && (
               <>
                 {' · '}
                 <a
-                  href={sorted[0].ticketUrl}
+                  href={orderedShowtimes[0].ticketUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-0.5 font-medium text-violet-600 hover:text-violet-800"
@@ -132,12 +214,12 @@ export default function EventShowtimesPoll({
 
       {/* Showtime cards */}
       <div className="space-y-2.5">
-        {sortedWithOriginalIndex.map(({ showtime, originalIndex }) => (
+        {orderedShowtimes.map((showtime, index) => (
           <EventShowtimeCard
-            key={originalIndex}
+            key={`${showtime.datetime}-${index}`}
             showtime={showtime}
-            selected={selectedIndices.has(originalIndex)}
-            onToggle={() => toggleShowtime(originalIndex)}
+            selected={selectedIndices.has(index)}
+            onToggle={() => toggleShowtime(index)}
             disabled={submitted}
           />
         ))}
@@ -147,10 +229,17 @@ export default function EventShowtimesPoll({
       <EventPollBottomBar
         selectedCount={selectedIndices.size}
         submitted={submitted}
+        submitting={submitting}
         pendingFriends={pendingFriends}
         event={event}
+        eventScheduleId={eventScheduleId}
         onSubmit={handleSubmit}
       />
+      {submitError && (
+        <div className="fixed bottom-20 left-4 right-4 z-50 mx-auto max-w-lg rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-sm">
+          {submitError}
+        </div>
+      )}
     </div>
   );
 }

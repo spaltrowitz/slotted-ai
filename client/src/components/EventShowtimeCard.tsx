@@ -5,6 +5,8 @@ interface EventShowtimeCardProps {
   selected: boolean;
   onToggle: () => void;
   disabled?: boolean;
+  onRemove?: () => void;
+  removeDisabled?: boolean;
 }
 
 function formatShowtimeDate(iso: string): string {
@@ -51,82 +53,100 @@ export default function EventShowtimeCard({
   selected,
   onToggle,
   disabled = false,
+  onRemove,
+  removeDisabled = false,
 }: EventShowtimeCardProps) {
   const hint = getCalendarHint(showtime);
 
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      disabled={disabled}
-      aria-pressed={selected}
+    <div
       className={`w-full rounded-xl border p-3.5 text-left transition-all ${
         selected
           ? 'ring-2 ring-violet-400 border-violet-300 bg-violet-50/60'
           : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-      } ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer active:scale-[0.98]'}`}
+      } ${disabled ? 'opacity-60' : ''}`}
     >
       <div className="flex items-start gap-3">
-        {/* Checkbox */}
-        <div
-          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
-            selected
-              ? 'border-violet-500 bg-violet-500'
-              : 'border-gray-300 bg-white'
-          }`}
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={disabled}
+          aria-pressed={selected}
+          className="flex min-w-0 flex-1 items-start gap-3 text-left disabled:cursor-not-allowed"
         >
-          {selected && (
-            <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">
-                {formatShowtimeDate(showtime.datetime)} · {formatShowtimeTime(showtime.datetime)}
-              </p>
-              {showtime.price && formatPrice(showtime.price) && (
-                <p className="mt-0.5 text-xs text-gray-500">
-                  {formatPrice(showtime.price)}
-                </p>
-              )}
-            </div>
-
-            {/* Calendar hint badge */}
-            {hint && (
-              <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-                {hint.icon} {hint.label}
-              </span>
+          {/* Checkbox */}
+          <div
+            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
+              selected
+                ? 'border-violet-500 bg-violet-500'
+                : 'border-gray-300 bg-white'
+            }`}
+          >
+            {selected && (
+              <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
             )}
           </div>
 
-          {/* Availability summary row */}
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {showtime.allFree.map((name) => (
-              <span
-                key={name}
-                className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700"
-              >
-                ✅ {name}
-              </span>
-            ))}
-            {showtime.conflicts.map((c) => (
-              <span
-                key={c.name}
-                className="inline-flex items-center gap-0.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500"
-              >
-                {c.reason === 'busy' ? '❌' : '⚠️'} {c.name}
-              </span>
-            ))}
+          {/* Content */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  {formatShowtimeDate(showtime.datetime)} · {formatShowtimeTime(showtime.datetime)}
+                </p>
+                {showtime.price && formatPrice(showtime.price) && (
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    {formatPrice(showtime.price)}
+                  </p>
+                )}
+              </div>
+
+              {/* Calendar hint badge */}
+              {hint && (
+                <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                  {hint.icon} {hint.label}
+                </span>
+              )}
+            </div>
+
+            {/* Availability summary row */}
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {showtime.allFree.map((name) => (
+                <span
+                  key={name}
+                  className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700"
+                >
+                  ✅ {name}
+                </span>
+              ))}
+              {showtime.conflicts.map((c) => (
+                <span
+                  key={c.name}
+                  className="inline-flex items-center gap-0.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500"
+                >
+                  {c.reason === 'busy' ? '❌' : '⚠️'} {c.name}
+                </span>
+              ))}
+            </div>
+
+
           </div>
+        </button>
 
-
-        </div>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={removeDisabled}
+            className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-red-100 bg-red-50 text-lg font-semibold leading-none text-red-500 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label={`Remove ${formatShowtimeDate(showtime.datetime)} ${formatShowtimeTime(showtime.datetime)}`}
+          >
+            ×
+          </button>
+        )}
       </div>
-    </button>
+    </div>
   );
 }

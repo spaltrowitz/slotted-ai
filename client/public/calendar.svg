@@ -1,17 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <!-- Calendar body -->
-  <rect x="3" y="6" width="26" height="23" rx="3" fill="#4f46e5"/>
-  <!-- Top bar (darker) -->
-  <rect x="3" y="6" width="26" height="7" rx="3" fill="#3730a3"/>
-  <rect x="3" y="10" width="26" height="3" fill="#3730a3"/>
-  <!-- Calendar rings -->
-  <rect x="9" y="3" width="3" height="6" rx="1.5" fill="#6366f1"/>
-  <rect x="20" y="3" width="3" height="6" rx="1.5" fill="#6366f1"/>
-  <!-- Date grid dots -->
-  <rect x="8" y="16" width="3.5" height="3.5" rx="0.75" fill="white" opacity="0.9"/>
-  <rect x="14.25" y="16" width="3.5" height="3.5" rx="0.75" fill="white" opacity="0.9"/>
-  <rect x="20.5" y="16" width="3.5" height="3.5" rx="0.75" fill="white" opacity="0.9"/>
-  <rect x="8" y="22" width="3.5" height="3.5" rx="0.75" fill="white" opacity="0.6"/>
-  <rect x="14.25" y="22" width="3.5" height="3.5" rx="0.75" fill="white" opacity="0.6"/>
-  <rect x="20.5" y="22" width="3.5" height="3.5" rx="0.75" fill="white" opacity="0.6"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Slotted.ai">
+  <defs>
+    <linearGradient id="slotted-logo-gradient" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0d9488"/>
+      <stop offset="50%" stop-color="#0891b2"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#slotted-logo-gradient)"/>
+  <path
+    d="M11.33 9.33V6.67m9.34 2.66V6.67m-10 7.11h10M8 26h16a2.67 2.67 0 0 0 2.67-2.67V9.33A2.67 2.67 0 0 0 24 6.67H8a2.67 2.67 0 0 0-2.67 2.66v14A2.67 2.67 0 0 0 8 26Z"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="2.67"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
 </svg>

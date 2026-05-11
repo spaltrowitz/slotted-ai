@@ -150,7 +150,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
   const counterProposeMutation = useMutation({
     mutationFn: async ({ meetupId, action, startTime, endTime }: { meetupId: string; action: 'update_time' | 'keep_original'; startTime?: string; endTime?: string }) => {
       if (action === 'update_time') {
-        await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'accepted', start_time: startTime, end_time: endTime });
+        await api.post(`/meetups/${meetupId}/accept-counter-propose`, { newStartTime: startTime, newEndTime: endTime });
       } else {
         await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'accepted' });
       }
@@ -260,6 +260,11 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
       navigate(`/dashboard?findTimes=${encodeURIComponent(notification.related_user_id)}`);
       return;
     }
+    if (notification.type === 'event_poll_update' && notification.related_id) {
+      onClose();
+      navigate(`/event-poll/${notification.related_id}`);
+      return;
+    }
     if (isFriendJoined) {
       onClose();
       navigate(notification.related_user_id ? `/dashboard?findTimes=${encodeURIComponent(notification.related_user_id)}` : '/dashboard');
@@ -275,6 +280,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
     meetup_reminder: { emoji: '⏳', bg: 'bg-blue-50', border: 'border-blue-100' },
     calendar_match: { emoji: '', bg: 'bg-amber-50', border: 'border-amber-100' },
     event_shared: { emoji: '', bg: 'bg-purple-50', border: 'border-purple-100' },
+    event_poll_update: { emoji: '', bg: 'bg-purple-50', border: 'border-purple-100' },
     meetup_rsvp_changed: { emoji: '', bg: 'bg-sky-50', border: 'border-sky-100' },
     meetup_time_changed: { emoji: '', bg: 'bg-indigo-50', border: 'border-indigo-100' },
     meetup_counter_propose: { emoji: '', bg: 'bg-violet-50', border: 'border-violet-100' },
@@ -450,7 +456,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                       )}
 
                       {/* Meetup RSVP actions */}
-                      {notification.type === 'meetup_request' && notification.related_id && (
+                      {notification.type === 'meetup_request' && notification.related_id && notification.my_rsvp && (
                         <div className="mt-1.5">
                           {rsvpDone[notification.id] ? (
                             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border ${
@@ -566,14 +572,6 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
                             }`}>
                               {counterProposeActionDone[notification.id] === 'update_time' ? '✅ Time updated' : 'Kept original time'}
                             </span>
-                          ) : notification.read ? (
-                            <Link
-                              to="/dashboard"
-                              onClick={(e) => { e.stopPropagation(); onClose(); }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slotted-200 bg-slotted-50 px-3 py-2 min-h-[44px] text-xs font-semibold text-slotted-700 hover:bg-slotted-100 shadow-sm"
-                            >
-                              View meetup
-                            </Link>
                           ) : (
                             <>
                               <div className="flex gap-1.5">

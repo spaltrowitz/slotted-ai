@@ -104,9 +104,9 @@ export default function NotificationsPage() {
   });
 
   const counterProposeMutation = useMutation({
-    mutationFn: async ({ meetupId, action }: { meetupId: string; action: 'update_time' | 'keep_original' }) => {
+    mutationFn: async ({ meetupId, action, startTime, endTime }: { meetupId: string; action: 'update_time' | 'keep_original'; startTime?: string; endTime?: string }) => {
       if (action === 'update_time') {
-        await api.patch(`/meetups/${meetupId}/rsvp`, { rsvp: 'accepted' });
+        await api.post(`/meetups/${meetupId}/accept-counter-propose`, { newStartTime: startTime, newEndTime: endTime });
       }
     },
     onSuccess: () => {
@@ -221,10 +221,19 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleCounterProposeAction = async (notificationId: string, meetupId: string, action: 'update_time' | 'keep_original') => {
+  const handleCounterProposeAction = async (notificationId: string, meetupId: string, action: 'update_time' | 'keep_original', notification: Notification) => {
     setCounterProposeActionLoading(notificationId);
+    if (action === 'update_time' && !notification.proposed_start_time) {
+      setCounterProposeActionLoading(null);
+      return;
+    }
     try {
-      await counterProposeMutation.mutateAsync({ meetupId, action });
+      await counterProposeMutation.mutateAsync({
+        meetupId,
+        action,
+        startTime: notification.proposed_start_time,
+        endTime: notification.proposed_end_time,
+      });
       await markAsReadMutation.mutateAsync(notificationId);
       setCounterProposeActionDone((prev) => ({ ...prev, [notificationId]: action }));
       const previousNotifications = queryClient.getQueryData<Notification[]>(queryKeys.notifications) ?? notifications;
@@ -244,7 +253,7 @@ export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'requests' | 'reminders'>('all');
 
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const requestTypes = ['friend_request', 'meetup_request', 'meetup_counter_propose'];
+  const requestTypes = ['friend_request', 'meetup_request', 'event_poll_update', 'meetup_counter_propose'];
   const reminderTypes = ['meetup_reminder', 'calendar_match', 'meetup_rsvp_changed', 'meetup_time_changed'];
   // event_shared notifications are shown in all tabs
 
@@ -272,6 +281,11 @@ export default function NotificationsPage() {
 
     if (notification.type === 'calendar_match' && notification.related_user_id && !isSharedEvent) {
       navigate(`/dashboard?findTimes=${encodeURIComponent(notification.related_user_id)}`);
+      return;
+    }
+
+    if (notification.type === 'event_poll_update' && notification.related_id) {
+      navigate(`/event-poll/${notification.related_id}`);
       return;
     }
 
@@ -468,7 +482,7 @@ export default function NotificationsPage() {
                   )}
 
                   {/* Meetup RSVP buttons */}
-                  {notification.type === 'meetup_request' && notification.related_id && (
+                  {notification.type === 'meetup_request' && notification.related_id && notification.my_rsvp && (
                     <div className="mt-2">
                       {rsvpDone[notification.id] ? (
                         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium border ${
@@ -590,25 +604,17 @@ export default function NotificationsPage() {
                         }`}>
                           {counterProposeActionDone[notification.id] === 'update_time' ? '✅ Time updated' : 'Kept original time'}
                         </span>
-                      ) : notification.read ? (
-                        <Link
-                          to="/dashboard"
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-slotted-200 bg-slotted-50 px-4 py-1.5 text-xs font-semibold text-slotted-700 transition-all hover:bg-slotted-100 shadow-sm"
-                        >
-                          View meetup
-                        </Link>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'update_time'); }}
+                            onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'update_time', notification); }}
                             disabled={counterProposeActionLoading === notification.id}
                             className="rounded-lg bg-violet-500 px-4 py-1.5 text-xs font-semibold text-white transition-all hover:bg-violet-600 shadow-sm disabled:opacity-50"
                           >
                             {counterProposeActionLoading === notification.id ? '...' : 'Update time'}
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'keep_original'); }}
+                            onClick={(e) => { e.stopPropagation(); handleCounterProposeAction(notification.id, notification.related_id!, 'keep_original', notification); }}
                             disabled={counterProposeActionLoading === notification.id}
                             className="rounded-lg border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-600 transition-all hover:bg-gray-50 disabled:opacity-50"
                           >
@@ -667,4 +673,3 @@ export default function NotificationsPage() {
     </AppShell>
   );
 }
-
