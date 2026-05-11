@@ -907,15 +907,10 @@ export default function DashboardPage() {
                             </div>
                           </div>
                         )}
-                        {poll.invitesClosed && (
-                          <div className="rounded-xl border border-violet-100 bg-violet-50 px-3 py-2">
-                            <p className="font-semibold text-violet-800">
-                              Invites closed
-                            </p>
-                            <p className="mt-0.5 text-violet-700">
-                              The invite link now only works for people already in this poll.
-                            </p>
-                          </div>
+                        {poll.invitesClosed && !isReadyToChoose && (
+                          <p className="px-1 text-[11px] font-medium text-violet-700">
+                            🔒 Invites closed — link only works for people already in this poll.
+                          </p>
                         )}
                         {poll.voted.length > 0 && (
                           <div className="rounded-xl border border-emerald-100 bg-white px-2.5 py-2">
@@ -930,7 +925,6 @@ export default function DashboardPage() {
                         {poll.pending.length > 0 && !needsMyPicks && (
                           <div className="rounded-xl border border-slate-100 bg-white px-2.5 py-2">
                             <div className="mb-1.5 flex items-center justify-between gap-2">
-                              <p className="min-w-0 truncate text-[11px] font-semibold text-slate-600">⏳ {pendingLabel}</p>
                               {poll.isOwner && (
                                 <button
                                   type="button"
@@ -941,6 +935,7 @@ export default function DashboardPage() {
                                   {nudgePollMutation.isPending ? 'Sending…' : '👋 Nudge'}
                                 </button>
                               )}
+                              <p className="min-w-0 truncate text-right text-[11px] font-semibold text-slate-600">⏳ {pendingLabel}</p>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {poll.pending.map((person) => (
@@ -1135,7 +1130,7 @@ export default function DashboardPage() {
               {!friendTipDismissed && (
                 <div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-slotted-100 bg-slotted-50/70 px-3 py-2.5">
                   <p className="text-xs leading-relaxed text-slotted-800">
-                    Tap a friend to find times, or check multiple friends for group plans.
+                    Tap a friend, or check multiple for group plans.
                   </p>
                   <button
                     type="button"
