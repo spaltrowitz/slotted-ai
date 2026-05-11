@@ -964,16 +964,18 @@ export default function DashboardPage() {
                         <button
                           type="button"
                           onClick={() => copyPollInvite(poll)}
-                          disabled={sharingPollId === poll.id || (poll.invitesClosed && !poll.isOwner)}
-                          className={`min-h-[40px] rounded-xl px-2 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
-                            needsMyPicks
-                              ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm'
-                              : isReadyToChoose
-                                ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                : 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm hover:shadow-md'
+                          disabled={sharingPollId === poll.id || poll.invitesClosed}
+                          className={`min-h-[40px] rounded-xl px-2 py-2 text-xs font-semibold transition-all disabled:opacity-100 ${
+                            poll.invitesClosed
+                              ? 'cursor-not-allowed border border-gray-200 bg-gray-50 text-gray-400'
+                              : needsMyPicks
+                                ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm'
+                                : isReadyToChoose
+                                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                  : 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm hover:shadow-md'
                           }`}
                         >
-                          {copiedPollId === poll.id ? 'Copied!' : poll.invitesClosed ? 'Link closed' : 'Copy link'}
+                          {copiedPollId === poll.id ? 'Copied!' : poll.invitesClosed ? '🔒 Link closed' : 'Copy link'}
                         </button>
                         <button
                           type="button"
