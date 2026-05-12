@@ -3736,7 +3736,7 @@ router.post("/events/schedules/:scheduleId/settle", authWithRateLimit, async (re
       .from("event_schedules")
       .update(scheduleUpdate)
       .eq("id", scheduleId);
-    if (updateErr && /confirmed_source|check constraint/i.test(updateErr.message)) {
+    if (updateErr && /event_schedules_confirmed_source_check|confirmed_source.*check|check.*confirmed_source/i.test(updateErr.message)) {
       scheduleUpdate.confirmed_source = "admin";
       const retry = await getSupabase()
         .from("event_schedules")
