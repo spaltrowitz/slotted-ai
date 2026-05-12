@@ -14,7 +14,9 @@ export async function sendEmail(opts: {
 }): Promise<boolean> {
   const tag = opts.logTag || "EMAIL";
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL || "Slotted.ai <noreply@slotted.ai>";
+  const fromAddress = process.env.RESEND_FROM_EMAIL || "noreply@slottedapp.com";
+  const fromName = process.env.RESEND_FROM_NAME || "Slotted.ai";
+  const from = fromAddress.includes("<") ? fromAddress : `${fromName} <${fromAddress}>`;
   if (!apiKey) {
     console.log(`[${tag}] RESEND_API_KEY not configured; skipped email for ${opts.userId}`);
     return false;
