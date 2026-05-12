@@ -3732,10 +3732,18 @@ router.post("/events/schedules/:scheduleId/settle", authWithRateLimit, async (re
     if (updatedShowtimes !== showtimes) {
       scheduleUpdate.showtimes = updatedShowtimes;
     }
-    const { error: updateErr } = await getSupabase()
+    let { error: updateErr } = await getSupabase()
       .from("event_schedules")
       .update(scheduleUpdate)
       .eq("id", scheduleId);
+    if (updateErr && /confirmed_source|check constraint/i.test(updateErr.message)) {
+      scheduleUpdate.confirmed_source = "admin";
+      const retry = await getSupabase()
+        .from("event_schedules")
+        .update(scheduleUpdate)
+        .eq("id", scheduleId);
+      updateErr = retry.error;
+    }
     if (updateErr) {
       res.status(500).json({ error: updateErr.message });
       return;

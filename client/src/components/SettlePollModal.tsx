@@ -51,6 +51,16 @@ function defaultCustomDatetime(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function splitDatetime(value: string): { date: string; time: string } {
+  const [date = '', time = ''] = value.split('T');
+  return { date, time };
+}
+
+function combineDatetime(date: string, time: string): string {
+  if (!date || !time) return '';
+  return `${date}T${time}`;
+}
+
 export default function SettlePollModal({
   scheduleId,
   eventTitle,
@@ -66,7 +76,9 @@ export default function SettlePollModal({
   const [step, setStep] = useState<Step>('date');
   const [showtimeIndex, setShowtimeIndex] = useState<number | null>(null);
   const [useCustom, setUseCustom] = useState(false);
-  const [customDatetime, setCustomDatetime] = useState<string>(defaultCustomDatetime());
+  const defaultDateTime = splitDatetime(defaultCustomDatetime());
+  const [customDate, setCustomDate] = useState<string>(defaultDateTime.date);
+  const [customTime, setCustomTime] = useState<string>(defaultDateTime.time);
   const [customLocation, setCustomLocation] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +119,8 @@ export default function SettlePollModal({
     setSelectedRecipients(new Set(allParticipants.map((p) => p.userId)));
   };
 
-  const dateStepValid = useCustom ? customDatetime.trim().length > 0 : showtimeIndex !== null;
+  const customDatetime = combineDatetime(customDate, customTime);
+  const dateStepValid = useCustom ? customDatetime.length > 0 : showtimeIndex !== null;
   const recipientStepValid = selectedRecipients.size > 0;
 
   const selectedDateLabel = useCustom
@@ -230,15 +243,26 @@ export default function SettlePollModal({
                 </button>
                 {useCustom && (
                   <div className="space-y-2 rounded-xl border border-sky-100 bg-sky-50/50 p-3">
-                    <label className="block text-xs font-medium text-gray-700">
-                      Date & time
-                      <input
-                        type="datetime-local"
-                        value={customDatetime}
-                        onChange={(e) => setCustomDatetime(e.target.value)}
-                        className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-sky-500 focus:outline-none"
-                      />
-                    </label>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <label className="block text-xs font-medium text-gray-700">
+                        Date
+                        <input
+                          type="date"
+                          value={customDate}
+                          onChange={(e) => setCustomDate(e.target.value)}
+                          className="mt-1 min-h-[44px] w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-sky-500 focus:outline-none"
+                        />
+                      </label>
+                      <label className="block text-xs font-medium text-gray-700">
+                        Time
+                        <input
+                          type="time"
+                          value={customTime}
+                          onChange={(e) => setCustomTime(e.target.value)}
+                          className="mt-1 min-h-[44px] w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-sky-500 focus:outline-none"
+                        />
+                      </label>
+                    </div>
                     <label className="block text-xs font-medium text-gray-700">
                       Location <span className="text-gray-400 font-normal">(optional)</span>
                       <input
