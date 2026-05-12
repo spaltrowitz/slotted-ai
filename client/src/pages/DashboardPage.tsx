@@ -15,7 +15,6 @@ import api from '../lib/api';
 import { getFirstName, getSmartDisplayName, formatMeetupTime } from '../lib/utils';
 import { getUserStage, type UserStage } from '../lib/userStage';
 import {
-  fetchDashboard,
   fetchFriends,
   fetchMeetups,
   queryKeys,
@@ -282,19 +281,13 @@ export default function DashboardPage() {
   const friendTipDismissedKey = userUid ? `slotted_friend_tip_dismissed_${userUid}` : null;
 
   /* ─── data fetching ─── */
-  const { isLoading: dashboardLoading } = useQuery({
-    queryKey: queryKeys.dashboard,
-    queryFn: fetchDashboard,
-    enabled: !!userUid,
-  });
-
-  const { data: meetups = [] } = useQuery({
+  const { data: meetups = [], isLoading: meetupsLoading } = useQuery({
     queryKey: queryKeys.meetups,
     queryFn: fetchMeetups,
     enabled: !!userUid,
   });
 
-  const { data: friendsData = [] } = useQuery({
+  const { data: friendsData = [], isLoading: friendsLoading } = useQuery({
     queryKey: queryKeys.friends,
     queryFn: fetchFriends,
     enabled: !!userUid,
@@ -490,7 +483,7 @@ export default function DashboardPage() {
     [calendarConnected, acceptedFriends.length, pendingInbound.length, completedHangoutCount, upcoming.length],
   );
 
-  const isLoading = dashboardLoading;
+  const isLoading = friendsLoading || meetupsLoading;
 
   useEffect(() => {
     if (!savedGroupsKey) {
@@ -1030,9 +1023,10 @@ export default function DashboardPage() {
                             <button
                               type="button"
                               onClick={() => setSettlingPollId(poll.id)}
-                              className="min-h-[44px] w-full rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-[11px] font-semibold text-sky-700 transition-colors hover:bg-sky-100"
+                              className="flex min-h-[52px] w-full flex-col items-center justify-center rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-center transition-colors hover:bg-sky-100"
                             >
-                              📅 Choose a date
+                              <span className="text-[11px] font-semibold text-sky-800">Date already decided?</span>
+                              <span className="text-[10px] font-medium text-sky-600">Notify + add to calendars</span>
                             </button>
                           )}
                           <button
