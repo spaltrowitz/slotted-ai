@@ -48,7 +48,7 @@ router.post("/sms/inbound", publicRateLimit, async (req: Request, res: Response)
 
     const action = await getPendingSMSAction(from);
     if (!action) {
-      await sendSMS(from, "📅 Slotted here! Visit slotted-ai.web.app to manage your plans. Reply STOP to unsubscribe.");
+      await sendSMS(from, "📅 Slotted here! Visit slottedapp.com to manage your plans. Reply STOP to unsubscribe.");
       res.json({ success: true });
       return;
     }
@@ -85,7 +85,7 @@ router.post("/sms/inbound", publicRateLimit, async (req: Request, res: Response)
             await sendSMS(from, SMS_TEMPLATES.meetupConfirmed(meetup.title, formatSMSDate(meetup.start_time)));
           }
         } else if (reply === "2") {
-          await sendSMS(from, "Open Slotted to suggest another time: slotted-ai.web.app");
+          await sendSMS(from, "Open Slotted to suggest another time: slottedapp.com");
         } else if (reply === "3") {
           await getSupabase()
             .from("meetup_participants")
@@ -130,7 +130,7 @@ router.post("/sms/inbound", publicRateLimit, async (req: Request, res: Response)
             const { data: friend } = await sb.from("users").select("*").eq("id", friendId).maybeSingle();
             
             if (!user || !friend) {
-              await sendSMS(from, `Open Slotted to find a time with ${friendName}: slotted-ai.web.app/friends`);
+              await sendSMS(from, `Open Slotted to find a time with ${friendName}: slottedapp.com/friends`);
               break;
             }
 
@@ -159,7 +159,7 @@ router.post("/sms/inbound", publicRateLimit, async (req: Request, res: Response)
             }
 
             if (!bestSlot) {
-              await sendSMS(from, `😕 No overlapping free times with ${friendName} in the next 2 weeks. Open Slotted to check: slotted-ai.web.app/friends`);
+              await sendSMS(from, `😕 No overlapping free times with ${friendName} in the next 2 weeks. Open Slotted to check: slottedapp.com/friends`);
               break;
             }
 
@@ -215,14 +215,14 @@ router.post("/sms/inbound", publicRateLimit, async (req: Request, res: Response)
             }
           } catch (err) {
             console.error("[SMS] Nudge auto-propose error:", err);
-            await sendSMS(from, `Open Slotted to find a time with ${friendName}: slotted-ai.web.app/friends`);
+            await sendSMS(from, `Open Slotted to find a time with ${friendName}: slottedapp.com/friends`);
           }
         }
         break;
       }
 
       default:
-        await sendSMS(from, "📅 Visit slotted-ai.web.app to manage your plans.");
+        await sendSMS(from, "📅 Visit slottedapp.com to manage your plans.");
     }
 
     await getSupabase()
@@ -278,8 +278,8 @@ router.post("/sms/beta-blast", async (req: Request, res: Response) => {
     for (const user of users) {
       const firstName = user.display_name?.split(" ")[0] || "there";
       const inviteUrl = user.invite_code
-        ? `https://slotted-ai.web.app/invite/${user.invite_code}`
-        : `https://slotted-ai.web.app?ref=${user.id}`;
+        ? `https://slottedapp.com/invite/${user.invite_code}`
+        : `https://slottedapp.com?ref=${user.id}`;
 
       const success = await sendEngagementSMS(
         user.id,

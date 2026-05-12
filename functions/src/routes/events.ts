@@ -2342,7 +2342,7 @@ router.post("/events/share", authWithRateLimit, async (req: AuthRequest, res: Re
                     body: humanPreview,
                   },
                   webpush: {
-                    fcmOptions: { link: "https://slotted-ai.web.app/notifications" },
+                    fcmOptions: { link: "https://slottedapp.com/notifications" },
                   },
                 }).catch(() => {}),
               ),
@@ -2898,7 +2898,7 @@ router.get("/events/schedules", authWithRateLimit, async (req: AuthRequest, res:
       current.push(vote);
       votesBySchedule.set(vote.schedule_id, current);
     }
-    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://slottedapp.com";
     const inviteBySchedule = new Map<string, any>();
     for (const invite of invites || []) {
       if (!inviteBySchedule.has(invite.event_schedule_id) && new Date(invite.expires_at) >= new Date()) {
@@ -3261,7 +3261,7 @@ router.post("/events/schedules/:scheduleId/invite-link", authWithRateLimit, asyn
       return;
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://slottedapp.com";
     const { data: existing, error: existingErr } = await getSupabase()
       .from("friend_invites")
       .select("id, token, expires_at")
@@ -3834,7 +3834,7 @@ router.post("/events/friend-invite", authWithRateLimit, async (req: AuthRequest,
 
     if (error) { res.status(500).json({ error: error.message }); return; }
 
-    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://slottedapp.com";
     res.json({
       inviteId: invite.id,
       inviteUrl: `${frontendUrl}/event-invite-meta/${token}`,
@@ -4213,7 +4213,7 @@ router.get("/event-invite-image/:token.svg", async (req: Request, res: Response)
 router.get("/event-invite-meta/:token", async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
-    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://slottedapp.com";
     const preview = await getInvitePreview(token);
     const title = preview?.headline || "You're invited to an event on Slotted";
     const description = preview?.description || "Pick the dates that work for you on Slotted.ai";
@@ -4241,7 +4241,7 @@ router.get("/event-invite-meta/:token", async (req: Request, res: Response) => {
   <meta property="og:image:type" content="${imageType}" />
   <meta property="og:image:width" content="${imageWidth}" />
   <meta property="og:image:height" content="${imageHeight}" />
-  <meta property="og:url" content="https://slotted-ai.web.app/event-invite/${token}" />
+  <meta property="og:url" content="https://slottedapp.com/event-invite/${token}" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="${twitterCard}" />
   <meta name="twitter:title" content="${escTitle}" />

@@ -26,7 +26,7 @@ export default function TermsOfServicePage() {
           <section>
             <p>
               Welcome to Slotted.ai. By accessing or using the Slotted.ai web application at{' '}
-              <span className="font-medium text-gray-900">slotted-ai.web.app</span> (the
+              <span className="font-medium text-gray-900">slottedapp.com</span> (the
               "Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not
               agree, please do not use the Service.
             </p>

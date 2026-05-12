@@ -8,11 +8,11 @@ Add Microsoft Outlook as a third calendar provider, matching Google Calendar's c
 2. Click "New registration"
    - Name: "Slotted"
    - Supported account types: "Accounts in any organizational directory and personal Microsoft accounts"
-   - Redirect URI: Web → `https://slotted-ai.web.app/api/calendar/outlook/callback`
+   - Redirect URI: Web → `https://slottedapp.com/api/calendar/outlook/callback`
 3. Note the **Application (client) ID** → set as `MICROSOFT_CLIENT_ID`
 4. Go to "Certificates & secrets" → New client secret → copy value → set as `MICROSOFT_CLIENT_SECRET`
 5. Set `MICROSOFT_TENANT_ID=common` (allows both personal and work/school accounts)
-6. Set `MICROSOFT_REDIRECT_URI=https://slotted-ai.web.app/api/calendar/outlook/callback`
+6. Set `MICROSOFT_REDIRECT_URI=https://slottedapp.com/api/calendar/outlook/callback`
 7. Go to "API permissions" → Add:
    - `Calendars.Read`
    - `Calendars.ReadWrite`

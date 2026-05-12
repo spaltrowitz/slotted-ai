@@ -27,13 +27,13 @@ function formatDateTime(iso: string) {
 function buildGoogleCalendarUrl(event: SharedEvent) {
   const fmt = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const inviteUrl = event.sharer.inviteCode
-    ? `https://slotted-ai.web.app/invite/${event.sharer.inviteCode}`
-    : 'https://slotted-ai.web.app';
+    ? `https://slottedapp.com/invite/${event.sharer.inviteCode}`
+    : 'https://slottedapp.com';
   const details = [
     event.description || '',
     '',
     '---',
-    'Created with Slotted.ai (https://slotted-ai.web.app)',
+    'Created with Slotted.ai (https://slottedapp.com)',
     'The app that helps friends find time to hang.',
     `Join: ${inviteUrl}`,
   ].join('\n');
@@ -94,8 +94,8 @@ export default function EventSharePage() {
   }
 
   const inviteUrl = event.sharer.inviteCode
-    ? `https://slotted-ai.web.app/invite/${event.sharer.inviteCode}`
-    : 'https://slotted-ai.web.app';
+    ? `https://slottedapp.com/invite/${event.sharer.inviteCode}`
+    : 'https://slottedapp.com';
   const icsUrl = `${API_BASE}/meetups/shared/${code}/ics`;
 
   return (
@@ -174,7 +174,7 @@ export default function EventSharePage() {
 
         {/* Footer */}
         <p className="text-center text-[11px] text-gray-500">
-          Powered by <a href="https://slotted-ai.web.app" className="underline hover:text-gray-400">Slotted.ai</a>
+          Powered by <a href="https://slottedapp.com" className="underline hover:text-gray-400">Slotted.ai</a>
         </p>
       </div>
     </div>

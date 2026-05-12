@@ -5,4 +5,4 @@ Disallow: /quick/
 Disallow: /event-invite/
 Disallow: /invite/
 
-Sitemap: https://slotted-ai.web.app/sitemap.xml
+Sitemap: https://slottedapp.com/sitemap.xml

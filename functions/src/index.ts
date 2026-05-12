@@ -63,7 +63,7 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
-  "https://slotted-ai.web.app",
+  "https://slottedapp.com",
   "https://slotted-ai.firebaseapp.com",
 ];
 app.use(
@@ -175,7 +175,7 @@ export const renewCalendarWatchChannels = onSchedule("every 6 hours", async () =
         requestBody: {
           id: channelId,
           type: "web_hook",
-          address: `${process.env.WEBHOOK_BASE_URL || "https://slotted-ai.web.app/api"}/webhooks/google-calendar`,
+          address: `${process.env.WEBHOOK_BASE_URL || "https://slottedapp.com/api"}/webhooks/google-calendar`,
           token: GOOGLE_WEBHOOK_SECRET,
           expiration: String(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
@@ -454,7 +454,7 @@ export const sendEventPollNudges = onSchedule("every 4 hours", async () => {
       await sendEmail({
         userId,
         subject: `Reminder: pick dates for ${schedule.event_title}`,
-        body: `The ${schedule.event_title} poll is waiting on your availability. Open Slotted.ai to pick the dates that work for you.\n\nhttps://slotted-ai.web.app`,
+        body: `The ${schedule.event_title} poll is waiting on your availability. Open Slotted.ai to pick the dates that work for you.\n\nhttps://slottedapp.com`,
         logTag: "EMAIL_POLL_REMINDER",
       });
     }
@@ -1065,15 +1065,15 @@ export const sendLifecycleMessages = onSchedule("every 2 hours", async () => {
       const ageHours = (now.getTime() - new Date(user.created_at).getTime()) / 3600000;
       const firstName = user.display_name?.split(" ")[0] || "there";
       const inviteUrl = user.invite_code
-        ? `https://slotted-ai.web.app/invite/${user.invite_code}`
-        : `https://slotted-ai.web.app?ref=${user.id}`;
+        ? `https://slottedapp.com/invite/${user.invite_code}`
+        : `https://slottedapp.com?ref=${user.id}`;
 
       // Day 0: Welcome (signed up in last 6 hours)
       if (ageHours < 6) {
         await sendEngagementSMS(
           user.id, user.phone_number, user.timezone || "America/New_York",
           "welcome",
-          `📅 Welcome to Slotted, ${firstName}! I'll help you and your friends actually make plans. Connect your calendar: slotted-ai.web.app`,
+          `📅 Welcome to Slotted, ${firstName}! I'll help you and your friends actually make plans. Connect your calendar: slottedapp.com`,
         );
         continue;
       }
@@ -1090,7 +1090,7 @@ export const sendLifecycleMessages = onSchedule("every 2 hours", async () => {
           await sendEngagementSMS(
             user.id, user.phone_number, user.timezone || "America/New_York",
             "enable_push",
-            `🔔 ${firstName}, turn on notifications so you don't miss when friends want to hang! Open Slotted and tap "Allow": slotted-ai.web.app/settings`,
+            `🔔 ${firstName}, turn on notifications so you don't miss when friends want to hang! Open Slotted and tap "Allow": slottedapp.com/settings`,
           );
           continue;
         }

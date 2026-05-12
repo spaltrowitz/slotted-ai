@@ -9,7 +9,7 @@
 After publishing, users who aren't test users will see a warning screen:
 > "Google hasn't verified this app"
 
-They can still proceed: **Advanced → "Go to slotted-ai.web.app (unsafe)"**. This is fine for beta but looks sketchy. Verification removes this.
+They can still proceed: **Advanced → "Go to slottedapp.com (unsafe)"**. This is fine for beta but looks sketchy. Verification removes this.
 
 ## Steps to Submit for Verification
 
@@ -17,17 +17,17 @@ They can still proceed: **Advanced → "Go to slotted-ai.web.app (unsafe)"**. Th
 ```bash
 cd client && npm run build && cd .. && firebase deploy --only hosting
 ```
-Verify it's live at: https://slotted-ai.web.app/privacy
+Verify it's live at: https://slottedapp.com/privacy
 
 ### 2. Update the OAuth consent screen in Google Cloud Console
 - Go to: https://console.cloud.google.com/apis/credentials/consent
-- Set **Privacy Policy URL** to: `https://slotted-ai.web.app/privacy`
-- Set **App Homepage** to: `https://slotted-ai.web.app`
+- Set **Privacy Policy URL** to: `https://slottedapp.com/privacy`
+- Set **App Homepage** to: `https://slottedapp.com`
 - Make sure **App Name**, **Support Email**, and **Logo** are filled in
 
 ### 3. Verify your domain
 - Go to: https://search.google.com/search-console
-- Add and verify `slotted-ai.web.app` (Firebase hosting domains may already be verified via your Google Cloud project)
+- Add and verify `slottedapp.com` (Firebase hosting domains may already be verified via your Google Cloud project)
 
 ### 4. Record a demo video
 - Record an **unlisted YouTube video** showing:

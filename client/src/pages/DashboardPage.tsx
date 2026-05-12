@@ -275,7 +275,7 @@ export default function DashboardPage() {
   const [nudgingPollId, setNudgingPollId] = useState<string | null>(null);
 
   const userUid = user?.uid;
-  const inviteUrl = `https://slotted-ai.web.app?ref=${userUid ?? ''}`;
+  const inviteUrl = `https://slottedapp.com?ref=${userUid ?? ''}`;
   const savedGroupsKey = userUid ? `slotted_saved_friend_groups_${userUid}` : null;
   const eventPollsMinimizedKey = userUid ? `slotted_event_polls_minimized_${userUid}` : null;
   const friendTipDismissedKey = userUid ? `slotted_friend_tip_dismissed_${userUid}` : null;

@@ -86,7 +86,7 @@ export class SlottedClient {
     } = {},
   ) {
     this.persona = persona;
-    this.baseUrl = (opts.baseUrl || process.env.API_BASE_URL || "https://slotted-ai.web.app/api").replace(/\/$/, "");
+    this.baseUrl = (opts.baseUrl || process.env.API_BASE_URL || "https://slottedapp.com/api").replace(/\/$/, "");
     this.adminSecret = opts.adminSecret || process.env.ADMIN_SECRET || "slotted-admin-2026";
   }
 

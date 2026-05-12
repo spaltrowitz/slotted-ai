@@ -783,8 +783,8 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
 
     const eventTitle = meetup.title || "Hangout";
     const quickLinks = [
-      `Need to reschedule? https://slotted-ai.web.app/quick/reschedule/${meetup.id}`,
-      `Can't make it? https://slotted-ai.web.app/quick/cancel/${meetup.id}`,
+      `Need to reschedule? https://slottedapp.com/quick/reschedule/${meetup.id}`,
+      `Can't make it? https://slottedapp.com/quick/cancel/${meetup.id}`,
     ].join("\n");
 
     const eventDescription = [
@@ -793,7 +793,7 @@ router.post("/meetups/:meetupId/add-to-calendar", authWithRateLimit, async (req:
       "───────────",
       quickLinks,
       "",
-      "Managed by Slotted.ai — https://slotted-ai.web.app",
+      "Managed by Slotted.ai — https://slottedapp.com",
     ].join("\n");
 
     const { data: existingCalendarPart } = await getSupabase()
@@ -1071,7 +1071,7 @@ router.post("/meetups/:meetupId/share", authWithRateLimit, async (req: AuthReque
     }
 
     if (meetup.share_code) {
-      res.json({ shareCode: meetup.share_code, shareUrl: `https://slotted-ai.web.app/e/${meetup.share_code}` });
+      res.json({ shareCode: meetup.share_code, shareUrl: `https://slottedapp.com/e/${meetup.share_code}` });
       return;
     }
 
@@ -1096,7 +1096,7 @@ router.post("/meetups/:meetupId/share", authWithRateLimit, async (req: AuthReque
       return;
     }
 
-    res.json({ shareCode, shareUrl: `https://slotted-ai.web.app/e/${shareCode}` });
+    res.json({ shareCode, shareUrl: `https://slottedapp.com/e/${shareCode}` });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1192,7 +1192,7 @@ router.get("/meetups/shared/:code/ics", async (req: Request, res: Response) => {
       .maybeSingle();
 
     const inviteCode = creator?.invite_code || "";
-    const inviteUrl = inviteCode ? `https://slotted-ai.web.app/invite/${inviteCode}` : "https://slotted-ai.web.app";
+    const inviteUrl = inviteCode ? `https://slottedapp.com/invite/${inviteCode}` : "https://slottedapp.com";
 
     const fmtIcs = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
     const now = fmtIcs(new Date().toISOString());
@@ -1203,7 +1203,7 @@ router.get("/meetups/shared/:code/ics", async (req: Request, res: Response) => {
       meetup.description || "",
       "",
       "---",
-      "📅 Created with Slotted (https://slotted-ai.web.app)",
+      "📅 Created with Slotted (https://slottedapp.com)",
       "The app that helps friends find time to hang.",
       `Join: ${inviteUrl}`,
     ].join("\\n");

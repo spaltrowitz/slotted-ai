@@ -139,7 +139,7 @@ router.get("/calendar/callback", async (req: Request, res: Response) => {
           requestBody: {
             id: channelId,
             type: "web_hook",
-            address: `${process.env.WEBHOOK_BASE_URL || "https://slotted-ai.web.app/api"}/webhooks/google-calendar`,
+            address: `${process.env.WEBHOOK_BASE_URL || "https://slottedapp.com/api"}/webhooks/google-calendar`,
             token: GOOGLE_WEBHOOK_SECRET,
             expiration: String(Date.now() + 7 * 24 * 60 * 60 * 1000),
           },
@@ -158,11 +158,11 @@ router.get("/calendar/callback", async (req: Request, res: Response) => {
     }
 
     // Redirect back to the frontend dashboard (not settings — avoids overwhelming new users)
-    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://slottedapp.com";
     res.redirect(`${frontendUrl}/dashboard?calendar=connected`);
   } catch (err: any) {
     console.error("Calendar OAuth callback error:", err);
-    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://slottedapp.com";
     res.redirect(`${frontendUrl}/dashboard?calendar=error`);
   }
 });
@@ -770,7 +770,7 @@ router.get("/calendar/outlook/auth-url", authWithRateLimit, async (req: AuthRequ
     const msalClient = getMsalClient();
     const authUrl = await msalClient.getAuthCodeUrl({
       scopes: MICROSOFT_SCOPES,
-      redirectUri: process.env.MICROSOFT_REDIRECT_URI || "https://slotted-ai.web.app/api/calendar/outlook/callback",
+      redirectUri: process.env.MICROSOFT_REDIRECT_URI || "https://slottedapp.com/api/calendar/outlook/callback",
       state: signOAuthState(req.uid!),
       prompt: "consent",
     });
@@ -798,7 +798,7 @@ router.get("/calendar/outlook/callback", async (req: Request, res: Response) => 
     const tokenResponse = await msalClient.acquireTokenByCode({
       code,
       scopes: MICROSOFT_SCOPES,
-      redirectUri: process.env.MICROSOFT_REDIRECT_URI || "https://slotted-ai.web.app/api/calendar/outlook/callback",
+      redirectUri: process.env.MICROSOFT_REDIRECT_URI || "https://slottedapp.com/api/calendar/outlook/callback",
     });
 
     // Store tokens in Vault
@@ -860,11 +860,11 @@ router.get("/calendar/outlook/callback", async (req: Request, res: Response) => 
       }
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://slottedapp.com";
     res.redirect(`${frontendUrl}/dashboard?calendar=connected`);
   } catch (err: any) {
     console.error("Outlook OAuth callback error:", err);
-    const frontendUrl = process.env.FRONTEND_URL || "https://slotted-ai.web.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://slottedapp.com";
     res.redirect(`${frontendUrl}/dashboard?calendar=error`);
   }
 });

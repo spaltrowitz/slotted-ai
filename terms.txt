@@ -3,7 +3,7 @@ Slotted.ai
 Last Updated: May 7, 2026
 
 1. ACCEPTANCE OF TERMS
-By accessing or using the Slotted.ai web application ("Slotted.ai," "we," "us," or "our") at slotted-ai.web.app, you agree to these Terms of Service. If you do not agree, please do not use the application.
+By accessing or using the Slotted.ai web application ("Slotted.ai," "we," "us," or "our") at slottedapp.com, you agree to these Terms of Service. If you do not agree, please do not use the application.
 
 2. SERVICE DESCRIPTION
 Slotted.ai is a social scheduling application that helps friends find mutual free time and plan hangouts. Features include:

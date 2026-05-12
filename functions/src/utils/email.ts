@@ -73,7 +73,7 @@ export async function sendEventPollNudgeEmail(opts: {
     `Hey,\n\n` +
     `${opts.fromName} is waiting on your availability for ${opts.eventTitle}.\n\n` +
     `Open Slotted.ai to pick the dates that work for you:\n` +
-    `https://slotted-ai.web.app\n\n` +
+    `https://slottedapp.com\n\n` +
     `— Slotted.ai`;
   return sendEmail({ userId: opts.userId, subject, body, logTag: "EMAIL_POLL_NUDGE" });
 }
@@ -159,7 +159,7 @@ export async function sendPollSettledEmail(opts: {
     `  • Google: ${googleUrl}\n` +
     `  • Outlook: ${outlookUrl}\n` +
     "\nOr open Slotted.ai to manage all your plans:\n" +
-    "https://slotted-ai.web.app\n\n" +
+    "https://slottedapp.com\n\n" +
     "— Slotted.ai";
   return sendEmail({ userId: opts.userId, subject, body, logTag: "EMAIL_POLL_SETTLED" });
 }

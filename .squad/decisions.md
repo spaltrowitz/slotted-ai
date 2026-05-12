@@ -290,7 +290,7 @@ Changed the else branch to `callback(new Error("Not allowed by CORS"))` so unkno
 ### Allowed Origins (unchanged)
 - `http://localhost:5173` — Vite dev server
 - `http://localhost:5174` — Vite dev server (alternate port)
-- `https://slotted-ai.web.app` — Firebase Hosting (production)
+- `https://slottedapp.com` — Firebase Hosting (production)
 - `https://slotted-ai.firebaseapp.com` — Firebase Hosting (alternate)
 
 ---

@@ -307,7 +307,7 @@ try {
     requestBody: {
       id: channelId,
       type: 'web_hook',
-      address: `${process.env.WEBHOOK_BASE_URL || 'https://slotted-ai.web.app/api'}/webhooks/google-calendar`,
+      address: `${process.env.WEBHOOK_BASE_URL || 'https://slottedapp.com/api'}/webhooks/google-calendar`,
       token: GOOGLE_WEBHOOK_SECRET,
       expiration: String(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -556,7 +556,7 @@ export const renewCalendarWatchChannels = onSchedule("every 6 hours", async () =
         requestBody: {
           id: channelId,
           type: 'web_hook',
-          address: `${process.env.WEBHOOK_BASE_URL || 'https://slotted-ai.web.app/api'}/webhooks/google-calendar`,
+          address: `${process.env.WEBHOOK_BASE_URL || 'https://slottedapp.com/api'}/webhooks/google-calendar`,
           token: GOOGLE_WEBHOOK_SECRET,
           expiration: String(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
@@ -645,7 +645,7 @@ No changes needed. The two-way sync is entirely server-driven. No new frontend A
 - `autoAddToCalendar()` — ✅ already shipped
 - `POST /webhooks/google-calendar` endpoint — ✅ already scaffolded
 - `GOOGLE_WEBHOOK_SECRET` environment variable — ✅ already configured
-- `WEBHOOK_BASE_URL` environment variable — **needs to be set** (or hardcode `https://slotted-ai.web.app/api`)
+- `WEBHOOK_BASE_URL` environment variable — **needs to be set** (or hardcode `https://slottedapp.com/api`)
 - Google Calendar API quota: push notification channels count against quota. At current scale (~20 users), this is negligible.
 
 ---

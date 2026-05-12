@@ -148,7 +148,7 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
               <p className="mt-0.5 text-xs text-gray-500">
                 {isMobile
                   ? 'Get the full app experience — quick access, notifications, and more.'
-                  : 'Install as an app or bookmark for quick access. For the best experience, visit slotted-ai.web.app on your phone.'}
+                  : 'Install as an app or bookmark for quick access. For the best experience, visit slottedapp.com on your phone.'}
               </p>
               <div className="mt-3 flex items-center gap-2">
                 <button
@@ -307,7 +307,7 @@ export default function InstallPrompt({ alwaysShow = false, desktopOnly = false 
                 <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
                   <p className="text-xs text-blue-700">
                     <strong>Best on mobile:</strong> Slotted.ai works on desktop, but the best experience is on your phone. Visit{' '}
-                    <strong>slotted-ai.web.app</strong> on your phone's browser and install it from there.
+                    <strong>slottedapp.com</strong> on your phone's browser and install it from there.
                   </p>
                 </div>
               </div>

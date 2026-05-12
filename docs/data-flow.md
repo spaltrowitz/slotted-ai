@@ -6,7 +6,7 @@
 
 | Layer | Service |
 |-------|---------|
-| **Frontend Hosting** | Firebase Hosting (`slotted-ai.web.app`) |
+| **Frontend Hosting** | Firebase Hosting (`slottedapp.com`) |
 | **Backend** | Firebase Cloud Functions (Express, Node.js 24, us-central1) |
 | **Database** | Supabase PostgreSQL (`lwqeqwjjtmcjbexoouxq.supabase.co`) |
 | **Auth** | Firebase Auth (Google OAuth 2.0) |

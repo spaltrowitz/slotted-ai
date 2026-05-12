@@ -240,8 +240,8 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
 
     const eventTitle = meetup.title || "Hangout";
     const quickLinks = [
-      `Need to reschedule? https://slotted-ai.web.app/quick/reschedule/${meetup.id}`,
-      `Can't make it? https://slotted-ai.web.app/quick/cancel/${meetup.id}`,
+      `Need to reschedule? https://slottedapp.com/quick/reschedule/${meetup.id}`,
+      `Can't make it? https://slottedapp.com/quick/cancel/${meetup.id}`,
     ].join("\n");
 
     const eventDescription = [
@@ -250,7 +250,7 @@ export async function autoAddToCalendar(firebaseUid: string, meetup: {
       "───────────",
       quickLinks,
       "",
-      "Managed by Slotted.ai — https://slotted-ai.web.app",
+      "Managed by Slotted.ai — https://slottedapp.com",
     ].join("\n");
 
     let addedEventId: string | null = null;
@@ -2073,7 +2073,7 @@ export function getOAuth2Client() {
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI || "https://slotted-ai.web.app/api/calendar/callback",
+    process.env.GOOGLE_REDIRECT_URI || "https://slottedapp.com/api/calendar/callback",
   );
 }
 

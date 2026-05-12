@@ -56,7 +56,7 @@ The setup script will:
 After running setup, add the Firebase UIDs and your Firebase Web API Key:
 
 ```env
-API_BASE_URL=https://slotted-ai.web.app/api
+API_BASE_URL=https://slottedapp.com/api
 ADMIN_SECRET=your-admin-secret
 FIREBASE_SERVICE_ACCOUNT_PATH=./service-account.json
 FIREBASE_API_KEY=your-web-api-key

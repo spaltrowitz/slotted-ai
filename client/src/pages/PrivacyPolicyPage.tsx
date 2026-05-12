@@ -27,7 +27,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <p>
               Slotted.ai ("we," "us," or "our") operates the web application at{' '}
-              <span className="font-medium text-gray-900">slotted-ai.web.app</span>. This Privacy
+              <span className="font-medium text-gray-900">slottedapp.com</span>. This Privacy
               Policy explains what information we collect, how we use it, and your choices regarding
               your data.
             </p>

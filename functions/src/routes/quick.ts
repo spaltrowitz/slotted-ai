@@ -4,7 +4,7 @@ const router = express.Router();
 
 /** Redirect to app with reschedule intent */
 router.get("/quick/reschedule/:meetupId", (req: Request, res: Response) => {
-  res.redirect(`https://slotted-ai.web.app/dashboard?reschedule=${req.params.meetupId}`);
+  res.redirect(`https://slottedapp.com/dashboard?reschedule=${req.params.meetupId}`);
 });
 
 /** Simple cancel confirmation page */
@@ -15,10 +15,10 @@ router.get("/quick/cancel/:meetupId", (req: Request, res: Response) => {
   if (action === "yes") {
     const token = req.query.token as string;
     if (!token) {
-      res.redirect("https://slotted-ai.web.app/dashboard");
+      res.redirect("https://slottedapp.com/dashboard");
       return;
     }
-    res.redirect(`https://slotted-ai.web.app/dashboard?cancel=${meetupId}`);
+    res.redirect(`https://slottedapp.com/dashboard?cancel=${meetupId}`);
     return;
   }
 
@@ -34,13 +34,13 @@ router.get("/quick/cancel/:meetupId", (req: Request, res: Response) => {
 <p style="font-size:2rem">😕</p>
 <h2 style="margin:.5rem 0">Can't make it?</h2>
 <p style="color:#6b7280;font-size:.875rem">Open Slotted to let your friend know.</p>
-<a class="btn keep" href="https://slotted-ai.web.app/dashboard">Open Slotted</a>
+<a class="btn keep" href="https://slottedapp.com/dashboard">Open Slotted</a>
 </div></body></html>`);
 });
 
 /** Running late redirect */
 router.get("/quick/status/:meetupId", (req: Request, res: Response) => {
-  res.redirect(`https://slotted-ai.web.app/dashboard?status=${req.params.meetupId}&action=${req.query.action || "late"}`);
+  res.redirect(`https://slottedapp.com/dashboard?status=${req.params.meetupId}&action=${req.query.action || "late"}`);
 });
 
 export default router;

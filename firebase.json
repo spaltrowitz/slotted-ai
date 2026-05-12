@@ -88,12 +88,12 @@
       "redirects": [
         {
           "source": "/",
-          "destination": "https://slottedapp-com.web.app",
+          "destination": "https://slottedapp.com",
           "type": 301
         },
         {
           "source": "/:path*",
-          "destination": "https://slottedapp-com.web.app/:path",
+          "destination": "https://slottedapp.com/:path",
           "type": 301
         }
       ]
