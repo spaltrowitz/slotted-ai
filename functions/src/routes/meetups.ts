@@ -20,10 +20,112 @@ import {
   formatDateTimeForTimeZone,
 } from "../utils/helpers";
 import { getSupabase } from "../supabase";
+import { sendPollSettledEmail } from "../utils/email";
 import { google } from "googleapis";
 import { createDAVClient, DAVCalendar } from "tsdav";
 
 const router = express.Router();
+
+function attendeeDescription(meetupId: string, fallbackDescription?: string | null): string {
+  return [
+    fallbackDescription || "Hangout scheduled through Slotted.ai.",
+    "",
+    "───────────",
+    `Need to reschedule? https://slottedapp.com/quick/reschedule/${meetupId}`,
+    `Can't make it? https://slottedapp.com/quick/cancel/${meetupId}`,
+    "",
+    "Managed by Slotted.ai — https://slottedapp.com",
+  ].join("\n");
+}
+
+async function sendNativeCalendarInvite(opts: {
+  firebaseUid: string;
+  creatorTimezone?: string | null;
+  creatorEmail?: string | null;
+  friendEmail?: string | null;
+  friendName?: string | null;
+  meetup: {
+    id: string;
+    title?: string;
+    description?: string | null;
+    location?: string | null;
+    start_time: string;
+    end_time: string;
+  };
+}): Promise<boolean> {
+  if (!opts.friendEmail) return false;
+  const description = attendeeDescription(opts.meetup.id, opts.meetup.description);
+  const dbUser = await getDbUser(opts.firebaseUid);
+  if (!dbUser) return false;
+
+  if (dbUser.google_refresh_token) {
+    const oauth2 = await getAuthedCalendarClient(opts.firebaseUid);
+    if (oauth2) {
+      const calendarApi = google.calendar({ version: "v3", auth: oauth2 });
+      const event = await calendarApi.events.insert({
+        calendarId: "primary",
+        sendUpdates: "all",
+        requestBody: {
+          summary: opts.meetup.title || "Hangout",
+          description,
+          colorId: "9",
+          location: opts.meetup.location || undefined,
+          start: {
+            dateTime: opts.meetup.start_time,
+            timeZone: opts.creatorTimezone || "America/New_York",
+          },
+          end: {
+            dateTime: opts.meetup.end_time,
+            timeZone: opts.creatorTimezone || "America/New_York",
+          },
+          attendees: [
+            { email: opts.friendEmail, displayName: opts.friendName || undefined },
+            { email: SLOTTED_CALENDAR_GUEST.email, displayName: SLOTTED_CALENDAR_GUEST.displayName, responseStatus: "accepted" },
+          ],
+        },
+      });
+      await getSupabase()
+        .from("meetup_participants")
+        .update({ google_event_id: event.data.id || null })
+        .eq("meetup_id", opts.meetup.id)
+        .eq("user_id", dbUser.id);
+      return true;
+    }
+  }
+
+  if (dbUser.outlook_calendar_connected && dbUser.outlook_refresh_token) {
+    const graphClient = await getOutlookGraphClient(opts.firebaseUid);
+    if (graphClient) {
+      const event = await graphClient.api("/me/events").post({
+        subject: opts.meetup.title || "Hangout",
+        body: { contentType: "text", content: description },
+        start: {
+          dateTime: opts.meetup.start_time,
+          timeZone: opts.creatorTimezone || "America/New_York",
+        },
+        end: {
+          dateTime: opts.meetup.end_time,
+          timeZone: opts.creatorTimezone || "America/New_York",
+        },
+        location: opts.meetup.location ? { displayName: opts.meetup.location } : undefined,
+        attendees: [
+          { emailAddress: { address: opts.friendEmail, name: opts.friendName || opts.friendEmail }, type: "required" },
+          { emailAddress: { address: SLOTTED_CALENDAR_GUEST.email, name: SLOTTED_CALENDAR_GUEST.displayName }, type: "required" },
+        ],
+        reminderMinutesBeforeStart: 15,
+        isReminderOn: true,
+      });
+      await getSupabase()
+        .from("meetup_participants")
+        .update({ google_event_id: event.id || null })
+        .eq("meetup_id", opts.meetup.id)
+        .eq("user_id", dbUser.id);
+      return true;
+    }
+  }
+
+  return false;
+}
 
 function authWithRateLimit(req: AuthRequest, res: Response, next: express.NextFunction): void {
   requireAuth(req, res, (err?: any) => {
@@ -189,8 +291,10 @@ router.post("/meetups", authWithRateLimit, async (req: AuthRequest, res: Respons
       });
     }
 
-    // Auto-add to the creator's Google Calendar (background, non-blocking)
-    autoAddToCalendar(req.uid!, meetup).catch(() => {});
+    // Auto-add to the creator's calendar (background, non-blocking)
+    autoAddToCalendar(req.uid!, meetup).catch((err: unknown) => {
+      console.warn("[MEETUPS] Creator auto-add failed", { meetupId: meetup.id, err });
+    });
 
     // Return meetup with quota warning if applicable
     const response: any = { ...meetup };
@@ -203,6 +307,163 @@ router.post("/meetups", authWithRateLimit, async (req: AuthRequest, res: Respons
       };
     }
     res.json(response);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /meetups/manual-invite — create a confirmed plan when the time is already agreed */
+router.post("/meetups/manual-invite", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const { friendId, title, startTime, endTime, location, description } = req.body as {
+      friendId?: string;
+      title?: string;
+      startTime?: string;
+      endTime?: string;
+      location?: string;
+      description?: string;
+    };
+
+    if (!friendId || typeof friendId !== "string") {
+      res.status(400).json({ error: "friendId is required" });
+      return;
+    }
+    if (!startTime || !endTime) {
+      res.status(400).json({ error: "startTime and endTime are required" });
+      return;
+    }
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      res.status(400).json({ error: "Invalid start or end time" });
+      return;
+    }
+    if (start < new Date(Date.now() + 5 * 60 * 1000)) {
+      res.status(400).json({ error: "Pick a time at least a few minutes from now." });
+      return;
+    }
+    if (end <= start) {
+      res.status(400).json({ error: "End time must be after start time." });
+      return;
+    }
+
+    const acceptedFriendIds = await getAcceptedFriendIdSet(me.id);
+    if (!acceptedFriendIds.has(friendId)) {
+      res.status(403).json({ error: "You can only invite accepted friends" });
+      return;
+    }
+    if (await isBlocked(me.id, friendId)) {
+      res.status(403).json({ error: "Unable to schedule with this friend" });
+      return;
+    }
+
+    const { data: friend } = await getSupabase()
+      .from("users")
+      .select("id, display_name, email, timezone, firebase_uid")
+      .eq("id", friendId)
+      .maybeSingle();
+    if (!friend) {
+      res.status(404).json({ error: "Friend not found" });
+      return;
+    }
+
+    const { data: existingMeetups } = await getSupabase()
+      .from("meetups")
+      .select("id, start_time, end_time, created_by")
+      .in("status", ["proposed", "confirmed"])
+      .lt("start_time", end.toISOString())
+      .gt("end_time", start.toISOString());
+    for (const existing of existingMeetups || []) {
+      const { data: existingParts } = await getSupabase()
+        .from("meetup_participants")
+        .select("user_id")
+        .eq("meetup_id", existing.id);
+      const existingIds = new Set((existingParts || []).map((p: any) => p.user_id));
+      if (existing.created_by === me.id && existingIds.has(me.id) && existingIds.has(friendId) && existingIds.size <= 2) {
+        res.status(409).json({ error: "A meetup with this friend already exists for this time", existingMeetupId: existing.id });
+        return;
+      }
+    }
+
+    const meetupTitle = title?.trim() || `Hangout with ${friend.display_name || "friend"}`;
+    const { data: meetup, error: meetupErr } = await getSupabase()
+      .from("meetups")
+      .insert({
+        title: meetupTitle,
+        description: description?.trim() || undefined,
+        location: location?.trim() || undefined,
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        created_by: me.id,
+        status: "confirmed",
+      })
+      .select()
+      .maybeSingle();
+    if (meetupErr || !meetup) {
+      res.status(500).json({ error: meetupErr?.message || "Could not create invite" });
+      return;
+    }
+
+    const { error: partErr } = await getSupabase()
+      .from("meetup_participants")
+      .insert([
+        { meetup_id: meetup.id, user_id: me.id, rsvp: "accepted", rsvp_source: "app" },
+        { meetup_id: meetup.id, user_id: friendId, rsvp: "pending", rsvp_source: "app" },
+      ]);
+    if (partErr) {
+      res.status(500).json({ error: partErr.message });
+      return;
+    }
+
+    const friendTimeStr = formatDateTimeForTimeZone(start.toISOString(), friend.timezone || "America/New_York");
+    await createNotification({
+      userId: friendId,
+      type: "meetup_request",
+      title: `${me.display_name || "Someone"} put a time on the calendar`,
+      body: `${meetupTitle} — ${friendTimeStr}`,
+      relatedUserId: me.id,
+      relatedId: meetup.id,
+    });
+
+    let nativeInviteSent = false;
+    try {
+      nativeInviteSent = await sendNativeCalendarInvite({
+        firebaseUid: req.uid!,
+        creatorTimezone: me.timezone,
+        creatorEmail: me.email,
+        friendEmail: friend.email,
+        friendName: friend.display_name,
+        meetup,
+      });
+    } catch (err) {
+      console.warn("[MANUAL_INVITE] Native calendar invite failed", { meetupId: meetup.id, err });
+    }
+
+    autoAddToCalendar(req.uid!, meetup).catch((err: unknown) => {
+      console.warn("[MANUAL_INVITE] Creator auto-add failed", { meetupId: meetup.id, err });
+    });
+
+    if (!nativeInviteSent) {
+      sendPollSettledEmail({
+        userId: friendId,
+        fromName: me.display_name?.split(" ")[0] || "A friend",
+        eventTitle: meetupTitle,
+        dateStr: friendTimeStr,
+        venue: meetup.location,
+        startTime: start,
+        endTime: end,
+      }).catch((err: unknown) => {
+        console.warn("[MANUAL_INVITE] Email fallback failed", { meetupId: meetup.id, friendId, err });
+      });
+    }
+
+    res.json({ ...meetup, nativeInviteSent });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

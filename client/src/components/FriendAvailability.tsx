@@ -24,6 +24,23 @@ const CALL_PLATFORMS: { value: VideoPlatform; label: string }[] = [
   { value: 'whatsapp', label: 'WhatsApp' },
 ];
 
+function localInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function defaultManualStart(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(13, 0, 0, 0);
+  return localInputValue(d);
+}
+
+function defaultManualEnd(startValue: string): string {
+  const d = new Date(startValue);
+  d.setHours(d.getHours() + 2);
+  return localInputValue(d);
+}
 
 interface ScoredSlot {
   start: string;
@@ -67,6 +84,12 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
     endTime: string;
   } | null>(null);
   const [pendingSlot, setPendingSlot] = useState<ScoredSlot | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualStart, setManualStart] = useState(defaultManualStart);
+  const [manualEnd, setManualEnd] = useState(() => defaultManualEnd(defaultManualStart()));
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualLocation, setManualLocation] = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
 
   const { data: overlapData, isLoading: loading, error: fetchError, refetch: fetchOverlaps } = useQuery({
     queryKey: ['availability-overlap', friendId, hangoutMode],
@@ -80,8 +103,9 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
   const suggestions: ScoredSlot[] = overlapData?.suggestions || [];
   const overlaps = overlapData?.overlaps || [];
   const syncStatus: SyncStatus | null = overlapData?.syncStatus || null;
+  const shapedFetchError = fetchError as { response?: { data?: { error?: string } }; message?: string } | null;
   const error = fetchError
-    ? ((fetchError as any)?.response?.data?.error || (fetchError as Error).message || 'Failed to find availability')
+    ? (shapedFetchError?.response?.data?.error || shapedFetchError?.message || 'Failed to find availability')
     : null;
 
   const handleBook = async (slot: ScoredSlot, titleOverride?: string) => {
@@ -113,7 +137,11 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
         const proceed = window.confirm(data.quotaWarning.message);
         if (!proceed) {
           // Cancel the meetup
-          try { await api.patch(`/meetups/${data.id}/rsvp`, { rsvp: 'declined' }); } catch {}
+          try {
+            await api.patch(`/meetups/${data.id}/rsvp`, { rsvp: 'declined' });
+          } catch (err) {
+            console.warn('Failed to cancel declined meetup:', err);
+          }
           setBookingSlot(null);
           return;
         }
@@ -129,6 +157,55 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
       // silent fail
     } finally {
       setBookingSlot(null);
+    }
+  };
+
+  const handleManualInvite = async () => {
+    const start = new Date(manualStart);
+    const end = new Date(manualEnd);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      setBookError('Pick a valid start and end time');
+      return;
+    }
+    if (start <= new Date()) {
+      setBookError("Pick a time that hasn't happened yet 😊");
+      return;
+    }
+    if (end <= start) {
+      setBookError('End time must be after start time');
+      return;
+    }
+    setManualSubmitting(true);
+    setBookError(null);
+    const bookingTitle = manualTitle.trim() || `${myFirstName} & ${friendFirst} hangout`;
+    try {
+      const { data } = await api.post('/meetups/manual-invite', {
+        friendId,
+        title: bookingTitle,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        location: manualLocation.trim() || undefined,
+      });
+      trackMeetupScheduled();
+      setBooked(start.toISOString());
+      setBookedLabel({
+        day: start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+        time: `${start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} – ${end.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`,
+        title: bookingTitle,
+      });
+      onBook?.({
+        start: data.start_time || start.toISOString(),
+        end: data.end_time || end.toISOString(),
+        score: 0,
+        reasons: [],
+        dayLabel: '',
+        timeLabel: '',
+      });
+    } catch (err: unknown) {
+      const shaped = err as { response?: { data?: { error?: string } }; message?: string };
+      setBookError(shaped.response?.data?.error || shaped.message || 'Could not create the invite');
+    } finally {
+      setManualSubmitting(false);
     }
   };
 
@@ -433,6 +510,80 @@ export default function FriendAvailability({ friendId, friendName, allFriendName
               setPendingSlot(null);
             }}
           />
+        </div>
+      )}
+
+      {!booked && (
+        <div className="border-t border-gray-100 px-3 py-3 sm:px-4">
+          <button
+            type="button"
+            onClick={() => setManualOpen((prev) => !prev)}
+            className="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-sky-100 bg-sky-50/70 px-3 py-2 text-left transition-colors hover:bg-sky-100"
+          >
+            <span>
+              <span className="block text-xs font-semibold text-sky-800">Already agreed on a time?</span>
+              <span className="block text-[11px] text-sky-600">Send a calendar invite manually</span>
+            </span>
+            <span className="text-sm text-sky-500">{manualOpen ? '−' : '+'}</span>
+          </button>
+          {manualOpen && (
+            <div className="mt-3 space-y-2 rounded-xl border border-sky-100 bg-white p-3">
+              <label className="block text-xs font-medium text-gray-700">
+                Title
+                <input
+                  type="text"
+                  value={manualTitle}
+                  onChange={(e) => setManualTitle(e.target.value)}
+                  placeholder={`${myFirstName} & ${friendFirst} hangout`}
+                  className="mt-1 min-h-[44px] w-full rounded-lg border border-gray-200 px-3 text-sm focus:border-sky-500 focus:outline-none"
+                />
+              </label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="block text-xs font-medium text-gray-700">
+                  Starts
+                  <input
+                    type="datetime-local"
+                    value={manualStart}
+                    onChange={(e) => {
+                      setManualStart(e.target.value);
+                      setManualEnd(defaultManualEnd(e.target.value));
+                    }}
+                    className="mt-1 min-h-[44px] w-full rounded-lg border border-gray-200 px-3 text-sm focus:border-sky-500 focus:outline-none"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-gray-700">
+                  Ends
+                  <input
+                    type="datetime-local"
+                    value={manualEnd}
+                    onChange={(e) => setManualEnd(e.target.value)}
+                    className="mt-1 min-h-[44px] w-full rounded-lg border border-gray-200 px-3 text-sm focus:border-sky-500 focus:outline-none"
+                  />
+                </label>
+              </div>
+              <label className="block text-xs font-medium text-gray-700">
+                Location <span className="font-normal text-gray-400">(optional)</span>
+                <input
+                  type="text"
+                  value={manualLocation}
+                  onChange={(e) => setManualLocation(e.target.value)}
+                  placeholder="e.g. coffee, walk, your place"
+                  className="mt-1 min-h-[44px] w-full rounded-lg border border-gray-200 px-3 text-sm focus:border-sky-500 focus:outline-none"
+                />
+              </label>
+              <p className="text-[11px] leading-relaxed text-gray-500">
+                Use this when you and {friendFirst} already picked the time. Slotted will create the plan, add it to your calendar, and send {friendFirst} an invite/fallback email.
+              </p>
+              <button
+                type="button"
+                onClick={handleManualInvite}
+                disabled={manualSubmitting}
+                className="min-h-[44px] w-full rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md disabled:opacity-50"
+              >
+                {manualSubmitting ? 'Sending…' : `Send invite to ${friendFirst}`}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

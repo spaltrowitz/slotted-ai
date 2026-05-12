@@ -920,7 +920,7 @@ export default function DashboardPage() {
                         )}
                         {poll.pending.length > 0 && !needsMyPicks && (
                           <div className="rounded-xl border border-slate-100 bg-white px-2.5 py-2">
-                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <div className="mb-1.5 flex flex-wrap items-center gap-2">
                               <p className="text-[11px] font-semibold text-slate-600">⏳ Pending</p>
                               {poll.isOwner && (
                                 <button
@@ -937,6 +937,11 @@ export default function DashboardPage() {
                                 </button>
                               )}
                             </div>
+                            {poll.isOwner && (
+                              <p className="mb-2 text-[10px] leading-relaxed text-slate-500">
+                                Auto-nudges are on: Slotted reminds pending friends in-app + email after 1 day, then once more 7 days later if this poll still needs picks.
+                              </p>
+                            )}
                             <div className="flex flex-wrap items-center gap-1.5">
                               {poll.pending.map((person) => (
                                 <PersonChip key={person.userId} person={person} tone="pending" />
@@ -1267,6 +1272,9 @@ export default function DashboardPage() {
                     friendName={selectedFriendName}
                     allFriendNames={allFriendNames}
                     onClose={handleCloseFindTimes}
+                    onBook={() => {
+                      queryClient.invalidateQueries({ queryKey: queryKeys.meetups });
+                    }}
                     completedHangouts={completedHangoutCount}
                     embedded
                   />

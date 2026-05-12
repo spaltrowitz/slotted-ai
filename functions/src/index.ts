@@ -64,7 +64,9 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
   "https://slottedapp.com",
+  "https://slottedapp-com.web.app",
   "https://slotted-ai.firebaseapp.com",
+  "https://slotted-ai.web.app",
 ];
 app.use(
   cors({
@@ -388,15 +390,13 @@ export const sendPendingRsvpNudges = onSchedule("every 4 hours", async (event) =
 });
 
 /**
- * Event poll nudge: once a poll has been waiting at least 24 hours, remind
- * invited participants who still have not picked dates. Uses notification
- * history for dedupe so each person gets at most one auto nudge per poll/day.
+ * Event poll nudges: remind pending participants 1 day after poll creation,
+ * then once more 7 days later if the poll is still open and incomplete.
  */
 export const sendEventPollNudges = onSchedule("every 4 hours", async () => {
   const sb = getSupabase();
   const now = new Date();
   const olderThan24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-  const recentNudgeCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
   const { data: schedules, error: schedulesErr } = await sb
     .from("event_schedules")
@@ -432,31 +432,52 @@ export const sendEventPollNudges = onSchedule("every 4 hours", async () => {
     const voted = votedBySchedule.get(schedule.id) || new Set<string>();
     const pendingFriendIds = (schedule.friend_ids || []).filter((userId: string) => !voted.has(userId));
     if (pendingFriendIds.length === 0) continue;
-
-    for (const userId of pendingFriendIds) {
-      const { data: existing } = await sb
-        .from("notifications")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("type", "meetup_request")
-        .eq("related_id", schedule.id)
-        .gte("created_at", recentNudgeCutoff)
-        .limit(1);
-      if (existing && existing.length > 0) continue;
-
-      await createNotification({
-        userId,
-        type: "meetup_request",
+    const ageMs = now.getTime() - new Date(schedule.created_at).getTime();
+    const allSteps = [
+      {
+        key: "day1",
+        due: ageMs >= 24 * 60 * 60 * 1000,
         title: `Reminder: pick dates for ${schedule.event_title}`,
         body: "The poll is waiting on your availability.",
-        relatedId: schedule.id,
-      });
-      await sendEmail({
-        userId,
-        subject: `Reminder: pick dates for ${schedule.event_title}`,
-        body: `The ${schedule.event_title} poll is waiting on your availability. Open Slotted.ai to pick the dates that work for you.\n\nhttps://slottedapp.com`,
-        logTag: "EMAIL_POLL_REMINDER",
-      });
+      },
+      {
+        key: "day8",
+        due: ageMs >= 8 * 24 * 60 * 60 * 1000,
+        title: `Still waiting: pick dates for ${schedule.event_title}`,
+        body: "This poll is still open — add your availability when you can.",
+      },
+    ];
+    const dueSteps = ageMs >= 8 * 24 * 60 * 60 * 1000
+      ? allSteps.filter((step) => step.key === "day8")
+      : allSteps.filter((step) => step.key === "day1");
+
+    for (const userId of pendingFriendIds) {
+      for (const step of dueSteps) {
+        if (!step.due) continue;
+        const { data: existing } = await sb
+          .from("notifications")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("type", "event_poll_update")
+          .eq("related_id", schedule.id)
+          .eq("title", step.title)
+          .limit(1);
+        if (existing && existing.length > 0) continue;
+
+        await createNotification({
+          userId,
+          type: "event_poll_update",
+          title: step.title,
+          body: step.body,
+          relatedId: schedule.id,
+        });
+        await sendEmail({
+          userId,
+          subject: step.title,
+          body: `${step.body}\n\nOpen Slotted.ai to pick dates for ${schedule.event_title}:\nhttps://slottedapp.com`,
+          logTag: "EMAIL_POLL_REMINDER",
+        });
+      }
     }
   }
 });
