@@ -6,7 +6,7 @@
     "slotted-ai": {
       "hosting": {
         "app": [
-          "slottedai-com"
+          "slottedapp-com"
         ],
         "legacy": [
           "slotted-ai"

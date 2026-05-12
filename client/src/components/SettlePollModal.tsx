@@ -122,8 +122,15 @@ export default function SettlePollModal({
     setSubmitting(true);
     setError(null);
     try {
-      const body: Record<string, any> = {
+      const body: {
+        recipientUserIds: string[];
+        timeZone?: string;
+        customDatetime?: string;
+        customLocation?: string;
+        showtimeIndex?: number | null;
+      } = {
         recipientUserIds: Array.from(selectedRecipients),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
       if (useCustom) {
         body.customDatetime = customDatetime;
@@ -134,8 +141,14 @@ export default function SettlePollModal({
       await api.post(`/events/schedules/${scheduleId}/settle`, body);
       onSettled();
       onClose();
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err?.message || 'Could not settle this poll.');
+    } catch (err: unknown) {
+      const shaped = err as { response?: { data?: { error?: unknown } }; message?: unknown };
+      const responseError = shaped.response?.data?.error;
+      setError(
+        (typeof responseError === 'string' && responseError) ||
+        (typeof shaped.message === 'string' && shaped.message) ||
+        'Could not settle this poll.',
+      );
     } finally {
       setSubmitting(false);
     }

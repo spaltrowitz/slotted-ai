@@ -201,6 +201,16 @@ function parseShowtimeAsEventLocalTime(datetime: string, timeZone = "America/New
   return new Date(localAsUtc.getTime() - finalOffset);
 }
 
+function isValidTimeZone(timeZone: unknown): timeZone is string {
+  if (typeof timeZone !== "string" || !timeZone.trim()) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Deduplicate events from multiple sources.
  * Matches the SAME performance (same title + same datetime within 2hr) across platforms.
@@ -3558,7 +3568,9 @@ router.post("/events/schedules/:scheduleId/confirm", authWithRateLimit, async (r
 
     for (const participant of participantUsers || []) {
       if (participant.firebase_uid) {
-        autoAddToCalendar(participant.firebase_uid, meetup).catch(() => {});
+        autoAddToCalendar(participant.firebase_uid, meetup).catch((err: unknown) => {
+          console.warn("[CONFIRM_POLL] Auto-add to calendar failed", { userId: participant.id, err });
+        });
       }
     }
 
@@ -3573,23 +3585,30 @@ router.post("/events/schedules/:scheduleId/confirm", authWithRateLimit, async (r
 // Owner-driven manual settlement. Unlike /confirm this does NOT require:
 //   - invites_closed
 //   - everyone to have voted
-// Body: { showtimeIndex?: number, customDatetime?: string, customLocation?: string, recipientUserIds: string[] }
+// Body: { showtimeIndex?: number, customDatetime?: string, customLocation?: string, timeZone?: string, recipientUserIds: string[] }
 // Sends notification + email to the chosen recipients only.
 // ---------------------------------------------------------------------------
 router.post("/events/schedules/:scheduleId/settle", authWithRateLimit, async (req: AuthRequest, res: Response) => {
   try {
     const me = await getDbUser(req.uid!);
-    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+    if (!me) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
 
     const { scheduleId } = req.params;
-    const { showtimeIndex, customDatetime, customLocation, recipientUserIds } = req.body as {
+    const { showtimeIndex, customDatetime, customLocation, timeZone, recipientUserIds } = req.body as {
       showtimeIndex?: number;
       customDatetime?: string;
       customLocation?: string;
+      timeZone?: string;
       recipientUserIds?: string[];
     };
 
-    if (!scheduleId) { res.status(400).json({ error: "scheduleId is required" }); return; }
+    if (!scheduleId) {
+      res.status(400).json({ error: "scheduleId is required" });
+      return;
+    }
     if (!Array.isArray(recipientUserIds) || recipientUserIds.length === 0) {
       res.status(400).json({ error: "recipientUserIds is required" });
       return;
@@ -3606,7 +3625,10 @@ router.post("/events/schedules/:scheduleId/settle", authWithRateLimit, async (re
       .select("*")
       .eq("id", scheduleId)
       .maybeSingle();
-    if (schedErr || !schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+    if (schedErr || !schedule) {
+      res.status(404).json({ error: "Schedule not found" });
+      return;
+    }
     if (schedule.created_by !== me.id) {
       res.status(403).json({ error: "Only the poll creator can settle this poll" });
       return;
@@ -3639,7 +3661,10 @@ router.post("/events/schedules/:scheduleId/settle", authWithRateLimit, async (re
     if (hasIndex) {
       finalShowtimeIndex = showtimeIndex as number;
       const picked = showtimes[finalShowtimeIndex];
-      if (!picked?.datetime) { res.status(400).json({ error: "Invalid showtimeIndex" }); return; }
+      if (!picked?.datetime) {
+        res.status(400).json({ error: "Invalid showtimeIndex" });
+        return;
+      }
       finalDatetime = picked.datetime;
     } else {
       finalDatetime = (customDatetime as string).trim();
@@ -3655,7 +3680,12 @@ router.post("/events/schedules/:scheduleId/settle", authWithRateLimit, async (re
       finalShowtimeIndex = updatedShowtimes.length - 1;
     }
 
-    const startTime = parseShowtimeAsEventLocalTime(finalDatetime);
+    const customTimeZone = isValidTimeZone(timeZone)
+      ? timeZone
+      : isValidTimeZone(me.timezone)
+        ? me.timezone
+        : "America/New_York";
+    const startTime = parseShowtimeAsEventLocalTime(finalDatetime, hasCustom ? customTimeZone : undefined);
     const endTime = new Date(startTime.getTime() + 2.5 * 3600000);
 
     // Create meetup with only the chosen recipients
@@ -3686,7 +3716,10 @@ router.post("/events/schedules/:scheduleId/settle", authWithRateLimit, async (re
           rsvp: "accepted",
         })),
       );
-    if (participantsErr) { res.status(500).json({ error: participantsErr.message }); return; }
+    if (participantsErr) {
+      res.status(500).json({ error: participantsErr.message });
+      return;
+    }
 
     const scheduleUpdate: Record<string, any> = {
       status: "confirmed",
@@ -3703,7 +3736,10 @@ router.post("/events/schedules/:scheduleId/settle", authWithRateLimit, async (re
       .from("event_schedules")
       .update(scheduleUpdate)
       .eq("id", scheduleId);
-    if (updateErr) { res.status(500).json({ error: updateErr.message }); return; }
+    if (updateErr) {
+      res.status(500).json({ error: updateErr.message });
+      return;
+    }
 
     // Notify recipients (in-app + push via createNotification, email via Resend)
     const { data: recipientUsers } = await getSupabase()
@@ -3725,23 +3761,27 @@ router.post("/events/schedules/:scheduleId/settle", authWithRateLimit, async (re
           relatedUserId: me.id,
           relatedId: meetup.id,
         });
-        // Email fallback (fire-and-forget)
-        sendPollSettledEmail({
-          userId,
-          fromName,
-          eventTitle: schedule.event_title,
-          dateStr: timeStr,
-          venue: finalVenue,
-          startTime,
-          endTime,
-        }).catch(() => {});
       }
+      // Email fallback with calendar links (fire-and-forget), including owner.
+      sendPollSettledEmail({
+        userId,
+        fromName,
+        eventTitle: schedule.event_title,
+        dateStr: timeStr,
+        venue: finalVenue,
+        startTime,
+        endTime,
+      }).catch((err: unknown) => {
+        console.warn("[SETTLE_POLL] Settlement email failed", { userId, err });
+      });
     }
 
     // Auto-add to each recipient's connected calendar
     for (const user of recipientUsers || []) {
       if (user.firebase_uid) {
-        autoAddToCalendar(user.firebase_uid, meetup).catch(() => {});
+        autoAddToCalendar(user.firebase_uid, meetup).catch((err: unknown) => {
+          console.warn("[SETTLE_POLL] Auto-add to calendar failed", { userId: user.id, err });
+        });
       }
     }
 

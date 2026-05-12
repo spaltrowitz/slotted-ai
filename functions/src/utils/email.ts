@@ -155,11 +155,11 @@ export async function sendPollSettledEmail(opts: {
     `${opts.fromName} confirmed plans for ${opts.eventTitle}:\n\n` +
     `📅 ${opts.dateStr}\n` +
     venueLine +
-    `\nAdd to your calendar:\n` +
+    "\nAdd to your calendar:\n" +
     `  • Google: ${googleUrl}\n` +
     `  • Outlook: ${outlookUrl}\n` +
-    `\nOr open Slotted.ai to manage all your plans:\n` +
-    `https://slotted-ai.web.app\n\n` +
-    `— Slotted.ai`;
+    "\nOr open Slotted.ai to manage all your plans:\n" +
+    "https://slotted-ai.web.app\n\n" +
+    "— Slotted.ai";
   return sendEmail({ userId: opts.userId, subject, body, logTag: "EMAIL_POLL_SETTLED" });
 }
