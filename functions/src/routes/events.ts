@@ -17,6 +17,7 @@ import {
   autoAddToCalendar,
   formatDateTimeForTimeZone,
 } from "../utils/helpers";
+import { sendEventPollNudgeEmail } from "../utils/email";
 import { getSupabase } from "../supabase";
 import * as admin from "firebase-admin";
 import { randomBytes } from "crypto";
@@ -2966,15 +2967,23 @@ router.post("/events/schedules/:scheduleId/nudge", authWithRateLimit, async (req
 
     const voterIds = new Set((votes || []).map((vote: any) => vote.user_id));
     const pendingIds = (schedule.friend_ids || []).filter((friendId: string) => !voterIds.has(friendId));
+    const fromName = me.display_name?.split(" ")[0] || "A friend";
     for (const friendId of pendingIds) {
       await createNotification({
         userId: friendId,
         type: "event_poll_update",
-        title: `${me.display_name?.split(" ")[0] || "A friend"} is waiting on your ${schedule.event_title} picks`,
+        title: `${fromName} is waiting on your ${schedule.event_title} picks`,
         body: "Tap the event poll link to save your availability.",
         relatedUserId: me.id,
         relatedId: schedule.id,
       });
+      // Fire-and-forget email fallback so friends who haven't granted push
+      // permission still hear about the nudge. Errors are swallowed inside.
+      sendEventPollNudgeEmail({
+        userId: friendId,
+        fromName,
+        eventTitle: schedule.event_title,
+      }).catch((err) => console.error("[nudge] email fallback failed:", err));
     }
 
     res.json({ nudged: pendingIds.length });

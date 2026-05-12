@@ -14,6 +14,7 @@ import {
   GOOGLE_WEBHOOK_SECRET,
   formatDateTimeForTimeZone,
 } from "./utils/helpers";
+import { sendEmail } from "./utils/email";
 
 // Route modules
 import notificationsRouter from "./routes/notifications";
@@ -139,42 +140,6 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 // ---------------------------------------------------------------------------
 // Scheduled Functions
 // ---------------------------------------------------------------------------
-async function sendEventPollNudgeEmail(userId: string, subject: string, body: string) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL || "Slotted.ai <noreply@slotted.ai>";
-  if (!apiKey) {
-    console.log(`[EMAIL_POLL_NUDGE] RESEND_API_KEY not configured; skipped email for ${userId}`);
-    return;
-  }
-
-  const { data: user, error } = await getSupabase()
-    .from("users")
-    .select("email, display_name")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error || !user?.email) {
-    console.warn(`[EMAIL_POLL_NUDGE] Could not load email for ${userId}: ${error?.message || "missing email"}`);
-    return;
-  }
-
-  const resp = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: user.email,
-      subject,
-      text: body,
-    }),
-  });
-
-  if (!resp.ok) {
-    console.error(`[EMAIL_POLL_NUDGE] Failed to email ${user.email}: ${resp.status} ${await resp.text()}`);
-  }
-}
 
 export const renewCalendarWatchChannels = onSchedule("every 6 hours", async () => {
   const sb = getSupabase();
@@ -486,11 +451,12 @@ export const sendEventPollNudges = onSchedule("every 4 hours", async () => {
         body: "The poll is waiting on your availability.",
         relatedId: schedule.id,
       });
-      await sendEventPollNudgeEmail(
+      await sendEmail({
         userId,
-        `Reminder: pick dates for ${schedule.event_title}`,
-        `The ${schedule.event_title} poll is waiting on your availability. Open Slotted.ai to pick the dates that work for you.`,
-      );
+        subject: `Reminder: pick dates for ${schedule.event_title}`,
+        body: `The ${schedule.event_title} poll is waiting on your availability. Open Slotted.ai to pick the dates that work for you.\n\nhttps://slotted-ai.web.app`,
+        logTag: "EMAIL_POLL_REMINDER",
+      });
     }
   }
 });
