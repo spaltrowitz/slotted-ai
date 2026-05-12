@@ -3983,8 +3983,14 @@ router.get("/event-invite-meta/:token", async (req: Request, res: Response) => {
     const preview = await getInvitePreview(token);
     const title = preview?.headline || "You're invited to an event on Slotted";
     const description = preview?.description || "Pick the dates that work for you on Slotted.ai";
-    const imageUrl = preview?.imageUrl || `${frontendUrl}/event-invite-image/${token}.svg`;
-    const imageType = preview?.imageUrl?.includes(".png") ? "image/png" : preview?.imageUrl ? "image/jpeg" : "image/svg+xml";
+    // OG image must be PNG/JPEG for iMessage, WhatsApp, Slack, Twitter, etc. SVG is silently dropped.
+    // Prefer real event image (Ticketmaster/SeatGeek → PNG/JPG). Fall back to the static app icon PNG.
+    const hasRasterEventImage = preview?.imageUrl && /\.(png|jpe?g|webp)(\?.*)?$/i.test(preview.imageUrl);
+    const imageUrl = hasRasterEventImage ? preview!.imageUrl! : `${frontendUrl}/icons/icon-512.png`;
+    const imageType = /\.png(\?.*)?$/i.test(imageUrl) ? "image/png" : "image/jpeg";
+    const imageWidth = hasRasterEventImage ? "1200" : "512";
+    const imageHeight = hasRasterEventImage ? "630" : "512";
+    const twitterCard = hasRasterEventImage ? "summary_large_image" : "summary";
     const escTitle = escapeHtml(title);
     const escDesc = escapeHtml(description);
     const escImageUrl = escapeHtml(imageUrl);
@@ -3999,11 +4005,11 @@ router.get("/event-invite-meta/:token", async (req: Request, res: Response) => {
   <meta property="og:image" content="${escImageUrl}" />
   <meta property="og:image:secure_url" content="${escImageUrl}" />
   <meta property="og:image:type" content="${imageType}" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
+  <meta property="og:image:width" content="${imageWidth}" />
+  <meta property="og:image:height" content="${imageHeight}" />
   <meta property="og:url" content="https://slotted-ai.web.app/event-invite/${token}" />
   <meta property="og:type" content="website" />
-  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:card" content="${twitterCard}" />
   <meta name="twitter:title" content="${escTitle}" />
   <meta name="twitter:description" content="${escDesc}" />
   <meta name="twitter:image" content="${escImageUrl}" />
