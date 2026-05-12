@@ -1,80 +1,104 @@
 {
-  "hosting": {
-    "public": "build",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "/api/**",
-        "run": {
-          "serviceId": "api",
-          "region": "us-central1"
-        }
-      },
-      {
-        "source": "/event-invite-meta/**",
-        "run": {
-          "serviceId": "api",
-          "region": "us-central1"
-        }
-      },
-      {
-        "source": "/event-invite-image/**",
-        "run": {
-          "serviceId": "api",
-          "region": "us-central1"
-        }
-      },
-      {
-        "source": "/slotted.vcf",
-        "destination": "/slotted.vcf"
-      },
-      {
-        "source": "/add-contact.html",
-        "destination": "/add-contact.html"
-      },
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ],
-    "headers": [
-      {
-        "source": "/index.html",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "no-cache, no-store, must-revalidate"
+  "hosting": [
+    {
+      "target": "app",
+      "public": "build",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "/api/**",
+          "run": {
+            "serviceId": "api",
+            "region": "us-central1"
           }
-        ]
-      },
-      {
-        "source": "/slotted.vcf",
-        "headers": [
-          {
-            "key": "Content-Type",
-            "value": "text/vcard"
-          },
-          {
-            "key": "Content-Disposition",
-            "value": "attachment; filename=\"slotted.vcf\""
+        },
+        {
+          "source": "/event-invite-meta/**",
+          "run": {
+            "serviceId": "api",
+            "region": "us-central1"
           }
-        ]
-      },
-      {
-        "source": "/google616b7ea30eac2459.html",
-        "headers": [
-          {
-            "key": "Content-Type",
-            "value": "text/html"
+        },
+        {
+          "source": "/event-invite-image/**",
+          "run": {
+            "serviceId": "api",
+            "region": "us-central1"
           }
-        ]
-      }
-    ]
-  },
+        },
+        {
+          "source": "/slotted.vcf",
+          "destination": "/slotted.vcf"
+        },
+        {
+          "source": "/add-contact.html",
+          "destination": "/add-contact.html"
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "/index.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache, no-store, must-revalidate"
+            }
+          ]
+        },
+        {
+          "source": "/slotted.vcf",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "text/vcard"
+            },
+            {
+              "key": "Content-Disposition",
+              "value": "attachment; filename=\"slotted.vcf\""
+            }
+          ]
+        },
+        {
+          "source": "/google616b7ea30eac2459.html",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "text/html"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "legacy",
+      "public": "redirect-site",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "redirects": [
+        {
+          "source": "/",
+          "destination": "https://slottedai.com",
+          "type": 301
+        },
+        {
+          "source": "/:path*",
+          "destination": "https://slottedai.com/:path",
+          "type": 301
+        }
+      ]
+    }
+  ],
   "functions": [
     {
       "codebase": "default",

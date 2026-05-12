@@ -17,7 +17,7 @@ import {
   autoAddToCalendar,
   formatDateTimeForTimeZone,
 } from "../utils/helpers";
-import { sendEventPollNudgeEmail } from "../utils/email";
+import { sendEventPollNudgeEmail, sendPollSettledEmail } from "../utils/email";
 import { getSupabase } from "../supabase";
 import * as admin from "firebase-admin";
 import { randomBytes } from "crypto";
@@ -2897,6 +2897,7 @@ router.get("/events/schedules", authWithRateLimit, async (req: AuthRequest, res:
     }
 
     res.json({
+      myUserId: me.id,
       schedules: schedules.map((schedule) => {
         const scheduleVotes = votesBySchedule.get(schedule.id) || [];
         const voterIds = new Set(scheduleVotes.map((vote) => vote.user_id));
@@ -2909,6 +2910,7 @@ router.get("/events/schedules", authWithRateLimit, async (req: AuthRequest, res:
           eventVenue: schedule.event_venue,
           eventImageUrl: schedule.event_image_url,
           showtimeCount: Array.isArray(schedule.showtimes) ? schedule.showtimes.length : 0,
+          showtimes: Array.isArray(schedule.showtimes) ? schedule.showtimes : [],
           status: schedule.status,
           lifecycleStatus: schedule.status === "confirmed" ? "confirmed" : "open",
           invitesClosed: Boolean(schedule.invites_closed),
@@ -3557,6 +3559,189 @@ router.post("/events/schedules/:scheduleId/confirm", authWithRateLimit, async (r
     for (const participant of participantUsers || []) {
       if (participant.firebase_uid) {
         autoAddToCalendar(participant.firebase_uid, meetup).catch(() => {});
+      }
+    }
+
+    res.json({ success: true, meetupId: meetup.id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /events/schedules/:scheduleId/settle
+// Owner-driven manual settlement. Unlike /confirm this does NOT require:
+//   - invites_closed
+//   - everyone to have voted
+// Body: { showtimeIndex?: number, customDatetime?: string, customLocation?: string, recipientUserIds: string[] }
+// Sends notification + email to the chosen recipients only.
+// ---------------------------------------------------------------------------
+router.post("/events/schedules/:scheduleId/settle", authWithRateLimit, async (req: AuthRequest, res: Response) => {
+  try {
+    const me = await getDbUser(req.uid!);
+    if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+    const { scheduleId } = req.params;
+    const { showtimeIndex, customDatetime, customLocation, recipientUserIds } = req.body as {
+      showtimeIndex?: number;
+      customDatetime?: string;
+      customLocation?: string;
+      recipientUserIds?: string[];
+    };
+
+    if (!scheduleId) { res.status(400).json({ error: "scheduleId is required" }); return; }
+    if (!Array.isArray(recipientUserIds) || recipientUserIds.length === 0) {
+      res.status(400).json({ error: "recipientUserIds is required" });
+      return;
+    }
+    const hasIndex = Number.isInteger(showtimeIndex) && (showtimeIndex as number) >= 0;
+    const hasCustom = typeof customDatetime === "string" && customDatetime.trim().length > 0;
+    if (hasIndex === hasCustom) {
+      res.status(400).json({ error: "Provide exactly one of showtimeIndex or customDatetime" });
+      return;
+    }
+
+    const { data: schedule, error: schedErr } = await getSupabase()
+      .from("event_schedules")
+      .select("*")
+      .eq("id", scheduleId)
+      .maybeSingle();
+    if (schedErr || !schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+    if (schedule.created_by !== me.id) {
+      res.status(403).json({ error: "Only the poll creator can settle this poll" });
+      return;
+    }
+    if (schedule.confirmed_meetup_id) {
+      res.status(409).json({ error: "This poll already has a confirmed event", existingMeetupId: schedule.confirmed_meetup_id });
+      return;
+    }
+    if (schedule.status === "expired") {
+      res.status(410).json({ error: "This poll has expired", code: "poll_expired" });
+      return;
+    }
+
+    // Validate recipients ⊆ invited participants
+    const invited = new Set<string>([schedule.created_by, ...(schedule.friend_ids || [])]);
+    for (const rid of recipientUserIds) {
+      if (!invited.has(rid)) {
+        res.status(400).json({ error: `Recipient ${rid} is not invited to this poll` });
+        return;
+      }
+    }
+
+    // Resolve final date + venue + showtime index
+    const showtimes: any[] = Array.isArray(schedule.showtimes) ? schedule.showtimes : [];
+    let finalShowtimeIndex: number;
+    let finalDatetime: string;
+    let finalVenue: string | null = schedule.event_venue || null;
+    let updatedShowtimes = showtimes;
+
+    if (hasIndex) {
+      finalShowtimeIndex = showtimeIndex as number;
+      const picked = showtimes[finalShowtimeIndex];
+      if (!picked?.datetime) { res.status(400).json({ error: "Invalid showtimeIndex" }); return; }
+      finalDatetime = picked.datetime;
+    } else {
+      finalDatetime = (customDatetime as string).trim();
+      if (customLocation && typeof customLocation === "string" && customLocation.trim()) {
+        finalVenue = customLocation.trim();
+      }
+      // Append the custom showtime so it's preserved + indexable
+      const newShowtime: any = { datetime: finalDatetime };
+      if (finalVenue && finalVenue !== schedule.event_venue) {
+        newShowtime.location = finalVenue;
+      }
+      updatedShowtimes = [...showtimes, newShowtime];
+      finalShowtimeIndex = updatedShowtimes.length - 1;
+    }
+
+    const startTime = parseShowtimeAsEventLocalTime(finalDatetime);
+    const endTime = new Date(startTime.getTime() + 2.5 * 3600000);
+
+    // Create meetup with only the chosen recipients
+    const { data: meetup, error: meetupErr } = await getSupabase()
+      .from("meetups")
+      .insert({
+        title: schedule.event_title,
+        location: finalVenue || undefined,
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        created_by: schedule.created_by,
+        status: "confirmed",
+        source_event_schedule_id: scheduleId,
+      })
+      .select()
+      .maybeSingle();
+    if (meetupErr || !meetup) {
+      res.status(500).json({ error: meetupErr?.message || "Could not create meetup" });
+      return;
+    }
+
+    const { error: participantsErr } = await getSupabase()
+      .from("meetup_participants")
+      .insert(
+        recipientUserIds.map((userId) => ({
+          meetup_id: meetup.id,
+          user_id: userId,
+          rsvp: "accepted",
+        })),
+      );
+    if (participantsErr) { res.status(500).json({ error: participantsErr.message }); return; }
+
+    const scheduleUpdate: Record<string, any> = {
+      status: "confirmed",
+      confirmed_by: me.id,
+      confirmed_source: "manual_settle",
+      confirmed_at: new Date().toISOString(),
+      confirmed_showtime_index: finalShowtimeIndex,
+      confirmed_meetup_id: meetup.id,
+    };
+    if (updatedShowtimes !== showtimes) {
+      scheduleUpdate.showtimes = updatedShowtimes;
+    }
+    const { error: updateErr } = await getSupabase()
+      .from("event_schedules")
+      .update(scheduleUpdate)
+      .eq("id", scheduleId);
+    if (updateErr) { res.status(500).json({ error: updateErr.message }); return; }
+
+    // Notify recipients (in-app + push via createNotification, email via Resend)
+    const { data: recipientUsers } = await getSupabase()
+      .from("users")
+      .select("id, firebase_uid, timezone, display_name")
+      .in("id", recipientUserIds);
+    const tzMap = new Map((recipientUsers || []).map((u: any) => [u.id, u.timezone || "America/New_York"]));
+    const fromName = me.display_name?.split(" ")[0] || "A friend";
+
+    for (const userId of recipientUserIds) {
+      const timeStr = formatDateTimeForTimeZone(startTime.toISOString(), tzMap.get(userId));
+      // In-app + FCM push (skip self-notify for owner)
+      if (userId !== me.id) {
+        await createNotification({
+          userId,
+          type: "meetup_confirmed",
+          title: `${schedule.event_title} is confirmed! 🎉`,
+          body: `Calendar invite is live for ${timeStr}.`,
+          relatedUserId: me.id,
+          relatedId: meetup.id,
+        });
+        // Email fallback (fire-and-forget)
+        sendPollSettledEmail({
+          userId,
+          fromName,
+          eventTitle: schedule.event_title,
+          dateStr: timeStr,
+          venue: finalVenue,
+          startTime,
+          endTime,
+        }).catch(() => {});
+      }
+    }
+
+    // Auto-add to each recipient's connected calendar
+    for (const user of recipientUsers || []) {
+      if (user.firebase_uid) {
+        autoAddToCalendar(user.firebase_uid, meetup).catch(() => {});
       }
     }
 

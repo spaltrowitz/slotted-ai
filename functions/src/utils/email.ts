@@ -77,3 +77,89 @@ export async function sendEventPollNudgeEmail(opts: {
     `— Slotted.ai`;
   return sendEmail({ userId: opts.userId, subject, body, logTag: "EMAIL_POLL_NUDGE" });
 }
+
+/**
+ * Build a Google Calendar add-event URL with all the event details.
+ */
+function buildGoogleCalendarUrl(opts: {
+  title: string;
+  start: Date;
+  end: Date;
+  location?: string | null;
+  description?: string;
+}): string {
+  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: opts.title,
+    dates: `${fmt(opts.start)}/${fmt(opts.end)}`,
+  });
+  if (opts.location) params.set("location", opts.location);
+  if (opts.description) params.set("details", opts.description);
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+/**
+ * Build an Outlook.com add-event URL with full event details.
+ */
+function buildOutlookCalendarUrl(opts: {
+  title: string;
+  start: Date;
+  end: Date;
+  location?: string | null;
+  description?: string;
+}): string {
+  const params = new URLSearchParams({
+    path: "/calendar/action/compose",
+    rru: "addevent",
+    subject: opts.title,
+    startdt: opts.start.toISOString(),
+    enddt: opts.end.toISOString(),
+  });
+  if (opts.location) params.set("location", opts.location);
+  if (opts.description) params.set("body", opts.description);
+  return `https://outlook.live.com/calendar/0/deeplink/compose?${params.toString()}`;
+}
+
+/**
+ * Email fallback for when a poll owner manually settles on a date (via the
+ * "Choose a date" flow) — possibly before everyone has voted.
+ */
+export async function sendPollSettledEmail(opts: {
+  userId: string;
+  fromName: string;
+  eventTitle: string;
+  dateStr: string;
+  venue?: string | null;
+  startTime: Date;
+  endTime: Date;
+}): Promise<boolean> {
+  const subject = `${opts.eventTitle} is set for ${opts.dateStr}`;
+  const description = `${opts.fromName} confirmed this hangout via Slotted.ai.`;
+  const googleUrl = buildGoogleCalendarUrl({
+    title: opts.eventTitle,
+    start: opts.startTime,
+    end: opts.endTime,
+    location: opts.venue,
+    description,
+  });
+  const outlookUrl = buildOutlookCalendarUrl({
+    title: opts.eventTitle,
+    start: opts.startTime,
+    end: opts.endTime,
+    location: opts.venue,
+    description,
+  });
+  const venueLine = opts.venue ? `📍 ${opts.venue}\n` : "";
+  const body =
+    `${opts.fromName} confirmed plans for ${opts.eventTitle}:\n\n` +
+    `📅 ${opts.dateStr}\n` +
+    venueLine +
+    `\nAdd to your calendar:\n` +
+    `  • Google: ${googleUrl}\n` +
+    `  • Outlook: ${outlookUrl}\n` +
+    `\nOr open Slotted.ai to manage all your plans:\n` +
+    `https://slotted-ai.web.app\n\n` +
+    `— Slotted.ai`;
+  return sendEmail({ userId: opts.userId, subject, body, logTag: "EMAIL_POLL_SETTLED" });
+}

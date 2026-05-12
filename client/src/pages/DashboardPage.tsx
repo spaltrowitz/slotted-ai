@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import AddToCalendarModal from '../components/AddToCalendarModal';
 import EventScheduleButton from '../components/EventScheduleButton';
+import SettlePollModal from '../components/SettlePollModal';
 import StarRating from '../components/StarRating';
 import SmartSuggestions from '../components/SmartSuggestions';
 import FriendAvailability from '../components/FriendAvailability';
@@ -32,6 +33,7 @@ type EventPollSummary = {
   eventTitle: string;
   eventVenue?: string | null;
   showtimeCount: number;
+  showtimes: { datetime: string; location?: string | null }[];
   status: string;
   invitesClosed?: boolean;
   invitesClosedAt?: string | null;
@@ -267,6 +269,7 @@ export default function DashboardPage() {
   const [copiedPollId, setCopiedPollId] = useState<string | null>(null);
   const [pollFriendSelections, setPollFriendSelections] = useState<Record<string, string>>({});
   const [expandedPollId, setExpandedPollId] = useState<string | null>(null);
+  const [settlingPollId, setSettlingPollId] = useState<string | null>(null);
   const [eventPollsMinimized, setEventPollsMinimized] = useState(false);
   const [friendTipDismissed, setFriendTipDismissed] = useState(false);
   const [nudgedPollIds, setNudgedPollIds] = useState<Set<string>>(new Set());
@@ -297,14 +300,16 @@ export default function DashboardPage() {
     enabled: !!userUid,
   });
 
-  const { data: eventPolls = [] } = useQuery({
+  const { data: pollsData } = useQuery({
     queryKey: ['event-polls'],
     queryFn: async () => {
-      const { data } = await api.get<{ schedules: EventPollSummary[] }>('/events/schedules');
-      return data.schedules;
+      const { data } = await api.get<{ myUserId?: string; schedules: EventPollSummary[] }>('/events/schedules');
+      return { myUserId: data.myUserId || '', schedules: data.schedules };
     },
     enabled: !!userUid,
   });
+  const eventPolls: EventPollSummary[] = pollsData?.schedules ?? [];
+  const myUserId = pollsData?.myUserId ?? '';
 
   /* ─── friend action mutations ─── */
   const friendActionMutation = useMutation({
@@ -1021,6 +1026,15 @@ export default function DashboardPage() {
                               <div className="border-t border-gray-200/70" />
                             </>
                           )}
+                          {poll.isOwner && poll.status === 'voting' && !poll.confirmedMeetupId && (
+                            <button
+                              type="button"
+                              onClick={() => setSettlingPollId(poll.id)}
+                              className="min-h-[44px] w-full rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-[11px] font-semibold text-sky-700 transition-colors hover:bg-sky-100"
+                            >
+                              📅 Choose a date
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
@@ -1380,6 +1394,27 @@ export default function DashboardPage() {
               onClose={() => setCalendarModal(null)}
             />
           )}
+          {settlingPollId && (() => {
+            const poll = eventPolls.find((p) => p.id === settlingPollId);
+            if (!poll) return null;
+            return (
+              <SettlePollModal
+                scheduleId={poll.id}
+                eventTitle={poll.eventTitle}
+                eventVenue={poll.eventVenue || null}
+                showtimes={poll.showtimes || []}
+                voted={poll.voted}
+                pending={poll.pending}
+                currentUserId={myUserId}
+                onClose={() => setSettlingPollId(null)}
+                onSettled={() => {
+                  queryClient.invalidateQueries({ queryKey: ['event-polls'] });
+                  queryClient.invalidateQueries({ queryKey: queryKeys.meetups });
+                  queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+                }}
+              />
+            );
+          })()}
         </div>
       )}
 

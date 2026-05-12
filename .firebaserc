@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "slotted-ai"
-  }
+  },
+  "targets": {
+    "slotted-ai": {
+      "hosting": {
+        "app": [
+          "slottedai-com"
+        ],
+        "legacy": [
+          "slotted-ai"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
